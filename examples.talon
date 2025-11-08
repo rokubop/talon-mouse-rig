@@ -23,7 +23,7 @@ mouse rig settings: user.mouse_rig_show_settings()
 # =============================================================================
 
 rig test basic motion: user.mouse_rig_example_basic()
-rig test stop: user.mouse_rig_example_stop()
+# rig test stop: user.mouse_rig_example_stop()
 rig test cruise: user.mouse_rig_example_cruise()
 rig test smooth speed: user.mouse_rig_example_smooth_speed()
 rig test turn: user.mouse_rig_example_turn()
@@ -53,6 +53,17 @@ rig go down left: user.mouse_rig_go_down_left()
 # =============================================================================
 # SPEED CONTROL
 # =============================================================================
+
+
+
+
+rig one: user.mouse_rig_example_test_1()
+rig two: user.mouse_rig_example_test_2()
+
+
+
+
+
 
 rig speed up: user.mouse_rig_speed_up()
 rig speed down: user.mouse_rig_speed_down()

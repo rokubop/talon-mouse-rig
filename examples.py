@@ -1,7 +1,12 @@
 """
-Mouse Rig - Example Usage
+Mouse Rig - Example Usage (PRD 4 - New API)
 
-This file demonstrates various ways to use the mouse rig system.
+This file demonstrates the new mouse rig API with:
+- speed and accel primitives
+- Temporary effects with .fade_in()/.hold()/.fade_out() lifecycle
+- Named effects that can be stopped early
+- Intuitive value modifiers: .to()/.by()/.mul()/.div()
+
 Use these examples as a starting point for your own commands.
 """
 
@@ -20,34 +25,253 @@ class Actions:
         """Basic continuous motion"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)  # Move right
-        rig.speed(5)
+        rig.speed(5)         # Set base speed
 
     def mouse_rig_example_stop():
         """Stop all movement"""
         rig = actions.user.mouse_rig()
-        # rig.halt()
         rig.stop()
 
     def mouse_rig_example_stop_soft():
         """Stop movement gradually"""
         rig = actions.user.mouse_rig()
-        rig.stop().over(500)
+        rig.stop(500)  # Fade out over 500ms
 
     def mouse_rig_example_cruise():
         """Set direction and cruise speed"""
         rig = actions.user.mouse_rig()
         rig.direction(0, 1)  # Move down
-        rig.speed(3)
+        rig.speed(3)         # Immediate speed
 
     def mouse_rig_example_smooth_speed():
         """Smoothly change speed"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(0)
-        rig.speed(10).over(5000)  # Ramp to 10 over 500ms
+        rig.speed.to(10).over(500)  # Ramp to 10 over 500ms
 
     def mouse_rig_example_turn():
         """Smooth turn while moving"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)   # Start moving right
+        rig.speed(5)
+        # After some time, turn down
+        rig.direction(0, 1).over(300)  # Smooth 90° turn
+
+
+# =============================================================================
+# TEMPORARY EFFECTS - SPEED BOOSTS
+# =============================================================================
+
+    def mouse_rig_example_speed_boost_instant():
+        """Speed boost with instant activation and deactivation"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Double speed for 2 seconds, then instantly revert
+        rig.speed.mul(2).hold(2000)
+
+    def mouse_rig_example_speed_boost_fade():
+        """Speed boost with fade out"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Double speed, hold 1s, then fade out over 3s
+        rig.speed.mul(2).hold(1000).fade_out(3000)
+
+    def mouse_rig_example_speed_boost_full_envelope():
+        """Speed boost with full fade in, hold, fade out"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Fade in over 300ms, hold 1s, fade out over 500ms
+        rig.speed.mul(2).fade_in(300).hold(1000).fade_out(500)
+
+    def mouse_rig_example_speed_boost_easing():
+        """Speed boost with custom easing"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Fade in with ease_out, fade out with ease_in
+        rig.speed.mul(1.5).fade_in(300, "ease_out").hold(2000).fade_out(1000, "ease_in")
+
+
+# =============================================================================
+# NAMED EFFECTS - CAN BE STOPPED EARLY
+# =============================================================================
+
+    def mouse_rig_example_named_boost_start():
+        """Start a named speed boost that can be stopped early"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Named effect - can be stopped with rig("turbo").stop()
+        rig("turbo").speed.mul(2).hold(5000)
+
+    def mouse_rig_example_named_boost_stop():
+        """Stop a named effect immediately"""
+        rig = actions.user.mouse_rig()
+        rig("turbo").stop()  # Immediate cancel
+
+    def mouse_rig_example_named_boost_stop_smooth():
+        """Stop a named effect gracefully"""
+        rig = actions.user.mouse_rig()
+        rig("turbo").stop(1000, "ease_out")  # Fade out over 1s
+
+
+# =============================================================================
+# ACCELERATION EXAMPLES
+# =============================================================================
+
+    def mouse_rig_example_thrust_start():
+        """Start continuous acceleration (thrust)"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(0)
+
+        # Accelerate continuously at 5 units/s²
+        # This creates velocity that adds to cruise speed without modifying it
+        rig("thrust").accel.to(5)
+
+    def mouse_rig_example_thrust_stop():
+        """Stop thrust gradually"""
+        rig = actions.user.mouse_rig()
+
+        # Gradually remove acceleration over 2s
+        # This fades out both the acceleration AND its accumulated velocity
+        # Cruise speed remains unchanged
+        rig("thrust").stop(2000, "ease_in")
+
+    def mouse_rig_example_gravity():
+        """Gravity effect"""
+        rig = actions.user.mouse_rig()
+
+        # Set up gravity
+        gravity = rig("gravity")
+        gravity.direction(0, 1)  # Down
+        gravity.accel.to(9.8)    # Acceleration due to gravity
+
+    def mouse_rig_example_gravity_stop():
+        """Remove gravity"""
+        rig = actions.user.mouse_rig()
+        rig("gravity").stop(500)
+
+# =============================================================================
+# PERMANENT CHANGES
+# =============================================================================
+
+    def mouse_rig_example_permanent_speed_change():
+        """Permanent speed change over time"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Permanently increase speed to 15 over 500ms
+        rig.speed.to(15).over(500)
+
+    def mouse_rig_example_relative_speed_change():
+        """Add to current speed permanently"""
+        rig = actions.user.mouse_rig()
+
+        # Add 5 to current speed over 300ms
+        rig.speed.by(5).over(300, "ease_out")
+
+
+# =============================================================================
+# MULTIPLE EFFECTS
+# =============================================================================
+
+    def mouse_rig_example_multiple_boosts():
+        """Stack multiple temporary effects"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(10)
+
+        # Apply multiple speed boosts - they stack
+        rig("boost1").speed.mul(1.5).hold(2000)
+        rig("boost2").speed.mul(1.2).hold(3000)
+        # Effective speed = 10 * 1.5 * 1.2 = 18
+
+    def mouse_rig_example_speed_and_accel():
+        """Combine speed boost with acceleration"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Temporary speed boost
+        rig("boost").speed.mul(2).hold(2000)
+
+        # Plus continuous acceleration
+        rig("thrust").accel.to(3)
+
+
+# =============================================================================
+# POSITION CONTROL (UNCHANGED FROM OLD API)
+# =============================================================================
+
+    def mouse_rig_example_glide_to():
+        """Glide to absolute position"""
+        rig = actions.user.mouse_rig()
+        screen_rect = screen.main().rect
+        center_x = screen_rect.width // 2
+        center_y = screen_rect.height // 2
+
+        # Glide to center of screen
+        rig.pos.to(center_x, center_y).over(1000)
+
+    def mouse_rig_example_glide_by():
+        """Glide by relative offset"""
+        rig = actions.user.mouse_rig()
+
+        # Move 200 pixels right, 100 pixels down
+        rig.pos.by(200, 100).over(500)
+
+
+# =============================================================================
+# ADVANCED USE CASES
+# =============================================================================
+
+    def mouse_rig_example_speed_pad_instant():
+        """Speed pad - instant boost for duration"""
+        rig = actions.user.mouse_rig()
+
+        # Hit a speed pad - instant +50% speed for 2 seconds
+        rig.speed.mul(1.5).hold(2000)
+
+    def mouse_rig_example_speed_pad_decay():
+        """Speed pad - instant boost with gradual decay"""
+        rig = actions.user.mouse_rig()
+
+        # Hit a speed pad - instant 2x, hold 1s, then fade over 3s
+        rig.speed.mul(2).hold(1000).fade_out(3000)
+
+    def mouse_rig_example_rocket_boost():
+        """Rocket boost - fade in acceleration, then fade out"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(3)
+
+        # Rocket boost effect
+        rig("rocket").accel.to(10).fade_in(500, "ease_out").hold(2000).fade_out(1000, "ease_in")
+
+    def mouse_rig_example_orbital_mechanics():
+        """Simulate orbital mechanics with acceleration"""
+        rig = actions.user.mouse_rig()
+
+        # Start with some velocity
+        rig.direction(1, 0)
+        rig.speed(5)
+
+        # Apply gravity pulling down
+        rig("gravity").direction(0, 1)
+        rig("gravity").accel.to(9.8)
+
+        # This will create a curved trajectory
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)  # Set direction to right (instant)
         rig.speed(5)  # Set speed to 5 (instant)
@@ -134,7 +358,7 @@ class Actions:
     def mouse_rig_turbo():
         """Boost speed temporarily"""
         rig = actions.user.mouse_rig()
-        rig.boost(16).over(800)
+        rig.speed(16).fade_in_out(800)
 
     def mouse_rig_accelerate():
         """Continuously accelerate (like pressing gas pedal)"""
@@ -1068,3 +1292,16 @@ class Actions:
         rig = actions.user.mouse_rig()
         # This should error with clear message
         rig.direction(1, 0).wait(500).rate(180)
+
+    def mouse_rig_example_test_1():
+        """Test continuous acceleration"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        # rig.speed.to(5).over(1000).revert(1000)
+        # rig.accel(10).revert(1000)
+        rig.speed.to(5).fade_in(1000).fade_out(1000)
+
+    def mouse_rig_example_test_2():
+        """Test continuous deceleration to stop"""
+        rig = actions.user.mouse_rig()
+        rig.stop(2000)

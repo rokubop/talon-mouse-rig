@@ -4,23 +4,74 @@ Talon Mouse Rig - Continuous motion-based mouse control system
 A fluent, stateful mouse control API supporting:
 - Continuous movement with direction + speed
 - Smooth transitions and easing
-- Temporary overlays (thrust, resist, boost)
-- Permanent rate-based changes (accelerate, decelerate)
+- Temporary effects with lifecycle (.fade_in()/.hold()/.fade_out())
+- Named effects that can be stopped early
+- Acceleration-based movement
 - Position control (glides)
 
-Usage:
+Core Properties:
+    rig.speed     # Cruise speed scalar (permanent base speed)
+    rig.accel     # Acceleration scalar (creates velocity overlay, doesn't modify cruise)
+    rig.direction # Direction vector
+    rig.pos       # Position
+
+Acceleration Behavior:
+    - Temporary accel effects (via .hold()/.fade_out()) create velocity contributions
+      that ADD to cruise speed without modifying it
+    - When an accel effect ends, its velocity contribution is removed
+    - This allows thrust/gravity effects that don't permanently change cruise speed
+    - Base accel (rig.accel.to(5) without effects) DOES modify cruise speed permanently
+
+    Examples:
+        rig.accel.to(5)                    # Permanently accelerate cruise speed
+        rig("thrust").accel.to(5)          # Temporary velocity overlay (doesn't modify cruise)
+        rig("thrust").stop()               # Velocity contribution removed, cruise unchanged
+
+Basic Usage:
     rig = actions.user.mouse_rig()
-    rig.direction((1, 0))       # right
-    rig.speed(5)                # set cruise speed
-    rig.speed(10).over(300)     # ramp to 10 over 300ms
+    rig.direction(1, 0)         # Set direction (right)
+    rig.speed(5)                # Set base speed immediately
+    rig.speed.to(10).over(500)  # Ramp to 10 over 500ms
 
-    # Temporary overlays
-    rig.thrust(5).over(1000)    # temporary acceleration
-    rig.resist(3).over(500)     # temporary deceleration
+Property Modifiers:
+    .to(value)   # Set to absolute value
+    .by(delta)   # Add/subtract relative value
+    .mul(factor) # Multiply by factor
+    .div(divisor) # Divide by divisor
 
-    # Permanent rate-based
-    rig.accelerate(2)           # cruise speed increases continuously
-    rig.decelerate(2)           # cruise speed decreases continuously
+Timing & Lifecycle:
+    Permanent Changes:
+        .over(duration, easing?)  # Animate change, stays forever
+
+    Temporary Effects (auto-remove after lifecycle):
+        .fade_in(duration, easing?)   # Fade in over duration
+        .hold(duration)               # Maintain for duration
+        .fade_out(duration, easing?)  # Fade out over duration
+        .fade_in_out(duration)        # Symmetric fade (half in, half out)
+
+Examples:
+    # Permanent changes
+    rig.speed.to(15).over(500)
+    rig.speed.by(5).over(300, "ease_out")
+
+    # Temporary effects (anonymous)
+    rig.speed.mul(2).hold(1000)                              # Instant boost, hold 1s, instant revert
+    rig.speed.mul(1.5).hold(2000).fade_out(500)              # Instant boost, hold 2s, fade out
+    rig.speed.mul(2).fade_in(300).hold(1000).fade_out(500)   # Fade in, hold, fade out
+
+    # Named effects (can be stopped early)
+    rig("boost").speed.mul(2).hold(1000)
+    rig("boost").stop()                              # Immediate cancel
+    rig("boost").stop(500, "ease_out")               # Graceful cancel over 500ms
+
+    # Acceleration (creates temporary velocity, doesn't modify cruise speed)
+    rig("thrust").accel.to(5)                        # Accelerate at 5 units/s²
+    rig("thrust").stop(2000, "ease_in")              # Stop thrust, velocity fades out
+
+    # Gravity effect
+    gravity = rig("gravity")
+    gravity.direction(0, 1)      # Down
+    gravity.accel.to(9.8)        # Acceleration due to gravity
 """
 
 from talon import Module, actions, ctrl, cron, settings, app
@@ -342,149 +393,194 @@ class PositionTransition(Transition):
         return delta
 
 
-class AccelerateTransition:
-    """Permanent acceleration transition (rate-based speed increase)"""
-    def __init__(self, accel_rate: float):
-        self.accel_rate = accel_rate  # speed units to gain per second
+# ============================================================================
+# EFFECT SYSTEM (temporary property modifications with lifecycle)
+# ============================================================================
+
+class Effect:
+    """
+    Represents a temporary property modification with lifecycle phases.
+
+    Effects have three optional phases:
+    - in: fade in the effect value over duration
+    - hold: maintain the effect value for duration
+    - out: fade out the effect value over duration
+
+    Effects auto-remove when their lifecycle completes.
+    """
+    def __init__(self,
+                 property_name: str,  # "speed" or "accel"
+                 operation: str,      # "to", "by", "mul", "div"
+                 value: float,
+                 name: Optional[str] = None):
+        self.property_name = property_name
+        self.operation = operation
+        self.value = value
+        self.name = name  # Optional name for stopping early
+
+        # Lifecycle configuration
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+
+        # Runtime state
+        self.phase: str = "not_started"  # "in", "hold", "out", "complete"
+        self.phase_start_time: Optional[float] = None
+        self.base_value: Optional[float] = None  # Value before effect was applied
+        self.current_multiplier: float = 0.0  # 0 to 1, how much of the effect is active
         self.complete = False
 
-    def update(self, rig_state: 'RigState', dt: float) -> None:
-        # Apply acceleration (speed units per second)
-        delta_v = self.accel_rate * dt
-        rig_state._speed += delta_v
+        # For stopping
+        self.stop_requested = False
+        self.stop_duration_ms: Optional[float] = None
+        self.stop_easing: str = "linear"
+        self.stop_start_time: Optional[float] = None
 
-        # Clamp to max speed limit if set
-        if rig_state.limits_max_speed is not None:
-            rig_state._speed = min(rig_state._speed, rig_state.limits_max_speed)
+    def start(self, current_value: float) -> None:
+        """Start the effect lifecycle"""
+        self.base_value = current_value
 
-
-class DecelerateTransition:
-    """Permanent deceleration transition (rate-based speed decrease)"""
-    def __init__(self, decel_rate: float):
-        self.decel_rate = decel_rate  # speed units to lose per second
-        self.complete = False
-
-    def update(self, rig_state: 'RigState', dt: float) -> None:
-        epsilon = settings.get("user.mouse_rig_epsilon")
-
-        # Apply deceleration (speed units per second)
-        delta_v = self.decel_rate * dt
-        rig_state._speed = max(0.0, rig_state._speed - delta_v)
-
-        # Complete when we reach zero
-        if rig_state._speed < epsilon:
-            rig_state._speed = 0.0
+        if self.in_duration_ms is not None:
+            self.phase = "in"
+            self.phase_start_time = time.perf_counter()
+        elif self.hold_duration_ms is not None:
+            self.phase = "hold"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        elif self.out_duration_ms is not None:
+            # Start at full strength if only out phase
+            self.phase = "out"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        else:
+            # No lifecycle - shouldn't happen for effects
+            self.phase = "complete"
             self.complete = True
 
+    def update(self, current_base_value: float) -> float:
+        """
+        Update effect and return the modified value.
 
-# ============================================================================
-# THRUST, RESIST & BOOST OVERLAYS
-# ============================================================================
+        Args:
+            current_base_value: The current base value of the property (without this effect)
 
-class ThrustOverlay:
-    """Temporary acceleration overlay that integrates to velocity, then decays"""
-    def __init__(self, acceleration: float, direction: Optional[Vec2] = None,
-                 duration_ms: Optional[float] = None, easing: str = "linear"):
-        self.acceleration = acceleration
-        self.direction = direction  # None means use rig's current direction
-        self.duration_ms = duration_ms
-        self.decay_duration_ms = duration_ms if duration_ms else 0  # Same duration for decay
-        self.start_time = time.perf_counter() if duration_ms else None
-        self.easing_fn = EASING_FUNCTIONS.get(easing, ease_linear)
-        self.phase = "accel"  # "accel" or "decay"
-        self.accumulated_velocity = Vec2(0, 0)
-        self.peak_velocity = Vec2(0, 0)
-        self.decay_start_time = None
-        self.complete = False
-
-    def update(self, rig_direction: Vec2, dt: float) -> Vec2:
-        """Update and return velocity contribution for this frame"""
+        Returns:
+            The modified value with this effect applied
+        """
         if self.complete:
-            return Vec2(0, 0)
+            return current_base_value
 
-        # Determine direction
-        thrust_dir = self.direction if self.direction else rig_direction
+        # Handle stop request
+        if self.stop_requested:
+            return self._update_stop(current_base_value)
 
-        if self.phase == "accel":
-            # Acceleration phase - integrate to build velocity
-            if self.duration_ms and self.start_time:
-                elapsed = (time.perf_counter() - self.start_time) * 1000
-                if elapsed >= self.duration_ms:
-                    # Transition to decay phase
-                    self.phase = "decay"
-                    self.peak_velocity = self.accumulated_velocity
-                    self.decay_start_time = time.perf_counter()
+        # Normal lifecycle progression
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
+
+        if self.phase == "in":
+            if elapsed_ms >= self.in_duration_ms:
+                # Move to next phase
+                self.current_multiplier = 1.0
+                if self.hold_duration_ms is not None:
+                    self.phase = "hold"
+                    self.phase_start_time = current_time
+                elif self.out_duration_ms is not None:
+                    self.phase = "out"
+                    self.phase_start_time = current_time
                 else:
-                    # Apply acceleration with easing envelope
-                    t = elapsed / self.duration_ms
-                    magnitude = self.acceleration * self.easing_fn(t)
-                    accel_vec = thrust_dir * magnitude
-                    self.accumulated_velocity = self.accumulated_velocity + (accel_vec * dt)
+                    self.phase = "complete"
+                    self.complete = True
+                    return current_base_value
+            else:
+                # Update multiplier with easing
+                t = elapsed_ms / self.in_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                self.current_multiplier = easing_fn(t)
 
-        if self.phase == "decay":
-            # Decay phase - linearly reduce accumulated velocity back to 0
-            elapsed = (time.perf_counter() - self.decay_start_time) * 1000
-            if elapsed >= self.decay_duration_ms:
+        elif self.phase == "hold":
+            if elapsed_ms >= self.hold_duration_ms:
+                # Move to next phase
+                if self.out_duration_ms is not None:
+                    self.phase = "out"
+                    self.phase_start_time = current_time
+                else:
+                    self.phase = "complete"
+                    self.complete = True
+                    return current_base_value
+            # Multiplier stays at 1.0 during hold
+
+        elif self.phase == "out":
+            if elapsed_ms >= self.out_duration_ms:
+                self.phase = "complete"
                 self.complete = True
-                return Vec2(0, 0)
+                return current_base_value
+            else:
+                # Fade out
+                t = elapsed_ms / self.out_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                self.current_multiplier = 1.0 - easing_fn(t)
 
-            # Linear decay from peak to 0
-            t = 1.0 - (elapsed / self.decay_duration_ms)
-            self.accumulated_velocity = self.peak_velocity * t
+        # Apply effect based on operation and current multiplier
+        return self._apply_effect(current_base_value)
 
-        return self.accumulated_velocity
+    def _apply_effect(self, base_value: float) -> float:
+        """Apply the effect to the base value based on operation and multiplier"""
+        if self.current_multiplier == 0.0:
+            return base_value
 
+        if self.operation == "to":
+            # Interpolate from base to target
+            return lerp(base_value, self.value, self.current_multiplier)
 
-class ResistOverlay:
-    """Temporary deceleration overlay - applies velocity that opposes motion"""
-    def __init__(self, deceleration: float, direction: Optional[Vec2] = None,
-                 duration_ms: Optional[float] = None, easing: str = "ease_out"):
-        self.deceleration = deceleration
-        self.direction = direction  # None means opposite of rig's current direction
-        self.duration_ms = duration_ms
-        self.start_time = time.perf_counter() if duration_ms else None
-        self.easing_fn = EASING_FUNCTIONS.get(easing, ease_linear)
-        self.complete = False
+        elif self.operation == "by":
+            # Add offset scaled by multiplier
+            return base_value + (self.value * self.current_multiplier)
 
-    def get_velocity(self, rig_direction: Vec2) -> Vec2:
-        """Get velocity offset for this frame (opposes motion)"""
-        if self.complete:
-            return Vec2(0, 0)
+        elif self.operation == "mul":
+            # Multiply: lerp from 1.0 to factor
+            factor = lerp(1.0, self.value, self.current_multiplier)
+            return base_value * factor
 
-        # Determine direction (default is opposite of current motion)
-        resist_dir = self.direction if self.direction else (rig_direction * -1)
+        elif self.operation == "div":
+            # Divide: lerp from 1.0 to 1/divisor
+            divisor = lerp(1.0, self.value, self.current_multiplier)
+            if divisor != 0:
+                return base_value / divisor
+            return base_value
 
-        # Calculate magnitude based on time envelope
-        magnitude = self.deceleration
-        if self.duration_ms and self.start_time:
-            elapsed = (time.perf_counter() - self.start_time) * 1000
-            if elapsed >= self.duration_ms:
-                self.complete = True
-                return Vec2(0, 0)
-            t = elapsed / self.duration_ms
-            magnitude *= self.easing_fn(t)
+        return base_value
 
-        return resist_dir * magnitude
-
-
-class BoostOverlay:
-    """Instant velocity offset that decays over time"""
-    def __init__(self, force: float, direction: Vec2, duration_ms: float):
-        self.initial_velocity = direction.normalized() * force
-        self.duration_ms = duration_ms
-        self.start_time = time.perf_counter()
-        self.complete = False
-
-    def get_velocity(self) -> Vec2:
-        """Get velocity contribution for this frame (decays linearly)"""
-        elapsed = (time.perf_counter() - self.start_time) * 1000
-        if elapsed >= self.duration_ms:
+    def _update_stop(self, current_base_value: float) -> float:
+        """Handle graceful stop with optional duration"""
+        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
+            # Immediate stop
             self.complete = True
-            return Vec2(0, 0)
+            return current_base_value
 
-        # Linear decay
-        t = 1.0 - (elapsed / self.duration_ms)
-        return self.initial_velocity * t
+        # Graceful stop over duration
+        if self.stop_start_time is None:
+            self.stop_start_time = time.perf_counter()
+
+        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
+        if elapsed_ms >= self.stop_duration_ms:
+            self.complete = True
+            return current_base_value
+
+        # Fade out the current multiplier
+        t = elapsed_ms / self.stop_duration_ms
+        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
+        self.current_multiplier = self.current_multiplier * (1.0 - easing_fn(t))
+
+        return self._apply_effect(current_base_value)
+
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop, optionally over a duration"""
+        self.stop_requested = True
+        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
+        self.stop_easing = easing
 
 
 # ============================================================================
@@ -899,11 +995,11 @@ class SpeedController:
         return SpeedBuilder(self.rig_state, value, instant=True)
 
     def add(self, delta: float) -> SpeedAdjustBuilder:
-        """Add to current speed"""
+        """Add to current speed (legacy - use .by() for new code)"""
         return SpeedAdjustBuilder(self.rig_state, delta, instant=True)
 
     def subtract(self, delta: float) -> SpeedAdjustBuilder:
-        """Subtract from current speed"""
+        """Subtract from current speed (legacy - use .by() with negative for new code)"""
         return self.add(-delta)
 
     def sub(self, delta: float) -> SpeedAdjustBuilder:
@@ -911,23 +1007,191 @@ class SpeedController:
         return self.subtract(delta)
 
     def multiply(self, factor: float) -> SpeedMultiplyBuilder:
-        """Multiply current speed by factor"""
+        """Multiply current speed by factor (legacy - use .mul() for new code)"""
         return SpeedMultiplyBuilder(self.rig_state, factor, instant=True)
 
-    def mul(self, factor: float) -> SpeedMultiplyBuilder:
-        """Multiply current speed by factor (shorthand for multiply)"""
-        return self.multiply(factor)
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """Multiply speed by factor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
 
     def divide(self, divisor: float) -> SpeedDivideBuilder:
-        """Divide current speed by divisor"""
+        """Divide current speed by divisor (legacy - use .div() for new code)"""
         if abs(divisor) < 1e-10:
             raise ValueError("Cannot divide speed by zero")
 
         return SpeedDivideBuilder(self.rig_state, divisor, instant=True)
 
-    def div(self, divisor: float) -> SpeedDivideBuilder:
-        """Divide current speed by divisor (shorthand for divide)"""
-        return self.divide(divisor)
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """Divide speed by divisor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        if abs(divisor) < 1e-10:
+            raise ValueError("Cannot divide speed by zero")
+        return PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set speed to absolute value (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "to", value)
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """Add delta to speed (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
+
+
+class AccelController:
+    """Controller for acceleration operations (accessed via rig.accel)"""
+    def __init__(self, rig_state: 'RigState'):
+        self.rig_state = rig_state
+
+    def __call__(self, value: float) -> 'PropertyEffectBuilder':
+        """Set acceleration instantly or return builder for transitions/effects"""
+        # Immediate set
+        self.rig_state._accel = value
+        self.rig_state.start()
+        return PropertyEffectBuilder(self.rig_state, "accel", "to", value, instant_done=True)
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set accel to absolute value (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "accel", "to", value)
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """Add delta to accel (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """Multiply accel by factor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        return PropertyEffectBuilder(self.rig_state, "accel", "mul", factor)
+
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """Divide accel by divisor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        if abs(divisor) < 1e-10:
+            raise ValueError("Cannot divide accel by zero")
+        return PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
+
+
+class PropertyEffectBuilder:
+    """
+    Universal builder for property effects supporting both permanent (.over())
+    and temporary (.fade_in()/.hold()/.fade_out()) modifications.
+    """
+    def __init__(self, rig_state: 'RigState', property_name: str, operation: str, value: float, instant_done: bool = False):
+        self.rig_state = rig_state
+        self.property_name = property_name  # "speed" or "accel"
+        self.operation = operation  # "to", "by", "mul", "div"
+        self.value = value
+        self._instant_done = instant_done  # Already executed immediately
+
+        # Timing configuration
+        self._over_duration_ms: Optional[float] = None
+        self._in_duration_ms: Optional[float] = None
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._in_easing: str = "linear"
+        self._out_easing: str = "linear"
+        self._over_easing: str = "linear"
+
+        # Named effect
+        self._effect_name: Optional[str] = None
+
+    def __del__(self):
+        """Execute the operation when builder goes out of scope"""
+        try:
+            self._execute()
+        except:
+            pass
+
+    def _execute(self):
+        """Execute the configured operation"""
+        if self._instant_done:
+            return  # Already executed
+
+        # Determine if this is permanent (.over()) or temporary (.in/.hold/.out)
+        is_temporary = (self._in_duration_ms is not None or
+                       self._hold_duration_ms is not None or
+                       self._out_duration_ms is not None)
+
+        if self._over_duration_ms is not None:
+            # Permanent transition over time
+            if self.property_name == "speed":
+                current = self.rig_state._speed
+                target = self._calculate_target_value(current)
+                transition = SpeedTransition(current, target, self._over_duration_ms, self._over_easing)
+                self.rig_state.start()
+                self.rig_state._speed_transition = transition
+            # TODO: Add accel transition if needed
+
+        elif is_temporary:
+            # Create and register temporary effect
+            effect = Effect(self.property_name, self.operation, self.value, self._effect_name)
+            effect.in_duration_ms = self._in_duration_ms
+            effect.in_easing = self._in_easing
+            effect.hold_duration_ms = self._hold_duration_ms
+            effect.out_duration_ms = self._out_duration_ms
+            effect.out_easing = self._out_easing
+
+            self.rig_state.start()
+            self.rig_state._effects.append(effect)
+
+            # Track named effect
+            if self._effect_name:
+                # Remove any existing effect with same name
+                if self._effect_name in self.rig_state._named_effects:
+                    old_effect = self.rig_state._named_effects[self._effect_name]
+                    if old_effect in self.rig_state._effects:
+                        self.rig_state._effects.remove(old_effect)
+                self.rig_state._named_effects[self._effect_name] = effect
+        else:
+            # Immediate execution (no timing specified)
+            if self.property_name == "speed":
+                current = self.rig_state._speed
+                target = self._calculate_target_value(current)
+                self.rig_state._speed = max(0.0, target)
+            elif self.property_name == "accel":
+                current = self.rig_state._accel
+                target = self._calculate_target_value(current)
+                self.rig_state._accel = target
+
+    def _calculate_target_value(self, current: float) -> float:
+        """Calculate the target value based on operation"""
+        if self.operation == "to":
+            return self.value
+        elif self.operation == "by":
+            return current + self.value
+        elif self.operation == "mul":
+            return current * self.value
+        elif self.operation == "div":
+            if abs(self.value) > 1e-10:
+                return current / self.value
+            return current
+        return current
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
+        """Permanent change over duration"""
+        self._over_duration_ms = duration_ms
+        self._over_easing = easing
+        return self
+
+    def fade_in(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
+        """Fade in effect over duration (must be paired with .hold() or .fade_out())"""
+        self._in_duration_ms = duration_ms
+        self._in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'PropertyEffectBuilder':
+        """Hold effect at full strength for duration"""
+        self._hold_duration_ms = duration_ms
+        return self
+
+    def fade_out(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
+        """Fade out effect over duration"""
+        self._out_duration_ms = duration_ms
+        self._out_easing = easing
+        return self
+
+    def fade_in_out(self, total_duration_ms: float) -> 'PropertyEffectBuilder':
+        """Symmetric fade in and out (splits duration evenly)"""
+        half = total_duration_ms / 2
+        self._in_duration_ms = half
+        self._out_duration_ms = half
+        return self
 
 
 class DirectionBuilder:
@@ -1260,171 +1524,108 @@ class PositionByBuilder:
             pass  # Ignore errors during cleanup
 
 
-class ThrustBuilder:
-    """Builder for thrust operations"""
-    def __init__(self, rig_state: 'RigState', acceleration: float):
+class NamedEffectBuilder:
+    """Builder for named effects that can be stopped early"""
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
-        self.acceleration = acceleration
-        self._direction = None
-        self._easing = "linear"
+        self.name = name
+        self._speed_controller = None
+        self._accel_controller = None
 
-    def dir(self, x: float, y: float) -> 'ThrustBuilder':
-        """Set explicit thrust direction
+    @property
+    def speed(self) -> 'NamedSpeedController':
+        """Access speed property for this named effect"""
+        if self._speed_controller is None:
+            self._speed_controller = NamedSpeedController(self.rig_state, self.name)
+        return self._speed_controller
+
+    @property
+    def accel(self) -> 'NamedAccelController':
+        """Access accel property for this named effect"""
+        if self._accel_controller is None:
+            self._accel_controller = NamedAccelController(self.rig_state, self.name)
+        return self._accel_controller
+
+    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Stop the named effect
 
         Args:
-            x: X component of direction vector
-            y: Y component of direction vector
-        """
-        self._direction = Vec2(x, y).normalized()
-        return self
-
-    def over(self, duration_ms: float) -> 'ThrustBuilder':
-        """Apply thrust over time"""
-        overlay = ThrustOverlay(
-            self.acceleration,
-            self._direction,
-            duration_ms,
-            self._easing
-        )
-        self.rig_state.start()  # Ensure ticking is active
-        self.rig_state._thrust_overlays.append(overlay)
-        return self
-
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'ThrustBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
-
-
-class ResistBuilder:
-    """Builder for resist (temporary deceleration) operations"""
-    def __init__(self, rig_state: 'RigState', deceleration: float):
-        self.rig_state = rig_state
-        self.deceleration = deceleration
-        self._direction = None
-        self._easing = "linear"
-
-    def dir(self, x: float, y: float) -> 'ResistBuilder':
-        """Set explicit resist direction
-
-        Args:
-            x: X component of direction vector
-            y: Y component of direction vector
-        """
-        self._direction = Vec2(x, y).normalized()
-        return self
-
-    def over(self, duration_ms: float) -> 'ResistBuilder':
-        """Apply resist over time"""
-        overlay = ResistOverlay(
-            self.deceleration,
-            self._direction,
-            duration_ms,
-            self._easing
-        )
-        self.rig_state.start()  # Ensure ticking is active
-        self.rig_state._resist_overlays.append(overlay)
-        return self
-
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'ResistBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
-
-
-class BoostBuilder:
-    """Builder for boost operations"""
-    def __init__(self, rig_state: 'RigState', force: float):
-        self.rig_state = rig_state
-        self.force = force
-        self._direction = None
-
-    def dir(self, x: float, y: float) -> 'BoostBuilder':
-        """Set explicit boost direction
-
-        Args:
-            x: X component of direction vector
-            y: Y component of direction vector
-        """
-        self._direction = Vec2(x, y).normalized()
-        return self
-
-    def over(self, duration_ms: float) -> 'BoostBuilder':
-        """Apply boost with decay over time"""
-        direction = self._direction if self._direction else self.rig_state._direction
-        overlay = BoostOverlay(self.force, direction, duration_ms)
-        self.rig_state.start()  # Ensure ticking is active
-        self.rig_state._boost_overlays.append(overlay)
-        return self
-
-
-class StopBuilder:
-    """Builder for stop operations with .over() support"""
-    def __init__(self, rig_state: 'RigState', instant: bool = False):
-        self.rig_state = rig_state
-        self._easing = "linear"
-        self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
-        self._duration_ms: Optional[float] = None
-
-    def __del__(self):
-        """Execute the operation when builder goes out of scope"""
-        try:
-            self._execute()
-        except:
-            pass  # Ignore errors during cleanup
-
-    def _execute(self):
-        """Execute the configured operation"""
-        if self._duration_ms is not None:
-            # Bake current velocity, clear everything, then decelerate
-            self.rig_state.bake()
-
-            # Create transition from current (baked) speed to 0
-            current_speed = self.rig_state._speed
-            transition = SpeedTransition(
-                current_speed,
-                0.0,
-                self._duration_ms,
-                self._easing
-            )
-            self.rig_state.start()  # Ensure ticking is active
-            self.rig_state._speed_transition = transition
-
-            # Register callback with transition if set
-            if self._then_callback:
-                transition.on_complete = self._then_callback
-        elif self._should_execute_instant:
-            # Instant stop (original behavior)
-            self.rig_state._stop_immediate()
-
-            # Execute callback immediately if set
-            if self._then_callback:
-                self._then_callback()
-
-    def over(self, duration_ms: float) -> 'StopBuilder':
-        """Decelerate to stop over time
-
-        Bakes current velocity (including all overlays) into cruise speed,
-        clears all overlays/transitions, then smoothly decelerates to zero.
+            duration_ms: Optional duration to fade out. If None, stops immediately.
+            easing: Easing function for gradual stop
 
         Examples:
-            rig.stop().over(500)                    # Smooth stop over 500ms
-            rig.stop().over(500).ease("ease_out")   # Smooth stop with easing
+            rig("boost").stop()  # Immediate stop
+            rig("boost").stop(500, "ease_out")  # Fade out over 500ms
         """
-        self._should_execute_instant = False
-        self._duration_ms = duration_ms
-        return self
+        if self.name in self.rig_state._named_effects:
+            effect = self.rig_state._named_effects[self.name]
+            effect.request_stop(duration_ms, easing)
 
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'StopBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
 
-    def then(self, callback: Callable) -> 'StopBuilder':
-        """Execute callback after stop completes"""
-        self._then_callback = callback
-        return self
+class NamedSpeedController:
+    """Speed controller for named effects"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set speed to absolute value"""
+        builder = PropertyEffectBuilder(self.rig_state, "speed", "to", value)
+        builder._effect_name = self.name
+        return builder
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """Add delta to speed"""
+        builder = PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
+        builder._effect_name = self.name
+        return builder
+
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """Multiply speed by factor"""
+        builder = PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
+        builder._effect_name = self.name
+        return builder
+
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """Divide speed by divisor"""
+        if abs(divisor) < 1e-10:
+            raise ValueError("Cannot divide speed by zero")
+        builder = PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
+        builder._effect_name = self.name
+        return builder
+
+
+class NamedAccelController:
+    """Accel controller for named effects"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set accel to absolute value"""
+        builder = PropertyEffectBuilder(self.rig_state, "accel", "to", value)
+        builder._effect_name = self.name
+        return builder
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """Add delta to accel"""
+        builder = PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+        builder._effect_name = self.name
+        return builder
+
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """Multiply accel by factor"""
+        builder = PropertyEffectBuilder(self.rig_state, "accel", "mul", factor)
+        builder._effect_name = self.name
+        return builder
+
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """Divide accel by divisor"""
+        if abs(divisor) < 1e-10:
+            raise ValueError("Cannot divide accel by zero")
+        builder = PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
+        builder._effect_name = self.name
+        return builder
 
 
 # ============================================================================
@@ -1436,23 +1637,26 @@ class RigState:
     def __init__(self):
         # Persistent state
         self._direction = Vec2(1, 0)  # unit vector
-        self._speed = 0.0  # cruise speed magnitude
+        self._speed = 0.0  # base speed magnitude
+        self._accel = 0.0  # base acceleration magnitude
         self.limits_max_speed = settings.get("user.mouse_rig_max_speed")
 
-        # Transitions
+        # Transitions (permanent)
         self._speed_transition: Optional[SpeedTransition] = None
         self._direction_transition: Optional[DirectionTransition] = None
-        self._accelerate_transition: Optional[AccelerateTransition] = None
-        self._decelerate_transition: Optional[DecelerateTransition] = None
         self._position_transitions: list[PositionTransition] = []
 
-        # Overlays
-        self._thrust_overlays: list[ThrustOverlay] = []
-        self._resist_overlays: list[ResistOverlay] = []
-        self._boost_overlays: list[BoostOverlay] = []
+        # Effects (temporary property modifications)
+        self._effects: list[Effect] = []
+        self._named_effects: dict[str, Effect] = {}
+
+        # Acceleration effects tracking (separate from cruise speed)
+        # Maps effect instances to their accumulated velocity contribution
+        self._accel_velocities: dict[Effect, float] = {}
 
         # Controllers (fluent API)
         self.speed = SpeedController(self)
+        self.accel = AccelController(self)
         self.pos = PositionController(self)
 
         # Sequence state
@@ -1469,27 +1673,31 @@ class RigState:
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
 
+    def __call__(self, name: str) -> 'NamedEffectBuilder':
+        """Create or access a named effect
+
+        Named effects can be stopped early via rig('name').stop()
+
+        Examples:
+            rig("boost").speed.mul(2).hold(1000)
+            rig("boost").stop()  # Stop immediately
+            rig("boost").stop(500)  # Fade out over 500ms
+        """
+        return NamedEffectBuilder(self, name)
+
     @property
     def state(self) -> dict:
         """Read-only state information"""
         position = ctrl.mouse_pos()
-        cruise_velocity = self._direction * self._speed
 
-        # Calculate overlay contributions
-        thrust_velocity = Vec2(0, 0)
-        for thrust in self._thrust_overlays:
-            thrust_velocity = thrust_velocity + thrust.accumulated_velocity
+        # Calculate effective speed and accel with effects applied
+        effective_speed = self._get_effective_speed()
+        effective_accel = self._get_effective_accel()
+        accel_velocity = self._get_accel_velocity_contribution()
 
-        resist_velocity = Vec2(0, 0)
-        for resist in self._resist_overlays:
-            resist_vec = resist.get_velocity(self._direction)
-            resist_velocity = resist_velocity + resist_vec
-
-        boost_velocity = Vec2(0, 0)
-        for boost in self._boost_overlays:
-            boost_velocity = boost_velocity + boost.get_velocity()
-
-        total_velocity = cruise_velocity + thrust_velocity + resist_velocity + boost_velocity
+        # Total velocity includes cruise velocity + accel velocity contributions
+        total_speed = effective_speed + accel_velocity
+        total_velocity = self._direction * total_speed
 
         # Determine cardinal/intercardinal direction
         direction_cardinal = self._get_cardinal_direction(self._direction)
@@ -1498,16 +1706,17 @@ class RigState:
             "position": position,
             "direction": self._direction.to_tuple(),
             "direction_cardinal": direction_cardinal,
-            "speed": self._speed,
-            "cruise_velocity": cruise_velocity.to_tuple(),
-            "total_velocity": total_velocity.to_tuple(),
-            "active_thrusts": len(self._thrust_overlays),
-            "active_resists": len(self._resist_overlays),
-            "active_boosts": len(self._boost_overlays),
+            "speed": self._speed,  # Base cruise speed
+            "accel": self._accel,
+            "effective_speed": effective_speed,  # Cruise speed with speed effects
+            "effective_accel": effective_accel,  # Acceleration with accel effects
+            "accel_velocity": accel_velocity,  # Integrated velocity from accel effects
+            "total_speed": total_speed,  # Total effective speed (cruise + accel velocity)
+            "velocity": total_velocity.to_tuple(),  # Total velocity vector
+            "active_effects": len(self._effects),
+            "named_effects": list(self._named_effects.keys()),
             "has_speed_transition": self._speed_transition is not None,
             "has_direction_transition": self._direction_transition is not None,
-            "has_accelerate": self._accelerate_transition is not None,
-            "has_decelerate": self._decelerate_transition is not None,
             "active_glides": len(self._position_transitions),
             "is_moving": self.is_moving,
             "is_ticking": self.is_ticking,
@@ -1522,8 +1731,11 @@ class RigState:
     def is_moving(self) -> bool:
         """Check if the rig is currently producing movement"""
         epsilon = settings.get("user.mouse_rig_epsilon")
-        total_vel = self._calculate_total_velocity()
-        return total_vel.magnitude() > epsilon
+        effective_speed = self._get_effective_speed()
+        accel_velocity = self._get_accel_velocity_contribution()
+        total_speed = effective_speed + accel_velocity
+        effective_accel = self._get_effective_accel()
+        return total_speed > epsilon or abs(effective_accel) > epsilon
 
     @property
     def settings(self) -> dict:
@@ -1536,6 +1748,35 @@ class RigState:
             "movement_type": settings.get("user.mouse_rig_movement_type"),
             "scale": settings.get("user.mouse_rig_scale"),
         }
+
+    def _get_effective_speed(self) -> float:
+        """Get speed with all effects applied"""
+        base_speed = self._speed
+        for effect in self._effects:
+            if effect.property_name == "speed":
+                base_speed = effect.update(base_speed)
+        return max(0.0, base_speed)
+
+    def _get_effective_accel(self) -> float:
+        """Get acceleration with all effects applied
+
+        Note: This returns the effective acceleration value but does NOT
+        modify cruise speed. Acceleration effects track their own velocity
+        contributions separately.
+        """
+        base_accel = self._accel
+        for effect in self._effects:
+            if effect.property_name == "accel":
+                base_accel = effect.update(base_accel)
+        return base_accel
+
+    def _get_accel_velocity_contribution(self) -> float:
+        """Get total velocity contribution from all acceleration effects
+
+        This is the sum of all integrated velocities from accel effects,
+        separate from cruise speed.
+        """
+        return sum(self._accel_velocities.values())
 
     def direction(self, x: float, y: float) -> DirectionBuilder:
         """Set direction instantly or return builder for .over()
@@ -1602,83 +1843,18 @@ class RigState:
         # Fallback (shouldn't happen with normalized vectors)
         return "right"
 
-    def _calculate_total_velocity(self) -> Vec2:
-        """Calculate current total velocity including all overlays
-
-        Returns the combined velocity from:
-        - Cruise velocity (direction * speed)
-        - Thrust overlays
-        - Resist overlays
-        - Boost overlays
-        """
-        # Calculate cruise velocity
-        cruise_velocity = self._direction * self._speed
-
-        # Calculate thrust velocity (use accumulated velocity, not acceleration)
-        thrust_velocity = Vec2(0, 0)
-        for thrust in self._thrust_overlays:
-            thrust_velocity = thrust_velocity + thrust.accumulated_velocity
-
-        # Calculate resist velocity
-        resist_velocity = Vec2(0, 0)
-        for resist in self._resist_overlays:
-            resist_vec = resist.get_velocity(self._direction)
-            resist_velocity = resist_velocity + resist_vec
-
-        # Calculate boost velocity
-        boost_velocity = Vec2(0, 0)
-        for boost in self._boost_overlays:
-            boost_velocity = boost_velocity + boost.get_velocity()
-
-        # Combine all velocities
-        total_velocity = cruise_velocity + thrust_velocity + resist_velocity + boost_velocity
-        return total_velocity
-
-    def bake(self) -> None:
-        """Collapse all overlays into cruise velocity
-
-        Takes the current total velocity (including thrust/resist/boost overlays)
-        and bakes it into the cruise speed and direction, then clears all overlays.
-
-        Useful for:
-        - Converting temporary overlays into permanent cruise velocity
-        - Simplifying state before making other changes
-        - Preparing for a smooth stop
-
-        Examples:
-            rig.thrust(5).over(2000)  # Active thrust overlay
-            rig.bake()                # Fold into cruise speed, clear overlay
-        """
-        total_vel = self._calculate_total_velocity()
-
-        # Bake into cruise velocity
-        magnitude = total_vel.magnitude()
-        if magnitude > 1e-6:
-            self._speed = magnitude
-            self._direction = total_vel.normalized()
-        else:
-            self._speed = 0.0
-            # Keep direction as-is when speed is zero
-
-        # Clear all overlays
-        self._thrust_overlays.clear()
-        self._resist_overlays.clear()
-        self._boost_overlays.clear()
-
     def _stop_immediate(self) -> None:
         """Internal: Immediate stop implementation"""
         # Stop movement
         self._speed = 0.0
+        self._accel = 0.0
         self._speed_transition = None
-        self._accelerate_transition = None
-        self._decelerate_transition = None
         self._direction_transition = None
         self._position_transitions.clear()
 
-        # Clear overlays
-        self._thrust_overlays.clear()
-        self._resist_overlays.clear()
-        self._boost_overlays.clear()
+        # Clear effects
+        self._effects.clear()
+        self._named_effects.clear()
 
         # Reset subpixel accumulator to prevent drift on restart
         self._subpixel_adjuster = SubpixelAdjuster()
@@ -1696,87 +1872,31 @@ class RigState:
                 pass  # Ignore errors if job already completed
         self._pending_wait_jobs.clear()
 
-    def stop(self) -> StopBuilder:
+    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop the rig
 
-        By default stops immediately. Use .over() for smooth deceleration.
-
-        Examples:
-            rig.stop()                              # Instant stop
-            rig.stop().over(500)                    # Smooth stop over 500ms
-            rig.stop().over(500).ease("ease_out")   # Smooth stop with easing
-            rig.stop().over(500).then(callback)     # Stop then callback
-        """
-        return StopBuilder(self, instant=True)
-
-    def thrust(self, acceleration: float) -> ThrustBuilder:
-        """Add temporary acceleration overlay
-
         Args:
-            acceleration: Acceleration rate (speed units per second)
+            duration_ms: Optional duration to fade out over. If None, stops immediately.
+            easing: Easing function name for gradual stop
 
         Examples:
-            rig.thrust(5).over(1000)              # Accelerate at 5 units/sec for 1 second
-            rig.thrust(3).dir(1, 0).over(500)     # Thrust right for 0.5 seconds
+            rig.stop()                  # Instant stop
+            rig.stop(500)               # Smooth stop over 500ms
+            rig.stop(1000, "ease_out")  # Smooth stop with easing
         """
-        return ThrustBuilder(self, acceleration)
-
-    def resist(self, deceleration: float) -> ResistBuilder:
-        """Add temporary deceleration overlay
-
-        Args:
-            deceleration: Deceleration rate (speed units per second)
-
-        Examples:
-            rig.resist(5).over(1000)              # Decelerate at 5 units/sec for 1 second
-            rig.resist(3).dir(-1, 0).over(500)    # Resist in specific direction
-        """
-        return ResistBuilder(self, deceleration)
-
-    def accelerate(self, rate: float) -> None:
-        """Permanently increase cruise speed at rate (speed units per second)
-
-        Args:
-            rate: Speed increase rate per second
-
-        Examples:
-            rig.accelerate(5)     # Cruise speed increases by 5 units/sec continuously
-        """
-        self.start()  # Ensure ticking is active
-        self._accelerate_transition = AccelerateTransition(rate)
-        self._decelerate_transition = None  # Cancel any active deceleration
-
-    def accel(self, rate: float) -> None:
-        """Alias for accelerate()"""
-        self.accelerate(rate)
-
-    def decelerate(self, rate: float) -> None:
-        """Permanently decrease cruise speed at rate (speed units per second)
-
-        Args:
-            rate: Speed decrease rate per second
-
-        Examples:
-            rig.decelerate(5)     # Cruise speed decreases by 5 units/sec until 0
-        """
-        self.start()  # Ensure ticking is active
-        self._decelerate_transition = DecelerateTransition(rate)
-        self._accelerate_transition = None  # Cancel any active acceleration
-
-    def decel(self, rate: float) -> None:
-        """Alias for decelerate()"""
-        self.decelerate(rate)
-
-    def boost(self, force: float) -> BoostBuilder:
-        """Add instant velocity offset with decay
-
-        Args:
-            force: Initial velocity magnitude
-
-        Examples:
-            rig.boost(10).over(500)           # Burst of speed that decays over 0.5 sec
-        """
-        return BoostBuilder(self, force)
+        if duration_ms is None or duration_ms == 0:
+            self._stop_immediate()
+        else:
+            # Gradual stop: fade speed to 0 over duration
+            if self._speed_transition is None:
+                transition = SpeedTransition(
+                    self._speed,
+                    0.0,
+                    duration_ms,
+                    easing
+                )
+                self.start()
+                self._speed_transition = transition
 
     def sequence(self, steps: list[Callable]) -> None:
         """Execute a sequence of operations in order
@@ -1868,8 +1988,8 @@ class RigState:
         """Check if rig is completely idle (no movement or transitions)"""
         epsilon = settings.get("user.mouse_rig_epsilon")
 
-        # Check if speed is effectively zero
-        if abs(self._speed) > epsilon:
+        # Check if speed and accel are effectively zero
+        if abs(self._speed) > epsilon or abs(self._accel) > epsilon:
             return False
 
         # Check for active transitions
@@ -1877,17 +1997,9 @@ class RigState:
             return False
         if self._direction_transition is not None:
             return False
-        if self._accelerate_transition is not None:
-            return False
-        if self._decelerate_transition is not None:
-            return False
 
-        # Check for active overlays
-        if len(self._thrust_overlays) > 0:
-            return False
-        if len(self._resist_overlays) > 0:
-            return False
-        if len(self._boost_overlays) > 0:
+        # Check for active effects
+        if len(self._effects) > 0:
             return False
 
         # Check for position transitions
@@ -1907,16 +2019,7 @@ class RigState:
         dt = current_time - self._last_frame_time if self._last_frame_time else 0.016
         self._last_frame_time = current_time
 
-        # Update transitions (in precedence order: accelerate/decelerate > speed)
-        if self._accelerate_transition:
-            self._accelerate_transition.update(self, dt)
-            # Accelerate never completes on its own (runs until cancelled)
-
-        if self._decelerate_transition:
-            self._decelerate_transition.update(self, dt)
-            if self._decelerate_transition.complete:
-                self._decelerate_transition = None
-
+        # Update permanent transitions
         if self._speed_transition:
             self._speed_transition.update(self)
             if self._speed_transition.complete:
@@ -1927,40 +2030,67 @@ class RigState:
             if self._direction_transition.complete:
                 self._direction_transition = None
 
-        # Calculate cruise velocity
-        cruise_velocity = self._direction * self._speed
+        # Update effects (temporary property modifications)
+        for effect in self._effects[:]:
+            # Start effect if not started
+            if effect.phase == "not_started":
+                if effect.property_name == "speed":
+                    effect.start(self._speed)
+                elif effect.property_name == "accel":
+                    effect.start(self._accel)
+                    # Initialize velocity tracking for accel effects
+                    self._accel_velocities[effect] = 0.0
 
-        # Apply thrust overlays (acceleration → velocity, then decay)
-        thrust_velocity = Vec2(0, 0)
-        for thrust in self._thrust_overlays[:]:
-            thrust_velocity = thrust_velocity + thrust.update(self._direction, dt)
-            if thrust.complete:
-                self._thrust_overlays.remove(thrust)
+            # Update effect lifecycle
+            if effect.property_name == "speed":
+                # Speed effects modify cruise speed
+                self._speed = effect.update(self._speed)
+            elif effect.property_name == "accel":
+                # Accel effects: get the current acceleration value but don't modify cruise speed
+                current_accel = effect.update(self._accel)
+                # Integrate the acceleration into this effect's velocity contribution
+                if effect in self._accel_velocities:
+                    self._accel_velocities[effect] += current_accel * dt
 
-        # Apply resist overlays (velocity offset)
-        resist_velocity = Vec2(0, 0)
-        for resist in self._resist_overlays[:]:
-            resist_vec = resist.get_velocity(self._direction)
-            resist_velocity = resist_velocity + resist_vec
-            if resist.complete:
-                self._resist_overlays.remove(resist)
+            # Remove completed effects
+            if effect.complete:
+                self._effects.remove(effect)
+                # Remove from named effects if it has a name
+                if effect.name and effect.name in self._named_effects:
+                    del self._named_effects[effect.name]
+                # Remove velocity tracking for accel effects
+                if effect.property_name == "accel" and effect in self._accel_velocities:
+                    del self._accel_velocities[effect]
 
-        # Apply boost overlays (velocity)
-        boost_velocity = Vec2(0, 0)
-        for boost in self._boost_overlays[:]:
-            boost_velocity = boost_velocity + boost.get_velocity()
-            if boost.complete:
-                self._boost_overlays.remove(boost)
+        # Handle base acceleration (permanent accel changes)
+        # Base accel DOES modify cruise speed permanently
+        base_accel = self._accel
+        if abs(base_accel) > 1e-6:
+            self._speed += base_accel * dt
+            self._speed = max(0.0, self._speed)
+            if self.limits_max_speed is not None:
+                self._speed = min(self._speed, self.limits_max_speed)
 
-        # Combine velocities
-        total_velocity = cruise_velocity + thrust_velocity + resist_velocity + boost_velocity
+        # Calculate velocity from effective speed and direction
+        effective_speed = self._get_effective_speed()
+
+        # Add velocity contributions from acceleration effects
+        accel_velocity_contribution = self._get_accel_velocity_contribution()
+        total_speed = effective_speed + accel_velocity_contribution
+
+        # Clamp total speed
+        if self.limits_max_speed is not None:
+            total_speed = min(total_speed, self.limits_max_speed)
+        total_speed = max(0.0, total_speed)
+
+        velocity = self._direction * total_speed
 
         # Apply scale
         scale = settings.get("user.mouse_rig_scale")
-        total_velocity = total_velocity * scale
+        velocity = velocity * scale
 
         # Update position from velocity
-        position_delta = total_velocity
+        position_delta = velocity
 
         # Apply position transitions (glides)
         for pos_transition in self._position_transitions[:]:
