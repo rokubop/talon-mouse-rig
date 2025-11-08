@@ -177,7 +177,7 @@ def clamp(value: float, min_val: float, max_val: float) -> float:
 class SubpixelAdjuster:
     """
     Accumulates fractional pixel movements to prevent rounding errors.
-    
+
     When moving the mouse in small increments (e.g., 0.3 pixels per frame),
     naive int() conversion would lose the fractional part each frame,
     causing the mouse to drift from its intended path. This class tracks
@@ -186,26 +186,26 @@ class SubpixelAdjuster:
     def __init__(self):
         self.x_frac = 0.0
         self.y_frac = 0.0
-    
+
     def adjust(self, dx: float, dy: float) -> Tuple[int, int]:
         """
         Convert float deltas to integer pixels while tracking fractional error.
-        
+
         Returns:
             (dx_int, dy_int): Integer pixel deltas to apply this frame
         """
         # Accumulate fractional movement
         self.x_frac += dx
         self.y_frac += dy
-        
+
         # Extract integer part (floor towards zero)
         dx_int = int(self.x_frac)
         dy_int = int(self.y_frac)
-        
+
         # Keep the fractional remainder for next frame
         self.x_frac -= dx_int
         self.y_frac -= dy_int
-        
+
         return dx_int, dy_int
 
 
@@ -1072,7 +1072,7 @@ class PositionToBuilder:
         self.rig_state = rig_state
         self.x = x
         self.y = y
-        self._easing = "linear"
+        self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
         self._then_callback: Optional[Callable] = None
@@ -1176,7 +1176,7 @@ class PositionByBuilder:
         self.rig_state = rig_state
         self.dx = dx
         self.dy = dy
-        self._easing = "linear"
+        self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
         self._then_callback: Optional[Callable] = None
@@ -1465,7 +1465,7 @@ class RigState:
         # Frame loop
         self._cron_job = None
         self._last_frame_time = None
-        
+
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
 
@@ -1478,10 +1478,7 @@ class RigState:
         # Calculate overlay contributions
         thrust_velocity = Vec2(0, 0)
         for thrust in self._thrust_overlays:
-            accel_vec = thrust.get_acceleration(self._direction)
-            # Approximate velocity contribution (using frame interval)
-            dt = settings.get("user.mouse_rig_frame_interval") / 1000.0
-            thrust_velocity = thrust_velocity + (accel_vec * dt)
+            thrust_velocity = thrust_velocity + thrust.accumulated_velocity
 
         resist_velocity = Vec2(0, 0)
         for resist in self._resist_overlays:
@@ -1494,9 +1491,13 @@ class RigState:
 
         total_velocity = cruise_velocity + thrust_velocity + resist_velocity + boost_velocity
 
+        # Determine cardinal/intercardinal direction
+        direction_cardinal = self._get_cardinal_direction(self._direction)
+
         return {
             "position": position,
             "direction": self._direction.to_tuple(),
+            "direction_cardinal": direction_cardinal,
             "speed": self._speed,
             "cruise_velocity": cruise_velocity.to_tuple(),
             "total_velocity": total_velocity.to_tuple(),
@@ -1508,6 +1509,7 @@ class RigState:
             "has_accelerate": self._accelerate_transition is not None,
             "has_decelerate": self._decelerate_transition is not None,
             "active_glides": len(self._position_transitions),
+            "is_moving": self.is_moving,
             "is_ticking": self.is_ticking,
         }
 
@@ -1515,6 +1517,13 @@ class RigState:
     def is_ticking(self) -> bool:
         """Check if the frame loop is currently running"""
         return self._cron_job is not None
+
+    @property
+    def is_moving(self) -> bool:
+        """Check if the rig is currently producing movement"""
+        epsilon = settings.get("user.mouse_rig_epsilon")
+        total_vel = self._calculate_total_velocity()
+        return total_vel.magnitude() > epsilon
 
     @property
     def settings(self) -> dict:
@@ -1562,6 +1571,37 @@ class RigState:
         reversed_dir = self._direction * -1
         return DirectionBuilder(self, reversed_dir, instant=True)
 
+    def _get_cardinal_direction(self, direction: Vec2) -> str:
+        """Get cardinal/intercardinal direction name from direction vector
+
+        Returns one of: "right", "left", "up", "down",
+                       "up_right", "up_left", "down_right", "down_left"
+        """
+        x, y = direction.x, direction.y
+
+        # Threshold for considering a direction as "mostly" along an axis
+        # 0.383 ≈ cos(67.5°), which is halfway between pure cardinal (0°) and pure diagonal (45°)
+        threshold = 0.383
+
+        # Pure cardinal directions (within 22.5° of axis)
+        if abs(x) > abs(y) * 2.414:  # tan(67.5°) ≈ 2.414
+            return "right" if x > 0 else "left"
+        if abs(y) > abs(x) * 2.414:
+            return "up" if y < 0 else "down"
+
+        # Diagonal/intercardinal directions
+        if x > 0 and y < 0:
+            return "up_right"
+        elif x < 0 and y < 0:
+            return "up_left"
+        elif x > 0 and y > 0:
+            return "down_right"
+        elif x < 0 and y > 0:
+            return "down_left"
+
+        # Fallback (shouldn't happen with normalized vectors)
+        return "right"
+
     def _calculate_total_velocity(self) -> Vec2:
         """Calculate current total velocity including all overlays
 
@@ -1574,14 +1614,10 @@ class RigState:
         # Calculate cruise velocity
         cruise_velocity = self._direction * self._speed
 
-        # Get frame interval for overlay calculations
-        dt = settings.get("user.mouse_rig_frame_interval") / 1000.0
-
-        # Calculate thrust velocity
+        # Calculate thrust velocity (use accumulated velocity, not acceleration)
         thrust_velocity = Vec2(0, 0)
         for thrust in self._thrust_overlays:
-            accel_vec = thrust.get_acceleration(self._direction)
-            thrust_velocity = thrust_velocity + (accel_vec * dt)
+            thrust_velocity = thrust_velocity + thrust.accumulated_velocity
 
         # Calculate resist velocity
         resist_velocity = Vec2(0, 0)
@@ -1979,6 +2015,27 @@ class Actions:
             rig.speed(5)
         """
         return get_rig()
+
+    def mouse_rig_state() -> dict:
+        """Get the current state of the mouse rig
+
+        Returns a dictionary with current rig state including:
+        - position: Current mouse position (x, y)
+        - direction: Direction vector (x, y)
+        - direction_cardinal: Cardinal direction name ("right", "left", "up", "down", etc.)
+        - speed: Current cruise speed
+        - cruise_velocity: Cruise velocity (x, y)
+        - total_velocity: Total velocity including overlays (x, y)
+        - Active overlays/transitions counts
+        - is_ticking: Whether the rig is actively running
+
+        Example:
+            state = actions.user.mouse_rig_state()
+            print(f"Speed: {state['speed']}")
+            print(f"Direction: {state['direction_cardinal']}")
+        """
+        rig = get_rig()
+        return rig.state
 
     def mouse_rig_stop() -> None:
         """Stop the mouse rig frame loop"""

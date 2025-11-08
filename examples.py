@@ -303,11 +303,11 @@ class Actions:
         rig.speed(5)
 
         def reverse():
-            rig.direction(-1, 0).over(200)
+            rig.direction(-1, 0)
             cron.after("2s", go_right)
 
         def go_right():
-            rig.direction(1, 0).over(200)
+            rig.direction(1, 0)
             cron.after("2s", reverse)
 
         cron.after("2s", reverse)
