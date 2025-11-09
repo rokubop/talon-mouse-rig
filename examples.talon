@@ -95,8 +95,8 @@ rig reverse: user.mouse_rig_reverse()
 # POSITION CONTROL
 # =============================================================================
 
-rig pos center: user.mouse_rig_pos_center()
-rig pos corner: user.mouse_rig_pos_corner()
+rig position center: user.mouse_rig_pos_center()
+rig position corner: user.mouse_rig_pos_corner()
 rig nudge right: user.mouse_rig_nudge_right()
 
 # =============================================================================

@@ -6,7 +6,7 @@ Simplified API using `speed`, `accel`, `direction` primitives with:
 - `.over()` for time-based changes
 - `.rate()` for rate-based changes
 - `.hold()` and `.revert()` for temporary effects
-- Named effects (modifiers on base)
+- Named modifiers (relative changes to base)
 - Named forces (independent entities)
 - Baking/flattening for state management
 
@@ -16,11 +16,11 @@ Simplified API using `speed`, `accel`, `direction` primitives with:
 
 **Base Rig**: The primary mouse movement state (speed, direction, accel, position)
 
-**Effects**: Named modifiers that transform base properties (multiply, add, etc.)
+**Modifiers**: Named relative changes that transform base properties (multiply, add, etc.)
 
 **Forces**: Named independent entities with their own speed/direction/accel that combine with base via vector addition
 
-**Temporary Changes**: Auto-remove via `.revert()` - can be used on base rig, effects, or forces
+**Temporary Changes**: Auto-remove via `.revert()` - can be used on base rig, modifiers, or forces
 
 ---
 
@@ -150,66 +150,66 @@ rig.direction.by(90).rate(45).hold(2000).revert(1000)
 
 ---
 
-## Named Effects (Modifiers)
+## Named Modifiers
 
-Effects modify base rig properties using relative operations (`.mul()`, `.by()`, `.div()`).
+Modifiers apply relative changes to base rig properties using (`.mul()`, `.by()`, `.div()`).
 They stay active until explicitly stopped.
 
-### Creating Effects
+### Creating Modifiers
 ```python
-rig.effect("boost").speed.mul(2)              # multiply base speed by 2
-rig.effect("drift").direction.by(15)          # rotate base direction by 15°
-rig.effect("slow").speed.mul(0.5)             # half the base speed
+rig.modifier("boost").speed.mul(2)            # multiply base speed by 2
+rig.modifier("drift").direction.by(15)        # rotate base direction by 15°
+rig.modifier("slow").speed.mul(0.5)           # half the base speed
 ```
 
-### Effect Composition
-Effects recalculate when base changes:
+### Modifier Composition
+Modifiers recalculate when base changes:
 
 ```python
 rig.speed(10)                                 # base = 10
-rig.effect("boost").speed.mul(2)              # total = 20
+rig.modifier("boost").speed.mul(2)            # total = 20
 rig.speed(20)                                 # change base = 20
 # boost recalculates: total = 40
 ```
 
-### Stopping Effects
+### Stopping Modifiers
 ```python
-# Stop specific effect
-rig.effect("boost").stop()                    # immediate stop
-rig.effect("boost").stop(500)                 # stop over 500ms
-rig.effect("boost").stop(500, "ease_in_out")  # with easing
+# Stop specific modifier
+rig.modifier("boost").stop()                  # immediate stop
+rig.modifier("boost").stop(500)               # stop over 500ms
+rig.modifier("boost").stop(500, "ease_in_out")  # with easing
 
-# Stop all effects
-rig.effect.stop_all()
-rig.effect.stop_all(1000)                     # all effects stop over 1s
+# Stop all modifiers
+rig.modifier.stop_all()
+rig.modifier.stop_all(1000)                   # all modifiers stop over 1s
 ```
 
 ### Imperative Control Pattern
-Named effects are designed for imperative control (like key press/release):
+Named modifiers are designed for imperative control (like key press/release):
 
 ```python
-# Key down - apply effect (repeatable)
-rig.effect("thrust").accel(10).rate(20)       # ramp to 10 at rate 20/sec
-rig.effect("thrust").accel(10).rate(20)       # continue/maintain
-rig.effect("thrust").accel(10).rate(20)       # still maintaining
+# Key down - apply modifier (repeatable)
+rig.force("thrust").accel(10)                 # set thrust acceleration
+rig.force("thrust").accel(10)                 # continue/maintain
+rig.force("thrust").accel(10)                 # still maintaining
 
-# Key up - stop effect
-rig.effect("thrust").stop(2000)               # graceful stop over 2s
+# Key up - stop force
+rig.force("thrust").stop(2000)                # graceful stop over 2s
 ```
 
 ### Constraints
-Effects can **only** use relative modifiers:
+Modifiers can **only** use relative operations:
 - ✓ `.mul()`, `.by()`, `.div()`
 - ✗ `.to()` or absolute setters - will raise an error (use forces for absolute values)
 
 ```python
 # Valid
-rig.effect("boost").speed.mul(2)        # ✓ relative modifier
-rig.effect("drift").direction.by(15)    # ✓ relative modifier
+rig.modifier("boost").speed.mul(2)      # ✓ relative operation
+rig.modifier("drift").direction.by(15)  # ✓ relative operation
 
 # Invalid - will error
-rig.effect("boost").speed.to(20)        # ✗ ERROR: effects cannot use .to()
-rig.effect("boost").speed(20)           # ✗ ERROR: effects cannot use absolute setters
+rig.modifier("boost").speed.to(20)      # ✗ ERROR: modifiers cannot use .to()
+rig.modifier("boost").speed(20)         # ✗ ERROR: modifiers cannot use absolute setters
 ```
 
 ---
@@ -295,18 +295,18 @@ rig.base.pos
 ```
 
 ### Baking/Flattening
-Collapse current computed state into base, removing all effects and forces:
+Collapse current computed state into base, removing all modifiers and forces:
 
 ```python
 # Setup
 rig.speed(10)
-rig.effect("boost").speed.mul(2)              # computed speed = 20
+rig.modifier("boost").speed.mul(2)            # computed speed = 20
 rig.force("wind").speed(5).direction(0, 1)    # adds vector
 
 # Bake
 rig.bake()
 # Now: base.speed = 20, base.direction = combined vector
-# All effects and forces cleared
+# All modifiers and forces cleared
 ```
 
 ### Global Stop
@@ -340,10 +340,10 @@ rig.speed.mul(2).over(300).hold(1000).revert(500)
 ### Thrust/Acceleration Control
 ```python
 # Key down (repeatable - can call multiple times)
-rig.effect("thrust").accel(10).rate(20)
+rig.force("thrust").accel(10)
 
 # Key up
-rig.effect("thrust").stop(2000, "ease_in")
+rig.force("thrust").stop(2000, "ease_in")
 ```
 
 ### Gravity Effect
@@ -374,14 +374,14 @@ rig.direction.by(180).rate(30)  # rotate at 30°/sec
 rig.speed(20)
 rig.direction(-1, 0)
 
-# Accel boost with decay
-rig.effect("accel_boost").accel(10).over(500).hold(1000).revert(1500)
+# Accel boost with decay (as a modifier)
+rig.modifier("accel_boost").accel.mul(2).hold(1000).revert(1500)
 
 # Turn base rig
 rig.direction.by(45).over(300)
 
 # Quick speed boost during turn
-rig.effect("quick_boost").speed.mul(1.5).hold(200).revert(100)
+rig.modifier("quick_boost").speed.mul(1.5).hold(200).revert(100)
 
 # Flatten and stop
 rig.bake()

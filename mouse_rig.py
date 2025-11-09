@@ -48,14 +48,14 @@ Temporary Effects (auto-remove after lifecycle):
         rig.speed.mul(2).hold(1000)                      # Hold 1s, instant revert
         rig.speed.mul(2).over(300).hold(1000).revert(500) # Fade in, hold, fade out
 
-Named Effects (modifiers on base, relative ops only):
-    rig.effect("boost").speed.mul(2)                # Multiply base by 2
-    rig.effect("boost").stop()                      # Immediate stop
-    rig.effect("boost").stop(500, "ease_out")       # Fade out over 500ms
-    rig.effect.stop_all()                           # Stop all effects
+Named Modifiers (relative changes to base, stoppable):
+    rig.modifier("boost").speed.mul(2)              # Multiply base by 2
+    rig.modifier("boost").stop()                    # Immediate stop
+    rig.modifier("boost").stop(500, "ease_out")     # Fade out over 500ms
+    rig.modifier.stop_all()                         # Stop all modifiers
 
     Constraints: Only .mul(), .by(), .div() allowed
-    Effects recalculate when base changes
+    Modifiers recalculate when base changes
 
 Named Forces (independent entities, absolute values only):
     rig.force("wind").speed(5)                      # Set force speed
@@ -68,7 +68,7 @@ Named Forces (independent entities, absolute values only):
     Forces remain constant regardless of base changes
 
 State Management:
-    rig.state.speed       # Computed speed (base + effects)
+    rig.state.speed       # Computed speed (base + modifiers)
     rig.state.accel       # Computed acceleration
     rig.state.direction   # Current direction
     rig.state.pos         # Current position
@@ -79,7 +79,7 @@ State Management:
     rig.base.direction    # Base direction only
 
 Baking & Stopping:
-    rig.bake()                      # Flatten effects into base, clear all
+    rig.bake()                      # Flatten modifiers into base, clear all
     rig.stop()                      # Bake, clear, speed=0 (instant)
     rig.stop(500, "ease_out")       # Bake, clear, decelerate over 500ms
 
@@ -104,8 +104,8 @@ Complete Examples:
     rig.speed.mul(1.5).hold(2000).revert(1000)
 
     # Thrust control (repeatable)
-    rig.effect("thrust").accel(10).rate(20)   # Key down
-    rig.effect("thrust").stop(2000)           # Key up
+    rig.force("thrust").accel(10)             # Key down
+    rig.force("thrust").stop(2000)            # Key up
 
     # Gravity
     rig.force("gravity").speed(9.8).direction(0, 1)
@@ -334,6 +334,93 @@ EASING_FUNCTIONS = {
 DEFAULT_EASING = "ease_out"
 
 # ============================================================================
+# ERROR MESSAGE HELPERS
+# ============================================================================
+
+def _get_speed_operations_help() -> str:
+    """Get help text for available speed operations"""
+    return (
+        "    rig.speed(value)                                        # Set speed\n"
+        "    rig.speed.to(value)                                     # With effects support\n"
+        "    rig.speed.by(delta)                                     # Add/subtract\n"
+        "    rig.speed.mul(factor)                                   # Multiply\n"
+        "    rig.speed.div(divisor)                                  # Divide\n"
+        "    rig.speed.to(20).over(500)                              # Transition over time\n"
+        "    rig.speed.to(20).over(500, 'ease_in_out')               # With easing\n"
+        "    rig.speed.mul(2).hold(1000)                             # Temporary boost\n"
+        "    rig.speed.mul(2).over(300).hold(1000).revert(300)       # Full lifecycle\n"
+        "    rig.speed.to(30).rate(10)                               # Rate-based (10/sec)"
+    )
+
+def _get_accel_operations_help() -> str:
+    """Get help text for available accel operations"""
+    return (
+        "    rig.accel(value)                                        # Set acceleration\n"
+        "    rig.accel.to(value)                                     # With effects support\n"
+        "    rig.accel.by(delta)                                     # Add/subtract\n"
+        "    rig.accel.mul(factor)                                   # Multiply\n"
+        "    rig.accel.div(divisor)                                  # Divide\n"
+        "    rig.accel.to(10).over(500)                              # Transition\n"
+        "    rig.accel.to(10).over(500).hold(1000).revert(500)       # Temporary effect"
+    )
+
+def _get_pos_operations_help() -> str:
+    """Get help text for available pos operations"""
+    return (
+        "    rig.pos.to(x, y)                                        # Move to position\n"
+        "    rig.pos.to(x, y).over(1000)                             # Glide over time\n"
+        "    rig.pos.to(x, y).over(1000, 'ease_in_out')              # With easing\n"
+        "    rig.pos.by(dx, dy)                                      # Move by offset\n"
+        "    rig.pos.by(dx, dy).over(500).revert(500)                # Move and return"
+    )
+
+def _get_direction_operations_help() -> str:
+    """Get help text for available direction operations"""
+    return (
+        "    rig.direction(x, y)                                     # Set direction (legacy)\n"
+        "    rig.direction.to(x, y)                                  # Set to absolute vector\n"
+        "    rig.direction.to(1, 0).over(500)                        # Smooth rotation over time\n"
+        "    rig.direction.to(1, 0).over(500, 'ease_in_out')         # With easing\n"
+        "    rig.direction.to(1, 0).rate(90)                         # Rotate at 90°/sec\n"
+        "    rig.direction.by(45)                                    # Rotate 45° (relative)\n"
+        "    rig.direction.by(-90).over(500)                         # Rotate -90° smoothly\n"
+        "    rig.direction.by(180).rate(90)                          # Rotate 180° at 90°/sec\n"
+        "    rig.reverse()                                           # 180° turn (shorthand)"
+    )
+
+def _error_cannot_chain_property(builder_type: str, property_name: str) -> str:
+    """Generate error message for invalid property chaining"""
+    help_map = {
+        "speed": _get_speed_operations_help(),
+        "accel": _get_accel_operations_help(),
+        "pos": _get_pos_operations_help(),
+        "direction": _get_direction_operations_help(),
+    }
+
+    # Get the "current" property from builder_type (e.g., "direction" from "direction")
+    current_prop = builder_type.split()[0] if ' ' in builder_type else builder_type
+
+    help_text = help_map.get(current_prop, f"# See documentation for {current_prop} operations")
+
+    return (
+        f"Cannot chain '{property_name}' after '{builder_type}'.\n\n"
+        f"Note: The core properties (speed, direction, pos, accel) cannot be chained together.\n"
+        f"Use separate statements instead:\n"
+        f"    rig = actions.user.mouse_rig()\n"
+        f"    rig.{current_prop}(...)  # Set {current_prop}\n"
+        f"    rig.{property_name}(...)  # Set {property_name}\n\n"
+        f"You can chain these with .{current_prop}:\n"
+        f"{help_text}"
+    )
+
+def _error_unknown_builder_attribute(builder_type: str, attribute_name: str, valid_methods: str) -> str:
+    """Generate error message for unknown attribute on builder"""
+    return (
+        f"'{builder_type}' has no attribute '{attribute_name}'.\n\n"
+        f"Available methods: {valid_methods}"
+    )
+
+# ============================================================================
 # TRANSITION CLASSES (for .over() support)
 # ============================================================================
 
@@ -496,9 +583,15 @@ class Effect:
             self.phase_start_time = time.perf_counter()
             self.current_multiplier = 1.0
         else:
-            # No lifecycle - shouldn't happen for effects
-            self.phase = "complete"
-            self.complete = True
+            # No lifecycle specified
+            if self.name:
+                # Named modifiers without lifecycle persist indefinitely at full strength
+                self.phase = "hold"
+                self.current_multiplier = 1.0
+            else:
+                # Unnamed effects without lifecycle complete immediately
+                self.phase = "complete"
+                self.complete = True
 
     def update(self, current_base_value: float) -> float:
         """
@@ -542,15 +635,18 @@ class Effect:
                 self.current_multiplier = easing_fn(t)
 
         elif self.phase == "hold":
-            if elapsed_ms >= self.hold_duration_ms:
-                # Move to next phase
-                if self.out_duration_ms is not None:
-                    self.phase = "out"
-                    self.phase_start_time = current_time
-                else:
-                    self.phase = "complete"
-                    self.complete = True
-                    return current_base_value
+            # Check if we have a duration specified
+            if self.hold_duration_ms is not None:
+                if elapsed_ms >= self.hold_duration_ms:
+                    # Move to next phase
+                    if self.out_duration_ms is not None:
+                        self.phase = "out"
+                        self.phase_start_time = current_time
+                    else:
+                        self.phase = "complete"
+                        self.complete = True
+                        return current_base_value
+            # else: persist indefinitely at full strength (named modifiers without timing)
             # Multiplier stays at 1.0 during hold
 
         elif self.phase == "out":
@@ -610,15 +706,109 @@ class Effect:
             self.complete = True
             return current_base_value
 
-        # Fade out the current multiplier
+        # Fade out the current multiplier (from 1.0 to 0.0)
         t = elapsed_ms / self.stop_duration_ms
         easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
-        self.current_multiplier = self.current_multiplier * (1.0 - easing_fn(t))
+        self.current_multiplier = 1.0 - easing_fn(t)
 
         return self._apply_effect(current_base_value)
 
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the effect to stop, optionally over a duration"""
+        self.stop_requested = True
+        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
+        self.stop_easing = easing
+
+
+# ============================================================================
+# FORCE SYSTEM (independent entities with vector addition)
+# ============================================================================
+
+class Force:
+    """
+    Independent entity with its own speed, acceleration, and direction.
+    Forces combine with base rig via vector addition.
+    """
+    def __init__(self, name: str, rig_state: 'RigState'):
+        self.name = name
+        self.rig_state = rig_state
+
+        # Force properties - default to rig's current direction
+        self._speed = 0.0
+        self._accel = 0.0
+        self._direction = rig_state._direction  # Inherit rig's direction
+
+        # Integrated velocity from acceleration
+        self._velocity = 0.0
+
+        # Stopping state
+        self.stop_requested = False
+        self.stop_duration_ms: Optional[float] = None
+        self.stop_easing = "linear"
+        self.stop_start_time: Optional[float] = None
+        self.stop_initial_speed = 0.0
+        self.stop_initial_velocity = 0.0
+        self.complete = False
+
+    def update(self, dt: float) -> Vec2:
+        """
+        Update force and return its velocity vector contribution.
+
+        Args:
+            dt: Delta time in seconds
+
+        Returns:
+            Velocity vector from this force
+        """
+        if self.complete:
+            return Vec2(0, 0)
+
+        # Handle stop request
+        if self.stop_requested:
+            return self._update_stop(dt)
+
+        # Integrate acceleration into velocity
+        if abs(self._accel) > 1e-6:
+            self._velocity += self._accel * dt
+
+        # Total speed is base speed + integrated velocity
+        total_speed = self._speed + self._velocity
+
+        # Return velocity vector
+        return self._direction * total_speed
+
+    def _update_stop(self, dt: float) -> Vec2:
+        """Handle gradual stopping of the force"""
+        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
+            # Immediate stop
+            self.complete = True
+            return Vec2(0, 0)
+
+        # Initialize stop
+        if self.stop_start_time is None:
+            self.stop_start_time = time.perf_counter()
+            self.stop_initial_speed = self._speed
+            self.stop_initial_velocity = self._velocity
+
+        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
+
+        if elapsed_ms >= self.stop_duration_ms:
+            self.complete = True
+            return Vec2(0, 0)
+
+        # Fade out both speed and velocity
+        t = elapsed_ms / self.stop_duration_ms
+        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
+        multiplier = 1.0 - easing_fn(t)
+
+        current_speed = self.stop_initial_speed * multiplier
+        current_velocity = self.stop_initial_velocity * multiplier
+        total_speed = current_speed + current_velocity
+
+        return self._direction * total_speed
+
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the force to stop, optionally over a duration"""
         self.stop_requested = True
         self.stop_duration_ms = duration_ms if duration_ms is not None else 0
         self.stop_easing = easing
@@ -1129,7 +1319,7 @@ class PropertyEffectBuilder:
         self._in_easing: str = "linear"
         self._out_easing: str = "linear"
 
-        # Named effect
+        # Named modifier
         self._effect_name: Optional[str] = None
 
     def __del__(self):
@@ -1145,9 +1335,10 @@ class PropertyEffectBuilder:
             return  # Already executed
 
         # Determine if this is permanent or temporary
-        # Temporary = has .revert() or .hold() specified
+        # Temporary = has .revert() or .hold() specified OR is a named modifier
         is_temporary = (self._hold_duration_ms is not None or
-                       self._out_duration_ms is not None)
+                       self._out_duration_ms is not None or
+                       self._effect_name is not None)
 
         if self._in_duration_ms is not None and not is_temporary:
             # Permanent transition over time (just .over() without .hold()/.revert())
@@ -1176,14 +1367,14 @@ class PropertyEffectBuilder:
             self.rig_state.start()
             self.rig_state._effects.append(effect)
 
-            # Track named effect
+            # Track named modifier
             if self._effect_name:
-                # Remove any existing effect with same name
-                if self._effect_name in self.rig_state._named_effects:
-                    old_effect = self.rig_state._named_effects[self._effect_name]
+                # Remove any existing modifier with same name
+                if self._effect_name in self.rig_state._named_modifiers:
+                    old_effect = self.rig_state._named_modifiers[self._effect_name]
                     if old_effect in self.rig_state._effects:
                         self.rig_state._effects.remove(old_effect)
-                self.rig_state._named_effects[self._effect_name] = effect
+                self.rig_state._named_modifiers[self._effect_name] = effect
         else:
             # Immediate execution (no timing specified)
             if self.property_name == "speed":
@@ -1276,6 +1467,25 @@ class PropertyEffectBuilder:
         self._in_duration_ms = duration_ms
         self._in_easing = "linear"  # Rate-based uses linear
         return self
+
+    def __getattr__(self, name: str):
+        """Provide helpful error messages for invalid chaining attempts"""
+        # Common rig properties that can't be chained
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            # Don't allow chaining properties from effect builders
+            raise AttributeError(_error_cannot_chain_property(f'{self.property_name} effect', name))
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after {self.property_name} effect.\n\n"
+                "Instead, use separate statements."
+            )
+
+        # Unknown attribute
+        raise AttributeError(_error_unknown_builder_attribute(
+            f'{self.property_name.capitalize()}EffectBuilder',
+            name,
+            'over, hold, revert, rate'
+        ))
 
 
 class PropertyRateNamespace:
@@ -1401,8 +1611,13 @@ class DirectionBuilder:
             elif self._then_callback:
                 self._then_callback()
 
-    def over(self, duration_ms: float) -> 'DirectionBuilder':
-        """Rotate to target direction over time"""
+    def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionBuilder':
+        """Rotate to target direction over time
+
+        Args:
+            duration_ms: Duration in milliseconds
+            easing: Easing function ('linear', 'ease_in', 'ease_out', 'ease_in_out', 'smoothstep')
+        """
         if self._wait_duration_ms is not None:
             raise ValueError(
                 "Cannot use .over() after .wait() - these are mutually exclusive execution modes.\n"
@@ -1412,6 +1627,7 @@ class DirectionBuilder:
             )
         self._should_execute_instant = False
         self._duration_ms = duration_ms
+        self._easing = easing
         return self
 
     def rate(self, degrees_per_second: float) -> 'DirectionBuilder':
@@ -1448,15 +1664,181 @@ class DirectionBuilder:
         self._wait_duration_ms = duration_ms
         return self
 
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'DirectionBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
-
     def then(self, callback: Callable) -> 'DirectionBuilder':
         """Execute callback after direction change completes"""
         self._then_callback = callback
         return self
+
+    def __getattr__(self, name: str):
+        """Provide helpful error messages for invalid chaining attempts"""
+        # Common rig properties that can't be chained
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            raise AttributeError(_error_cannot_chain_property('direction', name))
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after 'direction'.\n\n"
+                "Instead, use separate statements:\n"
+                "    rig.direction(1, 0)\n"
+                "    rig.{name}(...)"
+            )
+
+        # Unknown attribute
+        raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, rate, wait, then'))
+
+
+class DirectionByBuilder:
+    """Builder for direction.by(degrees) - relative rotation"""
+    def __init__(self, rig_state: 'RigState', degrees: float, instant: bool = False):
+        self.rig_state = rig_state
+        self.degrees = degrees
+        self._easing = "linear"
+        self._should_execute_instant = instant
+        self._then_callback: Optional[Callable] = None
+        self._duration_ms: Optional[float] = None
+        self._use_rate: bool = False
+        self._rate_degrees_per_second: Optional[float] = None
+        self._wait_duration_ms: Optional[float] = None
+
+    def __del__(self):
+        """Execute the operation when builder goes out of scope"""
+        try:
+            self._execute()
+        except:
+            pass  # Ignore errors during cleanup
+
+    def _execute(self):
+        """Execute the configured operation"""
+        # Calculate target direction from current + degrees
+        current_dir = self.rig_state._direction
+        angle_rad = math.radians(self.degrees)
+
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+
+        new_x = current_dir.x * cos_a - current_dir.y * sin_a
+        new_y = current_dir.x * sin_a + current_dir.y * cos_a
+
+        target_direction = Vec2(new_x, new_y).normalized()
+
+        if self._duration_ms is not None or self._use_rate:
+            # Calculate duration from rate if needed
+            duration_ms = self._duration_ms
+            if self._use_rate and self._rate_degrees_per_second is not None:
+                angle_deg = abs(self.degrees)
+                if angle_deg < 0.1:
+                    duration_ms = 1  # Minimal duration for near-zero turns
+                else:
+                    duration_sec = angle_deg / self._rate_degrees_per_second
+                    duration_ms = duration_sec * 1000
+
+            # Create transition
+            transition = DirectionTransition(
+                self.rig_state._direction,
+                target_direction,
+                duration_ms,
+                self._easing
+            )
+            self.rig_state.start()
+            self.rig_state._direction_transition = transition
+
+            # Register callback
+            if self._then_callback:
+                transition.on_complete = self._then_callback
+        elif self._should_execute_instant:
+            # Instant execution
+            self.rig_state._direction = target_direction
+            self.rig_state._direction_transition = None
+
+            # Execute callback immediately or after wait duration
+            if self._wait_duration_ms is not None and self._then_callback:
+                job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
+                self.rig_state._pending_wait_jobs.append(job)
+            elif self._then_callback:
+                self._then_callback()
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionByBuilder':
+        """Rotate by degrees over time"""
+        if self._wait_duration_ms is not None:
+            raise ValueError(
+                "Cannot use .over() after .wait() - these are mutually exclusive execution modes.\n"
+                "Choose one:\n"
+                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
+                "  - For smooth rotation over time: rig.direction.by(45).over(500).then(callback)"
+            )
+        self._should_execute_instant = False
+        self._duration_ms = duration_ms
+        self._easing = easing
+        return self
+
+    def rate(self, degrees_per_second: float) -> 'DirectionByBuilder':
+        """Rotate by degrees at specified rate"""
+        if self._wait_duration_ms is not None:
+            raise ValueError(
+                "Cannot use .rate() after .wait() - these are mutually exclusive execution modes.\n"
+                "Choose one:\n"
+                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
+                "  - For smooth rotation at rate: rig.direction.by(45).rate(90).then(callback)"
+            )
+        self._should_execute_instant = False
+        self._use_rate = True
+        self._rate_degrees_per_second = degrees_per_second
+        return self
+
+    def wait(self, duration_ms: float) -> 'DirectionByBuilder':
+        """Rotate immediately and wait for duration before executing .then() callback"""
+        if self._duration_ms is not None or self._use_rate:
+            raise ValueError(
+                "Cannot use .wait() after .over() or .rate() - these are mutually exclusive execution modes.\n"
+                "Choose one:\n"
+                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
+                "  - For smooth rotation over time: rig.direction.by(45).over(500).then(callback)\n"
+                "  - For smooth rotation at rate: rig.direction.by(45).rate(90).then(callback)"
+            )
+        self._wait_duration_ms = duration_ms
+        return self
+
+    def then(self, callback: Callable) -> 'DirectionByBuilder':
+        """Execute callback after rotation completes"""
+        self._then_callback = callback
+        return self
+
+    def __getattr__(self, name: str):
+        """Provide helpful error messages for invalid chaining attempts"""
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            raise AttributeError(_error_cannot_chain_property('direction.by()', name))
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after 'direction.by()'.\n\n"
+                "Instead, use separate statements."
+            )
+
+        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, rate, wait, then'))
+
+
+class DirectionController:
+    """Controller for direction operations (accessed via rig.direction)"""
+    def __init__(self, rig_state: 'RigState'):
+        self.rig_state = rig_state
+
+    def __call__(self, x: float, y: float) -> DirectionBuilder:
+        """Set direction instantly or return builder for .over() (legacy shorthand for .to())"""
+        return DirectionBuilder(self.rig_state, Vec2(x, y), instant=True)
+
+    def to(self, x: float, y: float) -> DirectionBuilder:
+        """Set direction to absolute vector (can use with .over(), .rate(), .wait(), .then())"""
+        return DirectionBuilder(self.rig_state, Vec2(x, y), instant=True)
+
+    def by(self, degrees: float) -> DirectionByBuilder:
+        """Rotate by relative angle in degrees (can use with .over(), .rate(), .wait(), .then())
+
+        Positive = clockwise, Negative = counter-clockwise
+
+        Examples:
+            rig.direction.by(90)              # Rotate 90° clockwise instantly
+            rig.direction.by(-45).over(500)   # Rotate 45° counter-clockwise over 500ms
+            rig.direction.by(180).rate(90)    # Rotate 180° at 90°/sec
+        """
+        return DirectionByBuilder(self.rig_state, degrees, instant=True)
 
 
 class PositionController:
@@ -1482,10 +1864,18 @@ class PositionToBuilder:
         self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
         self._wait_duration_ms: Optional[float] = None
+        self._hold_duration_ms: Optional[float] = None
+        self._revert_duration_ms: Optional[float] = None
+        self._revert_easing: str = "linear"
+        self._original_pos: Optional[Vec2] = None
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def over(self, duration_ms: float) -> 'PositionToBuilder':
+    def over(self, duration_ms: float, easing: str = None) -> 'PositionToBuilder':
         """Glide to position over time"""
         if self._wait_duration_ms is not None:
             raise ValueError(
@@ -1500,6 +1890,9 @@ class PositionToBuilder:
         # Disable instant execution since we're doing a transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
+        if easing is not None:
+            self._easing = easing
+        self._current_stage = "after_forward"
         return self
 
     def wait(self, duration_ms: float) -> 'PositionToBuilder':
@@ -1516,65 +1909,161 @@ class PositionToBuilder:
         self._easing = easing_type
         return self
 
+    def hold(self, duration_ms: float) -> 'PositionToBuilder':
+        """Hold at target position before reverting"""
+        self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PositionToBuilder':
+        """Move back to original position after hold (or immediately if no hold)"""
+        self._revert_duration_ms = duration_ms
+        self._revert_easing = easing
+        self._current_stage = "after_revert"
+        return self
+
     def then(self, callback: Callable) -> 'PositionToBuilder':
-        """Execute callback after position change completes"""
-        self._then_callback = callback
+        """Execute callback at the current point in the chain
+
+        Can be called multiple times at different stages:
+        - After .over(): fires when forward movement completes
+        - After .hold(): fires when hold period completes
+        - After .revert(): fires when revert completes
+
+        Examples:
+            rig.pos.to(x, y).over(500).then(do_something)
+            rig.pos.to(x, y).over(500).then(start_drag).revert(500).then(end_drag)
+        """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
+        else:
+            # Default: fire after forward movement
+            self._after_forward_callback = callback
         return self
 
     def __del__(self):
         """Execute the position change based on how the builder was configured"""
         try:
-            if self._duration_ms is not None:
-                # Create and apply transition with the configured easing
+            if self._duration_ms is not None or self._revert_duration_ms is not None:
+                # Store original position for potential revert
                 current_pos = Vec2(*ctrl.mouse_pos())
+                self._original_pos = current_pos
+
+                # Create forward transition (to target)
                 target_pos = Vec2(self.x, self.y)
                 offset = target_pos - current_pos
-                transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
 
-                # Register callback with transition if set
-                if self._then_callback:
-                    # If wait is specified, add additional delay after transition
-                    if self._wait_duration_ms is not None:
-                        # Capture variables in closure
-                        wait_ms = self._wait_duration_ms
-                        callback = self._then_callback
-                        rig_state = self.rig_state
-                        print(f"DEBUG: Setting up delayed callback with wait_ms={wait_ms}")
-                        def delayed_callback():
-                            print(f"DEBUG: Transition complete, scheduling callback after {wait_ms}ms")
-                            def execute_callback():
-                                print(f"DEBUG: About to execute callback")
-                                try:
-                                    callback()
-                                    print(f"DEBUG: Callback executed")
-                                finally:
-                                    # Remove this job from pending list after execution
-                                    if job in rig_state._pending_wait_jobs:
-                                        rig_state._pending_wait_jobs.remove(job)
-                                    print(f"DEBUG: Job removed from pending list")
-                            job = cron.after(f"{wait_ms}ms", execute_callback)
-                            rig_state._pending_wait_jobs.append(job)
-                            print(f"DEBUG: Callback scheduled, job={job}")
-                        transition.on_complete = delayed_callback
+                if self._duration_ms is not None:
+                    # Animate to target
+                    transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
+                else:
+                    # Instant move to target
+                    ctrl.mouse_move(int(self.x), int(self.y))
+                    transition = None
+
+                # Build callback chain from the end backwards
+                rig_state = self.rig_state
+                hold_duration = self._hold_duration_ms or 0
+
+                # Stage 3: After revert callback
+                after_revert_cb = self._after_revert_callback
+
+                # Stage 2: After hold + schedule revert + after_revert callback
+                if self._revert_duration_ms is not None:
+                    original_x, original_y = self._original_pos.x, self._original_pos.y
+                    revert_duration = self._revert_duration_ms
+                    revert_easing = self._revert_easing
+
+                    def schedule_revert():
+                        # Move back to original position
+                        curr_pos = Vec2(*ctrl.mouse_pos())
+                        back_offset = Vec2(original_x, original_y) - curr_pos
+
+                        if revert_duration > 0:
+                            # Animate back
+                            revert_transition = PositionTransition(
+                                curr_pos, back_offset, revert_duration, revert_easing
+                            )
+                            # Attach after-revert callback
+                            if after_revert_cb:
+                                revert_transition.on_complete = after_revert_cb
+                            rig_state._position_transitions.append(revert_transition)
+                        else:
+                            # Instant revert
+                            ctrl.mouse_move(int(original_x), int(original_y))
+                            if after_revert_cb:
+                                after_revert_cb()
+
+                    # Combine after_hold callback with revert scheduling
+                    def after_hold_combined():
+                        if self._after_hold_callback:
+                            self._after_hold_callback()
+                        schedule_revert()
+
+                    after_hold_cb = after_hold_combined
+                else:
+                    # No revert, just use the after_hold callback
+                    after_hold_cb = self._after_hold_callback
+
+                # Stage 1: After forward + hold + callbacks
+                def after_forward_combined():
+                    # Call after_forward callback
+                    if self._after_forward_callback:
+                        self._after_forward_callback()
+
+                    # Schedule hold period if specified
+                    if hold_duration > 0:
+                        if after_hold_cb:
+                            cron.after(f"{hold_duration}ms", after_hold_cb)
                     else:
-                        transition.on_complete = self._then_callback
+                        # No hold, go straight to after_hold callback (which includes revert)
+                        if after_hold_cb:
+                            after_hold_cb()
 
-                self.rig_state.start()  # Ensure ticking is active
-                self.rig_state._position_transitions.append(transition)
+                # Wire up the forward transition
+                if transition is not None:
+                    transition.on_complete = after_forward_combined
+                    self.rig_state.start()  # Ensure ticking is active
+                    self.rig_state._position_transitions.append(transition)
+                else:
+                    # Instant forward, call callback immediately
+                    after_forward_combined()
+
             elif self._should_execute_instant:
                 # Instant move
                 ctrl.mouse_move(int(self.x), int(self.y))
 
                 # Execute callback immediately or after wait duration
-                if self._wait_duration_ms is not None and self._then_callback:
+                if self._wait_duration_ms is not None and self._after_forward_callback:
                     # Wait for duration, then execute callback
-                    job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
+                    job = cron.after(f"{self._wait_duration_ms}ms", self._after_forward_callback)
                     self.rig_state._pending_wait_jobs.append(job)
-                    self.rig_state._pending_wait_jobs.append(job)
-                elif self._then_callback:
-                    self._then_callback()
+                elif self._after_forward_callback:
+                    self._after_forward_callback()
         except:
             pass  # Ignore errors during cleanup
+
+    def __getattr__(self, name: str):
+        """Provide helpful error messages for invalid chaining attempts"""
+        # Common rig properties that can't be chained
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            raise AttributeError(_error_cannot_chain_property('pos.to()', name))
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after pos.to().\n\n"
+                "Instead, use separate statements."
+            )
+
+        # Unknown attribute
+        raise AttributeError(_error_unknown_builder_attribute(
+            'PositionToBuilder',
+            name,
+            'over, wait, hold, revert, then'
+        ))
 
 
 class PositionByBuilder:
@@ -1586,10 +2075,18 @@ class PositionByBuilder:
         self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
         self._wait_duration_ms: Optional[float] = None
+        self._hold_duration_ms: Optional[float] = None
+        self._revert_duration_ms: Optional[float] = None
+        self._revert_easing: str = "linear"
+        self._original_pos: Optional[Vec2] = None
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def over(self, duration_ms: float) -> 'PositionByBuilder':
+    def over(self, duration_ms: float, easing: str = None) -> 'PositionByBuilder':
         """Glide by offset over time"""
         if self._wait_duration_ms is not None:
             raise ValueError(
@@ -1604,6 +2101,9 @@ class PositionByBuilder:
         # Disable instant execution since we're doing a transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
+        if easing is not None:
+            self._easing = easing
+        self._current_stage = "after_forward"
         return self
 
     def wait(self, duration_ms: float) -> 'PositionByBuilder':
@@ -1620,55 +2120,165 @@ class PositionByBuilder:
         self._easing = easing_type
         return self
 
+    def hold(self, duration_ms: float) -> 'PositionByBuilder':
+        """Hold at target position before reverting"""
+        self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PositionByBuilder':
+        """Move back to original position after hold (or immediately if no hold)"""
+        self._revert_duration_ms = duration_ms
+        self._revert_easing = easing
+        self._current_stage = "after_revert"
+        return self
+
     def then(self, callback: Callable) -> 'PositionByBuilder':
-        """Execute callback after position change completes"""
-        self._then_callback = callback
+        """Execute callback at the current point in the chain
+
+        Can be called multiple times at different stages:
+        - After .over(): fires when forward movement completes
+        - After .hold(): fires when hold period completes
+        - After .revert(): fires when revert completes
+
+        Examples:
+            rig.pos.by(dx, dy).over(500).then(do_something)
+            rig.pos.by(dx, dy).over(500).then(start_drag).revert(500).then(end_drag)
+        """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
+        else:
+            # Default: fire after forward movement
+            self._after_forward_callback = callback
         return self
 
     def __del__(self):
         """Execute the position change based on how the builder was configured"""
         try:
-            if self._duration_ms is not None:
-                # Create and apply transition with the configured easing
+            if self._duration_ms is not None or self._revert_duration_ms is not None:
+                # Store original position for potential revert
                 current_pos = Vec2(*ctrl.mouse_pos())
+                self._original_pos = current_pos
+
+                # Create forward transition (by offset)
                 offset = Vec2(self.dx, self.dy)
-                transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
 
-                # Register callback with transition if set
-                if self._then_callback:
-                    # If wait is specified, add additional delay after transition
-                    if self._wait_duration_ms is not None:
-                        # Capture variables in closure
-                        wait_ms = self._wait_duration_ms
-                        callback = self._then_callback
-                        rig_state = self.rig_state
-                        def delayed_callback():
-                            job = cron.after(f"{wait_ms}ms", callback)
-                            rig_state._pending_wait_jobs.append(job)
-                        transition.on_complete = delayed_callback
+                if self._duration_ms is not None:
+                    # Animate by offset
+                    transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
+                else:
+                    # Instant move by offset
+                    ctrl.mouse_move(int(current_pos.x + self.dx), int(current_pos.y + self.dy))
+                    transition = None
+
+                # Build callback chain from the end backwards
+                rig_state = self.rig_state
+                hold_duration = self._hold_duration_ms or 0
+
+                # Stage 3: After revert callback
+                after_revert_cb = self._after_revert_callback
+
+                # Stage 2: After hold + schedule revert + after_revert callback
+                if self._revert_duration_ms is not None:
+                    revert_duration = self._revert_duration_ms
+                    revert_easing = self._revert_easing
+                    # Use inverse offset for precise return
+                    inverse_offset = Vec2(-self.dx, -self.dy)
+
+                    def schedule_revert():
+                        # Move back by exact inverse offset
+                        curr_pos = Vec2(*ctrl.mouse_pos())
+
+                        if revert_duration > 0:
+                            # Animate back using inverse offset
+                            revert_transition = PositionTransition(
+                                curr_pos, inverse_offset, revert_duration, revert_easing
+                            )
+                            # Attach after-revert callback
+                            if after_revert_cb:
+                                revert_transition.on_complete = after_revert_cb
+                            rig_state._position_transitions.append(revert_transition)
+                        else:
+                            # Instant revert using inverse offset
+                            ctrl.mouse_move(int(curr_pos.x - self.dx), int(curr_pos.y - self.dy))
+                            if after_revert_cb:
+                                after_revert_cb()
+
+                    # Combine after_hold callback with revert scheduling
+                    def after_hold_combined():
+                        if self._after_hold_callback:
+                            self._after_hold_callback()
+                        schedule_revert()
+
+                    after_hold_cb = after_hold_combined
+                else:
+                    # No revert, just use the after_hold callback
+                    after_hold_cb = self._after_hold_callback
+
+                # Stage 1: After forward + hold + callbacks
+                def after_forward_combined():
+                    # Call after_forward callback
+                    if self._after_forward_callback:
+                        self._after_forward_callback()
+
+                    # Schedule hold period if specified
+                    if hold_duration > 0:
+                        if after_hold_cb:
+                            cron.after(f"{hold_duration}ms", after_hold_cb)
                     else:
-                        transition.on_complete = self._then_callback
+                        # No hold, go straight to after_hold callback (which includes revert)
+                        if after_hold_cb:
+                            after_hold_cb()
 
-                self.rig_state.start()  # Ensure ticking is active
-                self.rig_state._position_transitions.append(transition)
+                # Wire up the forward transition
+                if transition is not None:
+                    transition.on_complete = after_forward_combined
+                    self.rig_state.start()  # Ensure ticking is active
+                    self.rig_state._position_transitions.append(transition)
+                else:
+                    # Instant forward, call callback immediately
+                    after_forward_combined()
+
             elif self._should_execute_instant:
                 # Instant move
                 current_x, current_y = ctrl.mouse_pos()
                 ctrl.mouse_move(int(current_x + self.dx), int(current_y + self.dy))
 
                 # Execute callback immediately or after wait duration
-                if self._wait_duration_ms is not None and self._then_callback:
+                if self._wait_duration_ms is not None and self._after_forward_callback:
                     # Wait for duration, then execute callback
-                    job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
+                    job = cron.after(f"{self._wait_duration_ms}ms", self._after_forward_callback)
                     self.rig_state._pending_wait_jobs.append(job)
-                elif self._then_callback:
-                    self._then_callback()
+                elif self._after_forward_callback:
+                    self._after_forward_callback()
         except:
             pass  # Ignore errors during cleanup
 
+    def __getattr__(self, name: str):
+        """Provide helpful error messages for invalid chaining attempts"""
+        # Common rig properties that can't be chained
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            raise AttributeError(_error_cannot_chain_property('pos.by()', name))
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after pos.by().\n\n"
+                "Instead, use separate statements."
+            )
 
-class NamedEffectBuilder:
-    """Builder for named effects that can be stopped early"""
+        # Unknown attribute
+        raise AttributeError(_error_unknown_builder_attribute(
+            'PositionByBuilder',
+            name,
+            'over, wait, hold, revert, then'
+        ))
+
+
+class NamedModifierBuilder:
+    """Builder for named modifiers that can be stopped early"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
@@ -1677,20 +2287,20 @@ class NamedEffectBuilder:
 
     @property
     def speed(self) -> 'NamedSpeedController':
-        """Access speed property for this named effect"""
+        """Access speed property for this named modifier"""
         if self._speed_controller is None:
             self._speed_controller = NamedSpeedController(self.rig_state, self.name)
         return self._speed_controller
 
     @property
     def accel(self) -> 'NamedAccelController':
-        """Access accel property for this named effect"""
+        """Access accel property for this named modifier"""
         if self._accel_controller is None:
             self._accel_controller = NamedAccelController(self.rig_state, self.name)
         return self._accel_controller
 
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Stop the named effect
+        """Stop the named modifier
 
         Args:
             duration_ms: Optional duration to fade out. If None, stops immediately.
@@ -1700,21 +2310,21 @@ class NamedEffectBuilder:
             rig("boost").stop()  # Immediate stop
             rig("boost").stop(500, "ease_out")  # Fade out over 500ms
         """
-        if self.name in self.rig_state._named_effects:
-            effect = self.rig_state._named_effects[self.name]
+        if self.name in self.rig_state._named_modifiers:
+            effect = self.rig_state._named_modifiers[self.name]
             effect.request_stop(duration_ms, easing)
 
 
 class NamedSpeedController:
-    """Speed controller for named effects - only allows relative modifiers"""
+    """Speed controller for named modifiers - only allows relative modifiers"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """ERROR: Effects cannot use .to() - use rig.force() for absolute values"""
+        """ERROR: Modifiers cannot use .to() - use rig.force() for absolute values"""
         raise ValueError(
-            f"Effects can only use relative modifiers (.mul, .by, .div). "
+            f"Modifiers can only use relative operations (.mul, .by, .div). "
             f"Use rig.force('{self.name}') for absolute values (.to)."
         )
 
@@ -1740,15 +2350,15 @@ class NamedSpeedController:
 
 
 class NamedAccelController:
-    """Accel controller for named effects - only allows relative modifiers"""
+    """Accel controller for named modifiers - only allows relative modifiers"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """ERROR: Effects cannot use .to() - use rig.force() for absolute values"""
+        """ERROR: Modifiers cannot use .to() - use rig.force() for absolute values"""
         raise ValueError(
-            f"Effects can only use relative modifiers (.mul, .by, .div). "
+            f"Modifiers can only use relative operations (.mul, .by, .div). "
             f"Use rig.force('{self.name}') for absolute values (.to)."
         )
 
@@ -1778,23 +2388,27 @@ class NamedForceBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self._speed_controller = None
-        self._accel_controller = None
-        self._direction_controller = None
+        self._ensure_force_exists()
+
+    def _ensure_force_exists(self):
+        """Ensure a Force object exists for this name"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+
+    def _get_force(self) -> Force:
+        """Get the Force object for this name"""
+        self._ensure_force_exists()
+        return self.rig_state._named_forces[self.name]
 
     @property
     def speed(self) -> 'NamedForceSpeedController':
         """Access speed property for this named force"""
-        if self._speed_controller is None:
-            self._speed_controller = NamedForceSpeedController(self.rig_state, self.name)
-        return self._speed_controller
+        return NamedForceSpeedController(self.rig_state, self.name)
 
     @property
     def accel(self) -> 'NamedForceAccelController':
         """Access accel property for this named force"""
-        if self._accel_controller is None:
-            self._accel_controller = NamedForceAccelController(self.rig_state, self.name)
-        return self._accel_controller
+        return NamedForceAccelController(self.rig_state, self.name)
 
     def direction(self, x: float, y: float) -> 'NamedForceDirectionBuilder':
         """Set direction for this named force"""
@@ -1811,10 +2425,9 @@ class NamedForceBuilder:
             rig.force("wind").stop()  # Immediate stop
             rig.force("wind").stop(500, "ease_out")  # Fade out over 500ms
         """
-        # TODO: Implement force stopping logic
-        # For now, just clear from named forces dict
         if self.name in self.rig_state._named_forces:
-            del self.rig_state._named_forces[self.name]
+            force = self.rig_state._named_forces[self.name]
+            force.request_stop(duration_ms, easing)
 
 
 class NamedForceSpeedController:
@@ -1823,35 +2436,42 @@ class NamedForceSpeedController:
         self.rig_state = rig_state
         self.name = name
 
-    def __call__(self, value: float) -> 'PropertyEffectBuilder':
+    def _get_force(self) -> Force:
+        """Get or create the Force object"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        return self.rig_state._named_forces[self.name]
+
+    def __call__(self, value: float) -> 'NamedForceSpeedController':
         """Set speed directly (absolute)"""
         return self.to(value)
 
-    def to(self, value: float) -> 'PropertyEffectBuilder':
+    def to(self, value: float) -> 'NamedForceSpeedController':
         """Set speed to absolute value"""
-        builder = PropertyEffectBuilder(self.rig_state, "speed", "to", value)
-        builder._effect_name = f"__force__{self.name}"
-        return builder
+        force = self._get_force()
+        force._speed = value
+        self.rig_state.start()  # Ensure ticking is active
+        return self
 
-    def by(self, delta: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .by() - use rig.effect() for relative modifiers"""
+    def by(self, delta: float) -> 'NamedForceSpeedController':
+        """ERROR: Forces cannot use .by() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.by)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.by)."
         )
 
-    def mul(self, factor: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .mul() - use rig.effect() for relative modifiers"""
+    def mul(self, factor: float) -> 'NamedForceSpeedController':
+        """ERROR: Forces cannot use .mul() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.mul)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.mul)."
         )
 
-    def div(self, divisor: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .div() - use rig.effect() for relative modifiers"""
+    def div(self, divisor: float) -> 'NamedForceSpeedController':
+        """ERROR: Forces cannot use .div() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.div)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.div)."
         )
 
 
@@ -1861,35 +2481,42 @@ class NamedForceAccelController:
         self.rig_state = rig_state
         self.name = name
 
-    def __call__(self, value: float) -> 'PropertyEffectBuilder':
+    def _get_force(self) -> Force:
+        """Get or create the Force object"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        return self.rig_state._named_forces[self.name]
+
+    def __call__(self, value: float) -> 'NamedForceAccelController':
         """Set accel directly (absolute)"""
         return self.to(value)
 
-    def to(self, value: float) -> 'PropertyEffectBuilder':
+    def to(self, value: float) -> 'NamedForceAccelController':
         """Set accel to absolute value"""
-        builder = PropertyEffectBuilder(self.rig_state, "accel", "to", value)
-        builder._effect_name = f"__force__{self.name}"
-        return builder
+        force = self._get_force()
+        force._accel = value
+        self.rig_state.start()  # Ensure ticking is active
+        return self
 
-    def by(self, delta: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .by() - use rig.effect() for relative modifiers"""
+    def by(self, delta: float) -> 'NamedForceAccelController':
+        """ERROR: Forces cannot use .by() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.by)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.by)."
         )
 
-    def mul(self, factor: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .mul() - use rig.effect() for relative modifiers"""
+    def mul(self, factor: float) -> 'NamedForceAccelController':
+        """ERROR: Forces cannot use .mul() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.mul)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.mul)."
         )
 
-    def div(self, divisor: float) -> 'PropertyEffectBuilder':
-        """ERROR: Forces cannot use .div() - use rig.effect() for relative modifiers"""
+    def div(self, divisor: float) -> 'NamedForceAccelController':
+        """ERROR: Forces cannot use .div() - use rig.modifier() for relative modifiers"""
         raise ValueError(
             f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.effect('{self.name}') for relative modifiers (.div)."
+            f"Use rig.modifier('{self.name}') for relative modifiers (.div)."
         )
 
 
@@ -1904,28 +2531,28 @@ class NamedForceDirectionBuilder:
     def __del__(self):
         """Execute when builder goes out of scope"""
         try:
-            # Store direction for this force
-            if not hasattr(self.rig_state, '_named_forces'):
-                self.rig_state._named_forces = {}
+            # Set direction on the Force object
             if self.name not in self.rig_state._named_forces:
-                self.rig_state._named_forces[self.name] = {}
-            self.rig_state._named_forces[self.name]['direction'] = Vec2(self.x, self.y).normalized()
+                self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+
+            force = self.rig_state._named_forces[self.name]
+            force._direction = Vec2(self.x, self.y).normalized()
+            self.rig_state.start()  # Ensure ticking is active
         except:
             pass
 
-
-class NamedEffectNamespace:
-    """Namespace for rig.effect operations"""
+class NamedModifierNamespace:
+    """Namespace for rig.modifier operations"""
     def __init__(self, rig_state: 'RigState'):
         self.rig_state = rig_state
 
-    def __call__(self, name: str) -> NamedEffectBuilder:
-        """Create or access a named effect"""
-        return NamedEffectBuilder(self.rig_state, name)
+    def __call__(self, name: str) -> NamedModifierBuilder:
+        """Create or access a named modifier"""
+        return NamedModifierBuilder(self.rig_state, name)
 
     def stop_all(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Stop all named effects"""
-        for effect in list(self.rig_state._named_effects.values()):
+        """Stop all named modifiers"""
+        for effect in list(self.rig_state._named_modifiers.values()):
             effect.request_stop(duration_ms, easing)
 
 
@@ -1940,7 +2567,10 @@ class NamedForceNamespace:
 
     def stop_all(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop all named forces"""
-        # TODO: Implement graceful stopping with duration/easing
+        for force in list(self.rig_state._named_forces.values()):
+            force.request_stop(duration_ms, easing)
+
+        # Clean up force metadata
         if hasattr(self.rig_state, '_named_forces'):
             self.rig_state._named_forces.clear()
 
@@ -1950,18 +2580,18 @@ class NamedForceNamespace:
 # ============================================================================
 
 class StateAccessor:
-    """Accessor for computed state (base + effects + forces)"""
+    """Accessor for computed state (base + modifiers + forces)"""
     def __init__(self, rig_state: 'RigState'):
         self._rig = rig_state
 
     @property
     def speed(self) -> float:
-        """Get computed speed (base with effects applied, excluding accel velocity)"""
+        """Get computed speed (base with modifiers applied, excluding accel velocity)"""
         return self._rig._get_effective_speed()
 
     @property
     def accel(self) -> float:
-        """Get computed acceleration (base with effects applied)"""
+        """Get computed acceleration (base with modifiers applied)"""
         return self._rig._get_effective_accel()
 
     @property
@@ -1985,18 +2615,18 @@ class StateAccessor:
 
 
 class BaseAccessor:
-    """Accessor for base values only (without effects/forces)"""
+    """Accessor for base values only (without modifiers/forces)"""
     def __init__(self, rig_state: 'RigState'):
         self._rig = rig_state
 
     @property
     def speed(self) -> float:
-        """Get base speed (without effects)"""
+        """Get base speed (without modifiers)"""
         return self._rig._speed
 
     @property
     def accel(self) -> float:
-        """Get base acceleration (without effects)"""
+        """Get base acceleration (without modifiers)"""
         return self._rig._accel
 
     @property
@@ -2030,8 +2660,8 @@ class RigState:
 
         # Effects (temporary property modifications)
         self._effects: list[Effect] = []
-        self._named_effects: dict[str, Effect] = {}
-        self._named_forces: dict[str, dict] = {}  # Forces storage
+        self._named_modifiers: dict[str, Effect] = {}
+        self._named_forces: dict[str, Force] = {}  # Force entities
 
         # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
@@ -2040,10 +2670,11 @@ class RigState:
         # Controllers (fluent API)
         self.speed = SpeedController(self)
         self.accel = AccelController(self)
+        self.direction = DirectionController(self)
         self.pos = PositionController(self)
 
-        # Named effect/force namespaces
-        self._effect_namespace = NamedEffectNamespace(self)
+        # Named modifier/force namespaces
+        self._modifier_namespace = NamedModifierNamespace(self)
         self._force_namespace = NamedForceNamespace(self)
 
         # Sequence state
@@ -2060,30 +2691,30 @@ class RigState:
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
 
-    def __call__(self, name: str) -> 'NamedEffectBuilder':
-        """Create or access a named effect (DEPRECATED - use .effect() or .force())
+    def __call__(self, name: str) -> 'NamedModifierBuilder':
+        """Create or access a named modifier (DEPRECATED - use .modifier() or .force())
 
-        Named effects can be stopped early via rig('name').stop()
+        Named modifiers can be stopped early via rig('name').stop()
 
         Examples:
             rig("boost").speed.mul(2).hold(1000)
             rig("boost").stop()  # Stop immediately
             rig("boost").stop(500)  # Fade out over 500ms
         """
-        return NamedEffectBuilder(self, name)
+        return NamedModifierBuilder(self, name)
 
     @property
-    def effect(self) -> NamedEffectNamespace:
-        """Access named effects (modifiers on base properties)
+    def modifier(self) -> NamedModifierNamespace:
+        """Access named modifiers (relative changes to base properties)
 
-        Effects use relative operations (.mul, .by, .div) and recalculate when base changes.
+        Modifiers use relative operations (.mul, .by, .div) and recalculate when base changes.
 
         Examples:
-            rig.effect("boost").speed.mul(2)
-            rig.effect("boost").stop()
-            rig.effect.stop_all()
+            rig.modifier("boost").speed.mul(2)
+            rig.modifier("boost").stop()
+            rig.modifier.stop_all()
         """
-        return self._effect_namespace
+        return self._modifier_namespace
 
     @property
     def force(self) -> NamedForceNamespace:
@@ -2100,7 +2731,7 @@ class RigState:
 
     @property
     def state(self) -> StateAccessor:
-        """Access computed state (base + effects + forces)
+        """Access computed state (base + modifiers + forces)
 
         Examples:
             rig.state.speed      # Computed speed
@@ -2115,7 +2746,7 @@ class RigState:
 
     @property
     def base(self) -> BaseAccessor:
-        """Access base values only (without effects/forces)
+        """Access base values only (without modifiers/forces)
 
         Examples:
             rig.base.speed      # Base speed
@@ -2149,13 +2780,13 @@ class RigState:
             "direction_cardinal": direction_cardinal,
             "speed": self._speed,  # Base cruise speed
             "accel": self._accel,
-            "effective_speed": effective_speed,  # Cruise speed with speed effects
-            "effective_accel": effective_accel,  # Acceleration with accel effects
+            "effective_speed": effective_speed,  # Cruise speed with speed modifiers
+            "effective_accel": effective_accel,  # Acceleration with accel modifiers
             "accel_velocity": accel_velocity,  # Integrated velocity from accel effects
             "total_speed": total_speed,  # Total effective speed (cruise + accel velocity)
             "velocity": total_velocity.to_tuple(),  # Total velocity vector
             "active_effects": len(self._effects),
-            "named_effects": list(self._named_effects.keys()),
+            "named_modifiers": list(self._named_modifiers.keys()),
             "has_speed_transition": self._speed_transition is not None,
             "has_direction_transition": self._direction_transition is not None,
             "active_glides": len(self._position_transitions),
@@ -2215,34 +2846,16 @@ class RigState:
         """Get total velocity contribution from all acceleration effects
 
         This is the sum of all integrated velocities from accel effects,
-        separate from cruise speed.
+        scaled by each effect's current multiplier (for fade-out support).
         """
-        return sum(self._accel_velocities.values())
+        total = 0.0
+        for effect, velocity in self._accel_velocities.items():
+            # Scale velocity by effect's current multiplier
+            # This makes velocity fade out when effect fades out
+            total += velocity * effect.current_multiplier
+        return total
 
-    def direction(self, x: float, y: float) -> DirectionBuilder:
-        """Set direction instantly or return builder for .over()
-
-        Args:
-            x: X component of direction vector
-            y: Y component of direction vector
-
-        Examples:
-            rig.direction(1, 0)   # Right
-            rig.direction(0, 1)   # Down
-            rig.direction(-1, -1) # Up-left diagonal
-        """
-        self.start()  # Ensure ticking is active
-        vec2 = Vec2(x, y)
-        normalized = vec2.normalized()
-
-        # Return builder - it will handle instant vs transition
-        return DirectionBuilder(self, normalized, instant=True)
-
-    def dir(self, x: float, y: float) -> DirectionBuilder:
-        """Alias for direction()"""
-        return self.direction(x, y)
-
-    def reverse(self) -> DirectionBuilder:
+    def reverse(self) -> DirectionByBuilder:
         """Reverse direction (180 degree turn)
 
         Can be instant or smooth:
@@ -2250,8 +2863,7 @@ class RigState:
             rig.reverse().over(500)    # Smooth 180 over 500ms
             rig.reverse().rate(180)    # Reverse at 180°/s
         """
-        reversed_dir = self._direction * -1
-        return DirectionBuilder(self, reversed_dir, instant=True)
+        return DirectionByBuilder(self, 180, instant=True)
 
     def _get_cardinal_direction(self, direction: Vec2) -> str:
         """Get cardinal/intercardinal direction name from direction vector
@@ -2292,8 +2904,8 @@ class RigState:
 
         Examples:
             rig.speed(10)
-            rig.effect("boost").speed.mul(2)  # computed speed = 20
-            rig.bake()                         # base speed now 20, effect cleared
+            rig.modifier("boost").speed.mul(2)  # computed speed = 20
+            rig.bake()                          # base speed now 20, modifier cleared
         """
         # Compute final values
         final_speed = self._get_effective_speed()
@@ -2308,7 +2920,7 @@ class RigState:
 
         # Clear all effects and forces
         self._effects.clear()
-        self._named_effects.clear()
+        self._named_modifiers.clear()
         self._named_forces.clear()
         self._accel_velocities.clear()
 
@@ -2325,7 +2937,7 @@ class RigState:
 
         # Clear effects
         self._effects.clear()
-        self._named_effects.clear()
+        self._named_modifiers.clear()
 
         # Reset subpixel accumulator to prevent drift on restart
         self._subpixel_adjuster = SubpixelAdjuster()
@@ -2499,6 +3111,10 @@ class RigState:
         if len(self._effects) > 0:
             return False
 
+        # Check for active forces
+        if len(self._named_forces) > 0:
+            return False
+
         # Check for position transitions
         if len(self._position_transitions) > 0:
             return False
@@ -2549,9 +3165,9 @@ class RigState:
             # Remove completed effects
             if effect.complete:
                 self._effects.remove(effect)
-                # Remove from named effects if it has a name
-                if effect.name and effect.name in self._named_effects:
-                    del self._named_effects[effect.name]
+                # Remove from named modifiers if it has a name
+                if effect.name and effect.name in self._named_modifiers:
+                    del self._named_modifiers[effect.name]
                 # Remove velocity tracking for accel effects
                 if effect.property_name == "accel" and effect in self._accel_velocities:
                     del self._accel_velocities[effect]
@@ -2577,7 +3193,18 @@ class RigState:
             total_speed = min(total_speed, self.limits_max_speed)
         total_speed = max(0.0, total_speed)
 
+        # Base velocity vector
         velocity = self._direction * total_speed
+
+        # Add force contributions via vector addition
+        # Forces return velocity in pixels/frame (same units as base velocity)
+        for force_name, force in list(self._named_forces.items()):
+            force_velocity = force.update(dt)
+            velocity = velocity + force_velocity
+
+            # Remove completed forces
+            if force.complete:
+                del self._named_forces[force_name]
 
         # Apply scale
         scale = settings.get("user.mouse_rig_scale")

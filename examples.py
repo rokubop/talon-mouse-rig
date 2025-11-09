@@ -5,7 +5,7 @@ Basic examples demonstrating the PRD5 API:
 - Direction control
 - Speed control
 - Temporary effects (.over/.hold/.revert)
-- Named effects and forces
+- Named modifiers and forces
 - Rate-based timing
 - State management and baking
 """
@@ -23,8 +23,8 @@ class Actions:
     def mouse_rig_go_right():
         """Move right"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(2)
+        rig.direction(1, 0).speed(2)
+        # rig
 
     def mouse_rig_go_left():
         """Move left"""
@@ -146,38 +146,38 @@ class Actions:
         rig.speed.mul(0.1).hold(1000).revert(500)
 
     # =========================================================================
-    # NAMED EFFECTS
+    # NAMED MODIFIERS
     # =========================================================================
 
     def mouse_rig_turbo_on():
-        """Start turbo mode (named effect)"""
+        """Start turbo mode (named modifier)"""
         rig = actions.user.mouse_rig()
-        rig.effect("turbo").speed.mul(2)
+        rig.modifier("turbo").speed.mul(2)
 
     def mouse_rig_turbo_off():
         """Stop turbo mode"""
         rig = actions.user.mouse_rig()
-        rig.effect("turbo").stop(500)
+        rig.modifier("turbo").stop(500)
 
     def mouse_rig_thrust_on():
-        """Start thrust acceleration"""
+        """Start thrust acceleration (force)"""
         rig = actions.user.mouse_rig()
-        rig.effect("thrust").accel.to(10).over(300)
+        rig.force("thrust").accel(10)
 
     def mouse_rig_thrust_off():
         """Stop thrust"""
         rig = actions.user.mouse_rig()
-        rig.effect("thrust").stop(2000, "ease_in")
+        rig.force("thrust").stop(2000)
 
     def mouse_rig_drift_on():
-        """Add directional drift effect"""
+        """Add directional drift modifier"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.by(15)
+        rig.modifier("drift").direction.by(15)
 
     def mouse_rig_drift_off():
         """Remove drift"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").stop(1000)
+        rig.modifier("drift").stop(1000)
 
     # =========================================================================
     # NAMED FORCES
@@ -271,12 +271,12 @@ class Actions:
     def mouse_rig_pos_center():
         """Move to screen center"""
         rig = actions.user.mouse_rig()
-        rig.pos.to(960, 540).over(1000, "ease_in_out")
+        rig.pos.to(960, 540).over(350, "ease_in_out")
 
     def mouse_rig_pos_corner():
         """Move to top-left corner"""
         rig = actions.user.mouse_rig()
-        rig.pos.to(100, 100).over(800)
+        rig.pos.by(100, 100).over(800).revert(800).then(lambda: print("returned"))
 
     def mouse_rig_nudge_right():
         """Nudge position right"""
