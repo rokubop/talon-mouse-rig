@@ -23,7 +23,8 @@ class Actions:
     def mouse_rig_go_right():
         """Move right"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0).speed(2)
+        rig.direction(1, 0)
+        rig.speed(2)
         # rig
 
     def mouse_rig_go_left():

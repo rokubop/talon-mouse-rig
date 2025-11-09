@@ -864,6 +864,7 @@ class SpeedBuilder:
             self.rig_state._speed = value
             self.rig_state._speed_transition = None
             self.rig_state._brake_transition = None
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -964,6 +965,7 @@ class SpeedAdjustBuilder:
                 new_speed = min(new_speed, max_speed)
 
             self.rig_state._speed = new_speed
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -1064,6 +1066,7 @@ class SpeedMultiplyBuilder:
                 new_speed = min(new_speed, max_speed)
 
             self.rig_state._speed = new_speed
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -1171,6 +1174,7 @@ class SpeedDivideBuilder:
                 new_speed = min(new_speed, max_speed)
 
             self.rig_state._speed = new_speed
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -1381,6 +1385,7 @@ class PropertyEffectBuilder:
                 current = self.rig_state._speed
                 target = self._calculate_target_value(current)
                 self.rig_state._speed = max(0.0, target)
+                self.rig_state.start()  # Ensure ticking is active
             elif self.property_name == "accel":
                 current = self.rig_state._accel
                 target = self._calculate_target_value(current)
@@ -1602,6 +1607,7 @@ class DirectionBuilder:
             # Instant execution
             self.rig_state._direction = self.target_direction
             self.rig_state._direction_transition = None
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -1748,6 +1754,7 @@ class DirectionByBuilder:
             # Instant execution
             self.rig_state._direction = target_direction
             self.rig_state._direction_transition = None
+            self.rig_state.start()  # Ensure ticking is active
 
             # Execute callback immediately or after wait duration
             if self._wait_duration_ms is not None and self._then_callback:
@@ -3293,7 +3300,7 @@ class Actions:
         global _rig_instance
         if _rig_instance:
             _rig_instance.stop()
-            _rig_instance = None
+            # Keep the rig instance alive to preserve state (direction, etc.)
 
     def mouse_rig_set_type_talon() -> None:
         """Set mouse movement type to Talon (default, works for most apps)"""
