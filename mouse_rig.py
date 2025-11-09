@@ -1,77 +1,118 @@
 """
-Talon Mouse Rig - Continuous motion-based mouse control system
+Talon Mouse Rig - Continuous motion-based mouse control system (PRD 5)
 
-A fluent, stateful mouse control API supporting:
-- Continuous movement with direction + speed
-- Smooth transitions and easing
-- Temporary effects with lifecycle (.fade_in()/.hold()/.fade_out())
-- Named effects that can be stopped early
+A fluent, stateful mouse control API with:
+- Continuous movement (direction + speed)
+- Smooth transitions with easing
+- Rate-based and time-based changes
+- Temporary effects with lifecycle (.over()/.hold()/.revert())
+- Named effects (modifiers) and forces (independent entities)
 - Acceleration-based movement
 - Position control (glides)
+- State management and baking
 
 Core Properties:
-    rig.speed     # Cruise speed scalar (permanent base speed)
-    rig.accel     # Acceleration scalar (creates velocity overlay, doesn't modify cruise)
-    rig.direction # Direction vector
-    rig.pos       # Position
-
-Acceleration Behavior:
-    - Temporary accel effects (via .hold()/.fade_out()) create velocity contributions
-      that ADD to cruise speed without modifying it
-    - When an accel effect ends, its velocity contribution is removed
-    - This allows thrust/gravity effects that don't permanently change cruise speed
-    - Base accel (rig.accel.to(5) without effects) DOES modify cruise speed permanently
-
-    Examples:
-        rig.accel.to(5)                    # Permanently accelerate cruise speed
-        rig("thrust").accel.to(5)          # Temporary velocity overlay (doesn't modify cruise)
-        rig("thrust").stop()               # Velocity contribution removed, cruise unchanged
+    rig.speed      # Speed scalar
+    rig.accel      # Acceleration scalar
+    rig.direction  # Direction vector
+    rig.pos        # Position
 
 Basic Usage:
     rig = actions.user.mouse_rig()
-    rig.direction(1, 0)         # Set direction (right)
-    rig.speed(5)                # Set base speed immediately
-    rig.speed.to(10).over(500)  # Ramp to 10 over 500ms
+    rig.direction(1, 0)          # Set direction (right)
+    rig.speed(10)                # Set base speed
+    rig.speed.to(20).over(500)   # Ramp to 20 over 500ms
 
-Property Modifiers:
-    .to(value)   # Set to absolute value
-    .by(delta)   # Add/subtract relative value
-    .mul(factor) # Multiply by factor
-    .div(divisor) # Divide by divisor
+Value Modifiers:
+    .to(value)      # Set to absolute value
+    .by(delta)      # Add/subtract relative value
+    .mul(factor)    # Multiply by factor
+    .div(divisor)   # Divide by divisor
 
-Timing & Lifecycle:
-    Permanent Changes:
-        .over(duration, easing?)  # Animate change, stays forever
+Timing:
+    Time-based:
+        .over(duration, easing?)  # Animate over fixed duration
 
-    Temporary Effects (auto-remove after lifecycle):
-        .fade_in(duration, easing?)   # Fade in over duration
-        .hold(duration)               # Maintain for duration
-        .fade_out(duration, easing?)  # Fade out over duration
-        .fade_in_out(duration)        # Symmetric fade (half in, half out)
+    Rate-based (no easing, constant rate):
+        .rate(value)              # Context-aware rate
+        .rate.accel(value)        # Via acceleration
+        .rate.speed(value)        # Via speed (position only)
 
-Examples:
-    # Permanent changes
-    rig.speed.to(15).over(500)
-    rig.speed.by(5).over(300, "ease_out")
+Temporary Effects (auto-remove after lifecycle):
+    .over(duration)                # Fade in over duration
+    .hold(duration)                # Maintain for duration
+    .revert(duration?, easing?)    # Revert to original
 
-    # Temporary effects (anonymous)
-    rig.speed.mul(2).hold(1000)                              # Instant boost, hold 1s, instant revert
-    rig.speed.mul(1.5).hold(2000).fade_out(500)              # Instant boost, hold 2s, fade out
-    rig.speed.mul(2).fade_in(300).hold(1000).fade_out(500)   # Fade in, hold, fade out
+    Examples:
+        rig.speed.mul(2).revert(500)                     # Instant apply, revert over 500ms
+        rig.speed.mul(2).hold(1000)                      # Hold 1s, instant revert
+        rig.speed.mul(2).over(300).hold(1000).revert(500) # Fade in, hold, fade out
 
-    # Named effects (can be stopped early)
-    rig("boost").speed.mul(2).hold(1000)
-    rig("boost").stop()                              # Immediate cancel
-    rig("boost").stop(500, "ease_out")               # Graceful cancel over 500ms
+Named Effects (modifiers on base, relative ops only):
+    rig.effect("boost").speed.mul(2)                # Multiply base by 2
+    rig.effect("boost").stop()                      # Immediate stop
+    rig.effect("boost").stop(500, "ease_out")       # Fade out over 500ms
+    rig.effect.stop_all()                           # Stop all effects
 
-    # Acceleration (creates temporary velocity, doesn't modify cruise speed)
-    rig("thrust").accel.to(5)                        # Accelerate at 5 units/s²
-    rig("thrust").stop(2000, "ease_in")              # Stop thrust, velocity fades out
+    Constraints: Only .mul(), .by(), .div() allowed
+    Effects recalculate when base changes
 
-    # Gravity effect
-    gravity = rig("gravity")
-    gravity.direction(0, 1)      # Down
-    gravity.accel.to(9.8)        # Acceleration due to gravity
+Named Forces (independent entities, absolute values only):
+    rig.force("wind").speed(5)                      # Set force speed
+    rig.force("wind").direction(0, 1)               # Set force direction
+    rig.force("gravity").accel(9.8)                 # Set force acceleration
+    rig.force("wind").stop(500)                     # Fade out over 500ms
+    rig.force.stop_all()                            # Stop all forces
+
+    Constraints: Only .to() or direct setters allowed
+    Forces remain constant regardless of base changes
+
+State Management:
+    rig.state.speed       # Computed speed (base + effects)
+    rig.state.accel       # Computed acceleration
+    rig.state.direction   # Current direction
+    rig.state.pos         # Current position
+    rig.state.velocity    # Total velocity vector
+
+    rig.base.speed        # Base speed only
+    rig.base.accel        # Base acceleration only
+    rig.base.direction    # Base direction only
+
+Baking & Stopping:
+    rig.bake()                      # Flatten effects into base, clear all
+    rig.stop()                      # Bake, clear, speed=0 (instant)
+    rig.stop(500, "ease_out")       # Bake, clear, decelerate over 500ms
+
+Lambda Support:
+    rig.speed.by(lambda state: state.speed * 0.5).revert(1000)  # +50% boost
+
+Direction:
+    rig.direction(1, 0)              # Right
+    rig.direction(0, 1)              # Down
+    rig.direction(-1, -1)            # Up-left diagonal
+    rig.direction(1, 0).over(500)    # Smooth rotation
+    rig.direction(1, 0).rate(90)     # Rotate at 90°/sec
+    rig.reverse()                    # 180° turn
+
+Position:
+    rig.pos.to(100, 200)             # Instant move
+    rig.pos.to(100, 200).over(1000)  # Glide over 1s
+    rig.pos.by(50, 0)                # Move by offset
+
+Complete Examples:
+    # Speed boost pad
+    rig.speed.mul(1.5).hold(2000).revert(1000)
+
+    # Thrust control (repeatable)
+    rig.effect("thrust").accel(10).rate(20)   # Key down
+    rig.effect("thrust").stop(2000)           # Key up
+
+    # Gravity
+    rig.force("gravity").speed(9.8).direction(0, 1)
+    rig.force("gravity").stop(500)
+
+    # Dynamic boost based on current speed
+    rig.speed.by(lambda state: state.speed * 0.5).revert(1000)
 """
 
 from talon import Module, actions, ctrl, cron, settings, app
@@ -1011,7 +1052,7 @@ class SpeedController:
         return SpeedMultiplyBuilder(self.rig_state, factor, instant=True)
 
     def mul(self, factor: float) -> 'PropertyEffectBuilder':
-        """Multiply speed by factor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Multiply speed by factor (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
 
     def divide(self, divisor: float) -> SpeedDivideBuilder:
@@ -1022,17 +1063,17 @@ class SpeedController:
         return SpeedDivideBuilder(self.rig_state, divisor, instant=True)
 
     def div(self, divisor: float) -> 'PropertyEffectBuilder':
-        """Divide speed by divisor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Divide speed by divisor (can use with .over(), .hold(), .revert())"""
         if abs(divisor) < 1e-10:
             raise ValueError("Cannot divide speed by zero")
         return PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """Set speed to absolute value (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Set speed to absolute value (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "speed", "to", value)
 
     def by(self, delta: float) -> 'PropertyEffectBuilder':
-        """Add delta to speed (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Add delta to speed (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
 
 
@@ -1049,19 +1090,19 @@ class AccelController:
         return PropertyEffectBuilder(self.rig_state, "accel", "to", value, instant_done=True)
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """Set accel to absolute value (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Set accel to absolute value (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "accel", "to", value)
 
     def by(self, delta: float) -> 'PropertyEffectBuilder':
-        """Add delta to accel (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Add delta to accel (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
 
     def mul(self, factor: float) -> 'PropertyEffectBuilder':
-        """Multiply accel by factor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Multiply accel by factor (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "accel", "mul", factor)
 
     def div(self, divisor: float) -> 'PropertyEffectBuilder':
-        """Divide accel by divisor (can use with .over(), .fade_in(), .hold(), .fade_out())"""
+        """Divide accel by divisor (can use with .over(), .hold(), .revert())"""
         if abs(divisor) < 1e-10:
             raise ValueError("Cannot divide accel by zero")
         return PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
@@ -1070,23 +1111,23 @@ class AccelController:
 class PropertyEffectBuilder:
     """
     Universal builder for property effects supporting both permanent (.over())
-    and temporary (.fade_in()/.hold()/.fade_out()) modifications.
+    and temporary (.revert()/.hold()) modifications.
+
+    Supports lambda values for dynamic calculation at execution time.
     """
-    def __init__(self, rig_state: 'RigState', property_name: str, operation: str, value: float, instant_done: bool = False):
+    def __init__(self, rig_state: 'RigState', property_name: str, operation: str, value: Union[float, Callable], instant_done: bool = False):
         self.rig_state = rig_state
         self.property_name = property_name  # "speed" or "accel"
         self.operation = operation  # "to", "by", "mul", "div"
-        self.value = value
+        self.value = value  # Can be float or callable
         self._instant_done = instant_done  # Already executed immediately
 
         # Timing configuration
-        self._over_duration_ms: Optional[float] = None
         self._in_duration_ms: Optional[float] = None
         self._hold_duration_ms: Optional[float] = None
         self._out_duration_ms: Optional[float] = None
         self._in_easing: str = "linear"
         self._out_easing: str = "linear"
-        self._over_easing: str = "linear"
 
         # Named effect
         self._effect_name: Optional[str] = None
@@ -1103,17 +1144,17 @@ class PropertyEffectBuilder:
         if self._instant_done:
             return  # Already executed
 
-        # Determine if this is permanent (.over()) or temporary (.in/.hold/.out)
-        is_temporary = (self._in_duration_ms is not None or
-                       self._hold_duration_ms is not None or
+        # Determine if this is permanent or temporary
+        # Temporary = has .revert() or .hold() specified
+        is_temporary = (self._hold_duration_ms is not None or
                        self._out_duration_ms is not None)
 
-        if self._over_duration_ms is not None:
-            # Permanent transition over time
+        if self._in_duration_ms is not None and not is_temporary:
+            # Permanent transition over time (just .over() without .hold()/.revert())
             if self.property_name == "speed":
                 current = self.rig_state._speed
                 target = self._calculate_target_value(current)
-                transition = SpeedTransition(current, target, self._over_duration_ms, self._over_easing)
+                transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
                 self.rig_state.start()
                 self.rig_state._speed_transition = transition
             # TODO: Add accel transition if needed
@@ -1121,10 +1162,15 @@ class PropertyEffectBuilder:
         elif is_temporary:
             # Create and register temporary effect
             effect = Effect(self.property_name, self.operation, self.value, self._effect_name)
-            effect.in_duration_ms = self._in_duration_ms
+            effect.in_duration_ms = self._in_duration_ms  # Can be None for instant application
             effect.in_easing = self._in_easing
             effect.hold_duration_ms = self._hold_duration_ms
-            effect.out_duration_ms = self._out_duration_ms
+
+            # PRD5: .hold() alone implies instant revert after hold period
+            if self._hold_duration_ms is not None and self._out_duration_ms is None:
+                effect.out_duration_ms = 0
+            else:
+                effect.out_duration_ms = self._out_duration_ms
             effect.out_easing = self._out_easing
 
             self.rig_state.start()
@@ -1150,27 +1196,34 @@ class PropertyEffectBuilder:
                 self.rig_state._accel = target
 
     def _calculate_target_value(self, current: float) -> float:
-        """Calculate the target value based on operation"""
+        """Calculate the target value based on operation
+
+        Evaluates lambda functions at execution time with current state.
+        """
+        # Evaluate value if it's a callable (lambda)
+        value = self.value
+        if callable(value):
+            # Pass StateAccessor to lambda for dynamic calculations
+            if not hasattr(self.rig_state, '_state_accessor'):
+                self.rig_state._state_accessor = StateAccessor(self.rig_state)
+            value = value(self.rig_state._state_accessor)
+
         if self.operation == "to":
-            return self.value
+            return value
         elif self.operation == "by":
-            return current + self.value
+            return current + value
         elif self.operation == "mul":
-            return current * self.value
+            return current * value
         elif self.operation == "div":
-            if abs(self.value) > 1e-10:
-                return current / self.value
+            if abs(value) > 1e-10:
+                return current / value
             return current
         return current
 
     def over(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
-        """Permanent change over duration"""
-        self._over_duration_ms = duration_ms
-        self._over_easing = easing
-        return self
-
-    def fade_in(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
-        """Fade in effect over duration (must be paired with .hold() or .fade_out())"""
+        """Apply change over duration - can be permanent or temporary based on .revert()/.hold()"""
+        # Check if this is a temporary effect (has hold or revert)
+        # We'll set _in_duration_ms which will be checked in _execute
         self._in_duration_ms = duration_ms
         self._in_easing = easing
         return self
@@ -1180,18 +1233,108 @@ class PropertyEffectBuilder:
         self._hold_duration_ms = duration_ms
         return self
 
-    def fade_out(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
-        """Fade out effect over duration"""
-        self._out_duration_ms = duration_ms
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PropertyEffectBuilder':
+        """Revert to original value - instant if duration=0, gradual otherwise"""
+        self._out_duration_ms = duration_ms if duration_ms > 0 else 0
         self._out_easing = easing
         return self
 
-    def fade_in_out(self, total_duration_ms: float) -> 'PropertyEffectBuilder':
-        """Symmetric fade in and out (splits duration evenly)"""
-        half = total_duration_ms / 2
-        self._in_duration_ms = half
-        self._out_duration_ms = half
+    def rate(self, value: float = None) -> Union['PropertyEffectBuilder', 'PropertyRateNamespace']:
+        """Change at specified rate or access rate namespace
+
+        If value provided: context-aware rate (speed->speed/sec, accel->accel/sec²)
+        If no value: returns namespace for .rate.speed(), .rate.accel()
+
+        Examples:
+            rig.speed.to(50).rate(10)         # Increase speed at 10/sec
+            rig.speed.to(50).rate.accel(10)   # Accelerate at 10/sec² until reaching 50
+        """
+        if value is None:
+            # Return namespace for .rate.speed(), .rate.accel()
+            return PropertyRateNamespace(self)
+
+        # Context-aware rate
+        current = None
+        target = None
+
+        if self.property_name == "speed":
+            current = self.rig_state._speed
+            target = self._calculate_target_value(current)
+        elif self.property_name == "accel":
+            current = self.rig_state._accel
+            target = self._calculate_target_value(current)
+        else:
+            raise ValueError(f".rate() not valid for {self.property_name}")
+
+        delta = abs(target - current)
+        if delta < 0.01:
+            duration_ms = 1
+        else:
+            duration_sec = delta / value
+            duration_ms = duration_sec * 1000
+
+        self._in_duration_ms = duration_ms
+        self._in_easing = "linear"  # Rate-based uses linear
         return self
+
+
+class PropertyRateNamespace:
+    """Namespace for rate-based timing on properties"""
+    def __init__(self, builder: 'PropertyEffectBuilder'):
+        self._builder = builder
+
+    def speed(self, value: float) -> 'PropertyEffectBuilder':
+        """Change at specified speed rate (units/sec)
+
+        Only valid for position changes.
+        """
+        if self._builder.property_name == "position":
+            # Calculate duration based on distance / speed
+            # TODO: Implement position rate logic
+            pass
+        else:
+            raise ValueError(f".rate.speed() only valid for position, not {self._builder.property_name}")
+        return self._builder
+
+    def accel(self, value: float) -> 'PropertyEffectBuilder':
+        """Change via acceleration rate (units/sec²)
+
+        For speed: accelerate/decelerate at specified rate until reaching target
+        For accel: change acceleration at specified rate (jerk)
+        """
+        if self._builder.property_name == "speed":
+            # v = at, so t = v/a
+            current = self._builder.rig_state._speed
+            target = self._builder._calculate_target_value(current)
+            delta = abs(target - current)
+
+            if delta < 0.01:
+                duration_ms = 1  # Minimal duration
+            else:
+                duration_sec = delta / value
+                duration_ms = duration_sec * 1000
+
+            self._builder._in_duration_ms = duration_ms
+            self._builder._in_easing = "linear"  # Rate-based uses linear
+
+        elif self._builder.property_name == "accel":
+            # Jerk (rate of acceleration change)
+            current = self._builder.rig_state._accel
+            target = self._builder._calculate_target_value(current)
+            delta = abs(target - current)
+
+            if delta < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = delta / value
+                duration_ms = duration_sec * 1000
+
+            self._builder._in_duration_ms = duration_ms
+            self._builder._in_easing = "linear"
+        else:
+            raise ValueError(f".rate.accel() not valid for {self._builder.property_name}")
+
+        return self._builder
 
 
 class DirectionBuilder:
@@ -1563,16 +1706,17 @@ class NamedEffectBuilder:
 
 
 class NamedSpeedController:
-    """Speed controller for named effects"""
+    """Speed controller for named effects - only allows relative modifiers"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """Set speed to absolute value"""
-        builder = PropertyEffectBuilder(self.rig_state, "speed", "to", value)
-        builder._effect_name = self.name
-        return builder
+        """ERROR: Effects cannot use .to() - use rig.force() for absolute values"""
+        raise ValueError(
+            f"Effects can only use relative modifiers (.mul, .by, .div). "
+            f"Use rig.force('{self.name}') for absolute values (.to)."
+        )
 
     def by(self, delta: float) -> 'PropertyEffectBuilder':
         """Add delta to speed"""
@@ -1596,16 +1740,17 @@ class NamedSpeedController:
 
 
 class NamedAccelController:
-    """Accel controller for named effects"""
+    """Accel controller for named effects - only allows relative modifiers"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
     def to(self, value: float) -> 'PropertyEffectBuilder':
-        """Set accel to absolute value"""
-        builder = PropertyEffectBuilder(self.rig_state, "accel", "to", value)
-        builder._effect_name = self.name
-        return builder
+        """ERROR: Effects cannot use .to() - use rig.force() for absolute values"""
+        raise ValueError(
+            f"Effects can only use relative modifiers (.mul, .by, .div). "
+            f"Use rig.force('{self.name}') for absolute values (.to)."
+        )
 
     def by(self, delta: float) -> 'PropertyEffectBuilder':
         """Add delta to accel"""
@@ -1626,6 +1771,243 @@ class NamedAccelController:
         builder = PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
         builder._effect_name = self.name
         return builder
+
+
+class NamedForceBuilder:
+    """Builder for named forces - independent entities with their own speed/direction/accel"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+        self._speed_controller = None
+        self._accel_controller = None
+        self._direction_controller = None
+
+    @property
+    def speed(self) -> 'NamedForceSpeedController':
+        """Access speed property for this named force"""
+        if self._speed_controller is None:
+            self._speed_controller = NamedForceSpeedController(self.rig_state, self.name)
+        return self._speed_controller
+
+    @property
+    def accel(self) -> 'NamedForceAccelController':
+        """Access accel property for this named force"""
+        if self._accel_controller is None:
+            self._accel_controller = NamedForceAccelController(self.rig_state, self.name)
+        return self._accel_controller
+
+    def direction(self, x: float, y: float) -> 'NamedForceDirectionBuilder':
+        """Set direction for this named force"""
+        return NamedForceDirectionBuilder(self.rig_state, self.name, x, y)
+
+    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Stop the named force
+
+        Args:
+            duration_ms: Optional duration to fade out. If None, stops immediately.
+            easing: Easing function for gradual stop
+
+        Examples:
+            rig.force("wind").stop()  # Immediate stop
+            rig.force("wind").stop(500, "ease_out")  # Fade out over 500ms
+        """
+        # TODO: Implement force stopping logic
+        # For now, just clear from named forces dict
+        if self.name in self.rig_state._named_forces:
+            del self.rig_state._named_forces[self.name]
+
+
+class NamedForceSpeedController:
+    """Speed controller for named forces - only allows absolute setters"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def __call__(self, value: float) -> 'PropertyEffectBuilder':
+        """Set speed directly (absolute)"""
+        return self.to(value)
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set speed to absolute value"""
+        builder = PropertyEffectBuilder(self.rig_state, "speed", "to", value)
+        builder._effect_name = f"__force__{self.name}"
+        return builder
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .by() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.by)."
+        )
+
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .mul() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.mul)."
+        )
+
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .div() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.div)."
+        )
+
+
+class NamedForceAccelController:
+    """Accel controller for named forces - only allows absolute setters"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def __call__(self, value: float) -> 'PropertyEffectBuilder':
+        """Set accel directly (absolute)"""
+        return self.to(value)
+
+    def to(self, value: float) -> 'PropertyEffectBuilder':
+        """Set accel to absolute value"""
+        builder = PropertyEffectBuilder(self.rig_state, "accel", "to", value)
+        builder._effect_name = f"__force__{self.name}"
+        return builder
+
+    def by(self, delta: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .by() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.by)."
+        )
+
+    def mul(self, factor: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .mul() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.mul)."
+        )
+
+    def div(self, divisor: float) -> 'PropertyEffectBuilder':
+        """ERROR: Forces cannot use .div() - use rig.effect() for relative modifiers"""
+        raise ValueError(
+            f"Forces can only use absolute setters (.to, direct values). "
+            f"Use rig.effect('{self.name}') for relative modifiers (.div)."
+        )
+
+
+class NamedForceDirectionBuilder:
+    """Direction builder for named forces"""
+    def __init__(self, rig_state: 'RigState', name: str, x: float, y: float):
+        self.rig_state = rig_state
+        self.name = name
+        self.x = x
+        self.y = y
+
+    def __del__(self):
+        """Execute when builder goes out of scope"""
+        try:
+            # Store direction for this force
+            if not hasattr(self.rig_state, '_named_forces'):
+                self.rig_state._named_forces = {}
+            if self.name not in self.rig_state._named_forces:
+                self.rig_state._named_forces[self.name] = {}
+            self.rig_state._named_forces[self.name]['direction'] = Vec2(self.x, self.y).normalized()
+        except:
+            pass
+
+
+class NamedEffectNamespace:
+    """Namespace for rig.effect operations"""
+    def __init__(self, rig_state: 'RigState'):
+        self.rig_state = rig_state
+
+    def __call__(self, name: str) -> NamedEffectBuilder:
+        """Create or access a named effect"""
+        return NamedEffectBuilder(self.rig_state, name)
+
+    def stop_all(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Stop all named effects"""
+        for effect in list(self.rig_state._named_effects.values()):
+            effect.request_stop(duration_ms, easing)
+
+
+class NamedForceNamespace:
+    """Namespace for rig.force operations"""
+    def __init__(self, rig_state: 'RigState'):
+        self.rig_state = rig_state
+
+    def __call__(self, name: str) -> NamedForceBuilder:
+        """Create or access a named force"""
+        return NamedForceBuilder(self.rig_state, name)
+
+    def stop_all(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Stop all named forces"""
+        # TODO: Implement graceful stopping with duration/easing
+        if hasattr(self.rig_state, '_named_forces'):
+            self.rig_state._named_forces.clear()
+
+
+# ============================================================================
+# STATE ACCESSORS
+# ============================================================================
+
+class StateAccessor:
+    """Accessor for computed state (base + effects + forces)"""
+    def __init__(self, rig_state: 'RigState'):
+        self._rig = rig_state
+
+    @property
+    def speed(self) -> float:
+        """Get computed speed (base with effects applied, excluding accel velocity)"""
+        return self._rig._get_effective_speed()
+
+    @property
+    def accel(self) -> float:
+        """Get computed acceleration (base with effects applied)"""
+        return self._rig._get_effective_accel()
+
+    @property
+    def direction(self) -> Tuple[float, float]:
+        """Get current direction vector"""
+        return (self._rig._direction.x, self._rig._direction.y)
+
+    @property
+    def pos(self) -> Tuple[int, int]:
+        """Get current mouse position"""
+        return ctrl.mouse_pos()
+
+    @property
+    def velocity(self) -> Tuple[float, float]:
+        """Get total velocity vector (speed + accel contributions)"""
+        effective_speed = self._rig._get_effective_speed()
+        accel_velocity = self._rig._get_accel_velocity_contribution()
+        total_speed = effective_speed + accel_velocity
+        velocity_vec = self._rig._direction * total_speed
+        return (velocity_vec.x, velocity_vec.y)
+
+
+class BaseAccessor:
+    """Accessor for base values only (without effects/forces)"""
+    def __init__(self, rig_state: 'RigState'):
+        self._rig = rig_state
+
+    @property
+    def speed(self) -> float:
+        """Get base speed (without effects)"""
+        return self._rig._speed
+
+    @property
+    def accel(self) -> float:
+        """Get base acceleration (without effects)"""
+        return self._rig._accel
+
+    @property
+    def direction(self) -> Tuple[float, float]:
+        """Get base direction vector"""
+        return (self._rig._direction.x, self._rig._direction.y)
+
+    @property
+    def pos(self) -> Tuple[int, int]:
+        """Get current mouse position"""
+        return ctrl.mouse_pos()
 
 
 # ============================================================================
@@ -1649,6 +2031,7 @@ class RigState:
         # Effects (temporary property modifications)
         self._effects: list[Effect] = []
         self._named_effects: dict[str, Effect] = {}
+        self._named_forces: dict[str, dict] = {}  # Forces storage
 
         # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
@@ -1658,6 +2041,10 @@ class RigState:
         self.speed = SpeedController(self)
         self.accel = AccelController(self)
         self.pos = PositionController(self)
+
+        # Named effect/force namespaces
+        self._effect_namespace = NamedEffectNamespace(self)
+        self._force_namespace = NamedForceNamespace(self)
 
         # Sequence state
         self._sequence_queue: list[Callable] = []
@@ -1674,7 +2061,7 @@ class RigState:
         self._subpixel_adjuster = SubpixelAdjuster()
 
     def __call__(self, name: str) -> 'NamedEffectBuilder':
-        """Create or access a named effect
+        """Create or access a named effect (DEPRECATED - use .effect() or .force())
 
         Named effects can be stopped early via rig('name').stop()
 
@@ -1686,8 +2073,62 @@ class RigState:
         return NamedEffectBuilder(self, name)
 
     @property
-    def state(self) -> dict:
-        """Read-only state information"""
+    def effect(self) -> NamedEffectNamespace:
+        """Access named effects (modifiers on base properties)
+
+        Effects use relative operations (.mul, .by, .div) and recalculate when base changes.
+
+        Examples:
+            rig.effect("boost").speed.mul(2)
+            rig.effect("boost").stop()
+            rig.effect.stop_all()
+        """
+        return self._effect_namespace
+
+    @property
+    def force(self) -> NamedForceNamespace:
+        """Access named forces (independent entities)
+
+        Forces use absolute values (.to, direct setters) and remain constant.
+
+        Examples:
+            rig.force("wind").speed(5).direction(0, 1)
+            rig.force("wind").stop()
+            rig.force.stop_all()
+        """
+        return self._force_namespace
+
+    @property
+    def state(self) -> StateAccessor:
+        """Access computed state (base + effects + forces)
+
+        Examples:
+            rig.state.speed      # Computed speed
+            rig.state.accel      # Computed acceleration
+            rig.state.direction  # Current direction
+            rig.state.pos        # Current position
+            rig.state.velocity   # Total velocity vector
+        """
+        if not hasattr(self, '_state_accessor'):
+            self._state_accessor = StateAccessor(self)
+        return self._state_accessor
+
+    @property
+    def base(self) -> BaseAccessor:
+        """Access base values only (without effects/forces)
+
+        Examples:
+            rig.base.speed      # Base speed
+            rig.base.accel      # Base acceleration
+            rig.base.direction  # Base direction
+        """
+        if not hasattr(self, '_base_accessor'):
+            self._base_accessor = BaseAccessor(self)
+        return self._base_accessor
+
+    @property
+    def state_dict(self) -> dict:
+        """Read-only state information as dictionary (deprecated - use .state properties)"""
         position = ctrl.mouse_pos()
 
         # Calculate effective speed and accel with effects applied
@@ -1843,6 +2284,36 @@ class RigState:
         # Fallback (shouldn't happen with normalized vectors)
         return "right"
 
+    def bake(self) -> None:
+        """Flatten computed state into base, clearing all effects and forces
+
+        This takes the current computed values (base + effects + forces) and
+        makes them the new base values, then clears all effects and forces.
+
+        Examples:
+            rig.speed(10)
+            rig.effect("boost").speed.mul(2)  # computed speed = 20
+            rig.bake()                         # base speed now 20, effect cleared
+        """
+        # Compute final values
+        final_speed = self._get_effective_speed()
+        final_accel = self._get_effective_accel()
+        # Direction doesn't change with effects in current implementation
+        final_direction = self._direction
+
+        # Set as new base
+        self._speed = final_speed
+        self._accel = final_accel
+        self._direction = final_direction
+
+        # Clear all effects and forces
+        self._effects.clear()
+        self._named_effects.clear()
+        self._named_forces.clear()
+        self._accel_velocities.clear()
+
+        # Note: We don't clear transitions as those are permanent changes in progress
+
     def _stop_immediate(self) -> None:
         """Internal: Immediate stop implementation"""
         # Stop movement
@@ -1873,30 +2344,56 @@ class RigState:
         self._pending_wait_jobs.clear()
 
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Stop the rig
+        """Stop everything: bake state, clear effects/forces, decelerate to 0
 
         Args:
-            duration_ms: Optional duration to fade out over. If None, stops immediately.
-            easing: Easing function name for gradual stop
+            duration_ms: Optional duration to decelerate over. If None, stops immediately.
+            easing: Easing function name for gradual deceleration
 
         Examples:
-            rig.stop()                  # Instant stop
-            rig.stop(500)               # Smooth stop over 500ms
-            rig.stop(1000, "ease_out")  # Smooth stop with easing
+            rig.stop()                  # Instant: bake, clear, speed=0
+            rig.stop(500)               # Bake, clear, then decelerate over 500ms
+            rig.stop(1000, "ease_out")  # Bake, clear, decelerate with easing
         """
+        # 1. Bake current state (flatten effects/forces into base)
+        self.bake()
+
+        # 2. Effects and forces already cleared by bake()
+
+        # 3. Decelerate speed to 0
         if duration_ms is None or duration_ms == 0:
-            self._stop_immediate()
+            # Immediate stop
+            self._speed = 0.0
+            self._accel = 0.0
+            self._speed_transition = None
+            self._direction_transition = None
+            self._position_transitions.clear()
+
+            # Reset subpixel accumulator
+            self._subpixel_adjuster = SubpixelAdjuster()
+
+            # Stop frame loop
+            if self._cron_job is not None:
+                cron.cancel(self._cron_job)
+                self._cron_job = None
+
+            # Cancel pending callbacks
+            for job in self._pending_wait_jobs:
+                try:
+                    cron.cancel(job)
+                except:
+                    pass
+            self._pending_wait_jobs.clear()
         else:
-            # Gradual stop: fade speed to 0 over duration
-            if self._speed_transition is None:
-                transition = SpeedTransition(
-                    self._speed,
-                    0.0,
-                    duration_ms,
-                    easing
-                )
-                self.start()
-                self._speed_transition = transition
+            # Gradual deceleration: fade speed to 0 over duration
+            transition = SpeedTransition(
+                self._speed,
+                0.0,
+                duration_ms,
+                easing
+            )
+            self.start()
+            self._speed_transition = transition
 
     def sequence(self, steps: list[Callable]) -> None:
         """Execute a sequence of operations in order
@@ -2041,11 +2538,8 @@ class RigState:
                     # Initialize velocity tracking for accel effects
                     self._accel_velocities[effect] = 0.0
 
-            # Update effect lifecycle
-            if effect.property_name == "speed":
-                # Speed effects modify cruise speed
-                self._speed = effect.update(self._speed)
-            elif effect.property_name == "accel":
+            # Update effect lifecycle for accel effects (they integrate velocity separately)
+            if effect.property_name == "accel":
                 # Accel effects: get the current acceleration value but don't modify cruise speed
                 current_accel = effect.update(self._accel)
                 # Integrate the acceleration into this effect's velocity contribution
@@ -2165,7 +2659,7 @@ class Actions:
             print(f"Direction: {state['direction_cardinal']}")
         """
         rig = get_rig()
-        return rig.state
+        return rig.state_dict
 
     def mouse_rig_stop() -> None:
         """Stop the mouse rig frame loop"""
