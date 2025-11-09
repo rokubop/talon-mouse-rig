@@ -320,3 +320,38 @@ class Actions:
         """Double current speed temporarily"""
         rig = actions.user.mouse_rig()
         rig.speed.mul(lambda state: 2).hold(2000).revert(500)
+
+    # =========================================================================
+    # PROPERTY CHAINING EXAMPLES
+    # =========================================================================
+
+    def mouse_rig_chain_basic():
+        """Chain multiple properties in one statement (no timing)"""
+        rig = actions.user.mouse_rig()
+        # All properties execute immediately, no timing involved
+        rig.speed(10).accel(2).direction(1, 0)
+
+    def mouse_rig_chain_all_properties():
+        """Chain all four property types"""
+        rig = actions.user.mouse_rig()
+        # Set speed, accel, direction, and position in one chain
+        rig.speed(5).accel(3).direction(1, 1).pos.to(500, 500)
+
+    def mouse_rig_chain_with_modifiers():
+        """Chain with relative modifiers"""
+        rig = actions.user.mouse_rig()
+        # Use .by() for relative changes while chaining
+        rig.speed.by(5).accel.by(2).direction.by(45)
+
+    def mouse_rig_no_timing_in_chains():
+        """INVALID: Cannot mix timing with chaining
+        
+        These would raise errors:
+            rig.speed(4).over(100).accel(3)      # timing before chain
+            rig.speed(4).accel(3).over(100)      # timing after chain
+        
+        Instead, use separate statements:
+        """
+        rig = actions.user.mouse_rig()
+        rig.speed(4).over(100)   # Timing allowed when not chaining
+        rig.accel(3).over(200)   # Each property gets its own timing

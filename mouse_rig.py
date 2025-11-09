@@ -1647,11 +1647,38 @@ class PropertyEffectBuilder:
         return self
 
     def __getattr__(self, name: str):
-        """Provide helpful error messages for invalid chaining attempts"""
-        # Common rig properties that can't be chained
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
         if name in ['speed', 'accel', 'pos', 'direction']:
-            # Don't allow chaining properties from effect builders
-            raise AttributeError(_error_cannot_chain_property(f'{self.property_name} effect', name))
+            # Check if any timing has been configured
+            has_timing = (
+                self._hold_duration_ms is not None or
+                self._out_duration_ms is not None or
+                self._in_duration_ms is not None or
+                self._in_easing != "linear"
+            )
+            
+            if has_timing:
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .in_out, .hold, .revert).\n\n"
+                    "Use separate statements:\n"
+                    f"  rig.{self.property_name}(...).over(...)\n"
+                    f"  rig.{name}(...)"
+                )
+            
+            # Execute current property change immediately
+            self._execute()
+            
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                return SpeedController(self._rig)
+            elif name == 'accel':
+                return AccelController(self._rig)
+            elif name == 'pos':
+                return PositionController(self._rig)
+            elif name == 'direction':
+                return DirectionController(self._rig)
+                
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after {self.property_name} effect.\n\n"
@@ -1849,10 +1876,37 @@ class DirectionBuilder:
         return self
 
     def __getattr__(self, name: str):
-        """Provide helpful error messages for invalid chaining attempts"""
-        # Common rig properties that can't be chained
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
         if name in ['speed', 'accel', 'pos', 'direction']:
-            raise AttributeError(_error_cannot_chain_property('direction', name))
+            # Check if any timing has been configured
+            has_timing = (
+                self._duration_ms is not None or
+                self._use_rate or
+                self._wait_duration_ms is not None
+            )
+            
+            if has_timing:
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .rate, .wait).\n\n"
+                    "Use separate statements:\n"
+                    f"  rig.direction(...).over(...)\n"
+                    f"  rig.{name}(...)"
+                )
+            
+            # Execute current direction change immediately
+            self._execute()
+            
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                return SpeedController(self.rig_state)
+            elif name == 'accel':
+                return AccelController(self.rig_state)
+            elif name == 'pos':
+                return PositionController(self.rig_state)
+            elif name == 'direction':
+                return DirectionController(self.rig_state)
+                
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after 'direction'.\n\n"
@@ -2023,9 +2077,39 @@ class DirectionByBuilder:
         return self
 
     def __getattr__(self, name: str):
-        """Provide helpful error messages for invalid chaining attempts"""
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
         if name in ['speed', 'accel', 'pos', 'direction']:
-            raise AttributeError(_error_cannot_chain_property('direction.by()', name))
+            # Check if any timing has been configured
+            has_timing = (
+                self._duration_ms is not None or
+                self._use_rate or
+                self._wait_duration_ms is not None or
+                self._hold_duration_ms is not None or
+                self._out_duration_ms is not None
+            )
+            
+            if has_timing:
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .rate, .wait, .hold, .revert).\n\n"
+                    "Use separate statements:\n"
+                    f"  rig.direction.by(...).over(...)\n"
+                    f"  rig.{name}(...)"
+                )
+            
+            # Execute current direction change immediately
+            self._execute()
+            
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                return SpeedController(self.rig_state)
+            elif name == 'accel':
+                return AccelController(self.rig_state)
+            elif name == 'pos':
+                return PositionController(self.rig_state)
+            elif name == 'direction':
+                return DirectionController(self.rig_state)
+                
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after 'direction.by()'.\n\n"
@@ -2268,10 +2352,41 @@ class PositionToBuilder:
             pass  # Ignore errors during cleanup
 
     def __getattr__(self, name: str):
-        """Provide helpful error messages for invalid chaining attempts"""
-        # Common rig properties that can't be chained
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
         if name in ['speed', 'accel', 'pos', 'direction']:
-            raise AttributeError(_error_cannot_chain_property('pos.to()', name))
+            # Check if any timing has been configured
+            has_timing = (
+                self._duration_ms is not None or
+                self._wait_duration_ms is not None or
+                self._hold_duration_ms is not None or
+                self._revert_duration_ms is not None
+            )
+            
+            if has_timing:
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .wait, .hold, .revert).\n\n"
+                    "Use separate statements:\n"
+                    f"  rig.pos.to(...).over(...)\n"
+                    f"  rig.{name}(...)"
+                )
+            
+            # Execute current position change immediately
+            self._should_execute_instant = True
+            
+            # Trigger execution via __del__
+            self.__del__()
+            
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                return SpeedController(self.rig_state)
+            elif name == 'accel':
+                return AccelController(self.rig_state)
+            elif name == 'pos':
+                return PositionController(self.rig_state)
+            elif name == 'direction':
+                return DirectionController(self.rig_state)
+                
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after pos.to().\n\n"
@@ -2479,10 +2594,41 @@ class PositionByBuilder:
             pass  # Ignore errors during cleanup
 
     def __getattr__(self, name: str):
-        """Provide helpful error messages for invalid chaining attempts"""
-        # Common rig properties that can't be chained
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
         if name in ['speed', 'accel', 'pos', 'direction']:
-            raise AttributeError(_error_cannot_chain_property('pos.by()', name))
+            # Check if any timing has been configured
+            has_timing = (
+                self._duration_ms is not None or
+                self._wait_duration_ms is not None or
+                self._hold_duration_ms is not None or
+                self._revert_duration_ms is not None
+            )
+            
+            if has_timing:
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .wait, .hold, .revert).\n\n"
+                    "Use separate statements:\n"
+                    f"  rig.pos.by(...).over(...)\n"
+                    f"  rig.{name}(...)"
+                )
+            
+            # Execute current position change immediately
+            self._should_execute_instant = True
+            
+            # Trigger execution via __del__
+            self.__del__()
+            
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                return SpeedController(self.rig_state)
+            elif name == 'accel':
+                return AccelController(self.rig_state)
+            elif name == 'pos':
+                return PositionController(self.rig_state)
+            elif name == 'direction':
+                return DirectionController(self.rig_state)
+                
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after pos.by().\n\n"
