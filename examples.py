@@ -171,14 +171,19 @@ class Actions:
         rig.force("thrust").stop(2000)
 
     def mouse_rig_drift_on():
-        """Add directional drift modifier"""
+        """Add directional drift modifier (named)"""
         rig = actions.user.mouse_rig()
         rig.modifier("drift").direction.by(15)
+
+    def mouse_rig_drift_temporary():
+        """Temporary directional drift (auto-revert)"""
+        rig = actions.user.mouse_rig()
+        rig.direction.by(15).over(1000).revert(1000)
 
     def mouse_rig_drift_off():
         """Remove drift"""
         rig = actions.user.mouse_rig()
-        rig.modifier("drift").stop(1000)
+        rig.modifier("drift").stop()
 
     # =========================================================================
     # NAMED FORCES
@@ -188,8 +193,8 @@ class Actions:
         """Enable gravity force"""
         rig = actions.user.mouse_rig()
         gravity = rig.force("gravity")
-        gravity.speed(9.8)
-        gravity.direction(0, 1)  # Downward
+        gravity.accel(2)
+        gravity.direction(0, 1)
 
     def mouse_rig_gravity_off():
         """Disable gravity"""

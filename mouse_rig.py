@@ -720,6 +720,179 @@ class Effect:
         self.stop_easing = easing
 
 
+class DirectionEffect:
+    """
+    Represents a temporary direction rotation with lifecycle phases.
+
+    Similar to Effect but handles direction (rotation in degrees) instead of scalar values.
+    """
+    def __init__(self, degrees: float, name: Optional[str] = None):
+        self.degrees = degrees  # Rotation amount in degrees
+        self.name = name  # Optional name for stopping early
+
+        # Lifecycle configuration
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+
+        # Runtime state
+        self.phase: str = "not_started"  # "in", "hold", "out", "complete"
+        self.phase_start_time: Optional[float] = None
+        self.base_direction: Optional[Vec2] = None  # Direction before effect was applied
+        self.current_multiplier: float = 0.0  # 0 to 1, how much of the rotation is active
+        self.complete = False
+
+        # For stopping
+        self.stop_requested = False
+        self.stop_duration_ms: Optional[float] = None
+        self.stop_easing: str = "linear"
+        self.stop_start_time: Optional[float] = None
+
+    def start(self, current_direction: Vec2) -> None:
+        """Start the effect lifecycle"""
+        self.base_direction = current_direction
+
+        if self.in_duration_ms is not None:
+            self.phase = "in"
+            self.phase_start_time = time.perf_counter()
+        elif self.hold_duration_ms is not None:
+            self.phase = "hold"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        elif self.out_duration_ms is not None:
+            # Start at full strength if only out phase
+            self.phase = "out"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        else:
+            # No lifecycle specified
+            if self.name:
+                # Named modifiers without lifecycle persist indefinitely at full strength
+                self.phase = "hold"
+                self.current_multiplier = 1.0
+            else:
+                # Unnamed effects without lifecycle complete immediately
+                self.phase = "complete"
+                self.complete = True
+
+    def update(self, current_base_direction: Vec2) -> Vec2:
+        """
+        Update effect and return the modified direction.
+
+        Args:
+            current_base_direction: The current base direction (without this effect)
+
+        Returns:
+            The modified direction with this effect applied
+        """
+        if self.complete:
+            return current_base_direction
+
+        # Handle stop request
+        if self.stop_requested:
+            return self._update_stop(current_base_direction)
+
+        # Normal lifecycle progression
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
+
+        if self.phase == "in":
+            if elapsed_ms >= self.in_duration_ms:
+                # Move to next phase
+                self.current_multiplier = 1.0
+                if self.hold_duration_ms is not None:
+                    self.phase = "hold"
+                    self.phase_start_time = current_time
+                elif self.out_duration_ms is not None:
+                    self.phase = "out"
+                    self.phase_start_time = current_time
+                else:
+                    self.phase = "complete"
+                    self.complete = True
+                    return current_base_direction
+            else:
+                # Update multiplier with easing
+                t = elapsed_ms / self.in_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                self.current_multiplier = easing_fn(t)
+
+        elif self.phase == "hold":
+            # Check if we have a duration specified
+            if self.hold_duration_ms is not None:
+                if elapsed_ms >= self.hold_duration_ms:
+                    # Move to next phase
+                    if self.out_duration_ms is not None:
+                        self.phase = "out"
+                        self.phase_start_time = current_time
+                    else:
+                        self.phase = "complete"
+                        self.complete = True
+                        return current_base_direction
+            # else: persist indefinitely at full strength (named modifiers without timing)
+            # Multiplier stays at 1.0 during hold
+
+        elif self.phase == "out":
+            if elapsed_ms >= self.out_duration_ms:
+                self.phase = "complete"
+                self.complete = True
+                return current_base_direction
+            else:
+                # Fade out
+                t = elapsed_ms / self.out_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                self.current_multiplier = 1.0 - easing_fn(t)
+
+        # Apply rotation based on current multiplier
+        return self._apply_rotation(current_base_direction)
+
+    def _apply_rotation(self, base_direction: Vec2) -> Vec2:
+        """Apply the rotation to the base direction based on multiplier"""
+        if self.current_multiplier == 0.0:
+            return base_direction
+
+        # Calculate the rotation amount scaled by multiplier
+        angle_rad = math.radians(self.degrees * self.current_multiplier)
+
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+
+        new_x = base_direction.x * cos_a - base_direction.y * sin_a
+        new_y = base_direction.x * sin_a + base_direction.y * cos_a
+
+        return Vec2(new_x, new_y).normalized()
+
+    def _update_stop(self, current_base_direction: Vec2) -> Vec2:
+        """Handle graceful stop with optional duration"""
+        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
+            # Immediate stop
+            self.complete = True
+            return current_base_direction
+
+        # Graceful stop over duration
+        if self.stop_start_time is None:
+            self.stop_start_time = time.perf_counter()
+
+        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
+        if elapsed_ms >= self.stop_duration_ms:
+            self.complete = True
+            return current_base_direction
+
+        # Fade out the current multiplier (from 1.0 to 0.0)
+        t = elapsed_ms / self.stop_duration_ms
+        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
+        self.current_multiplier = 1.0 - easing_fn(t)
+
+        return self._apply_rotation(current_base_direction)
+
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop, optionally over a duration"""
+        self.stop_requested = True
+        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
+        self.stop_easing = easing
+
+
 # ============================================================================
 # FORCE SYSTEM (independent entities with vector addition)
 # ============================================================================
@@ -1705,6 +1878,11 @@ class DirectionByBuilder:
         self._rate_degrees_per_second: Optional[float] = None
         self._wait_duration_ms: Optional[float] = None
 
+        # Temporary effect support
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
+
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
         try:
@@ -1714,6 +1892,30 @@ class DirectionByBuilder:
 
     def _execute(self):
         """Execute the configured operation"""
+        # Check if this is a temporary effect (has .revert() or .hold())
+        is_temporary = self._hold_duration_ms is not None or self._out_duration_ms is not None
+
+        if is_temporary:
+            # Create and register temporary direction effect
+            dir_effect = DirectionEffect(self.degrees)
+            dir_effect.in_duration_ms = self._duration_ms  # Can be None for instant application
+            dir_effect.in_easing = self._easing
+            dir_effect.hold_duration_ms = self._hold_duration_ms
+
+            # PRD5: .hold() alone implies instant revert after hold period
+            if self._hold_duration_ms is not None and self._out_duration_ms is None:
+                dir_effect.out_duration_ms = 0
+            else:
+                dir_effect.out_duration_ms = self._out_duration_ms
+            dir_effect.out_easing = self._out_easing
+
+            self.rig_state.start()
+            self.rig_state._direction_effects.append(dir_effect)
+
+            # TODO: Handle callback when effect completes
+            return
+
+        # Non-temporary: permanent rotation
         # Calculate target direction from current + degrees
         current_dir = self.rig_state._direction
         angle_rad = math.radians(self.degrees)
@@ -1804,6 +2006,17 @@ class DirectionByBuilder:
         self._wait_duration_ms = duration_ms
         return self
 
+    def hold(self, duration_ms: float) -> 'DirectionByBuilder':
+        """Hold rotation at full strength for duration"""
+        self._hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'DirectionByBuilder':
+        """Revert to original direction - instant if duration=0, gradual otherwise"""
+        self._out_duration_ms = duration_ms if duration_ms > 0 else 0
+        self._out_easing = easing
+        return self
+
     def then(self, callback: Callable) -> 'DirectionByBuilder':
         """Execute callback after rotation completes"""
         self._then_callback = callback
@@ -1819,7 +2032,7 @@ class DirectionByBuilder:
                 "Instead, use separate statements."
             )
 
-        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, rate, wait, then'))
+        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, rate, wait, hold, revert, then'))
 
 
 class DirectionController:
@@ -2291,6 +2504,7 @@ class NamedModifierBuilder:
         self.name = name
         self._speed_controller = None
         self._accel_controller = None
+        self._direction_controller = None
 
     @property
     def speed(self) -> 'NamedSpeedController':
@@ -2306,6 +2520,13 @@ class NamedModifierBuilder:
             self._accel_controller = NamedAccelController(self.rig_state, self.name)
         return self._accel_controller
 
+    @property
+    def direction(self) -> 'NamedDirectionController':
+        """Access direction property for this named modifier"""
+        if self._direction_controller is None:
+            self._direction_controller = NamedDirectionController(self.rig_state, self.name)
+        return self._direction_controller
+
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop the named modifier
 
@@ -2317,9 +2538,15 @@ class NamedModifierBuilder:
             rig("boost").stop()  # Immediate stop
             rig("boost").stop(500, "ease_out")  # Fade out over 500ms
         """
+        # Stop speed/accel modifiers
         if self.name in self.rig_state._named_modifiers:
             effect = self.rig_state._named_modifiers[self.name]
             effect.request_stop(duration_ms, easing)
+
+        # Stop direction modifiers
+        if self.name in self.rig_state._named_direction_modifiers:
+            dir_effect = self.rig_state._named_direction_modifiers[self.name]
+            dir_effect.request_stop(duration_ms, easing)
 
 
 class NamedSpeedController:
@@ -2388,6 +2615,89 @@ class NamedAccelController:
         builder = PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
         builder._effect_name = self.name
         return builder
+
+
+class NamedDirectionController:
+    """Direction controller for named modifiers - only allows relative modifiers"""
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def by(self, degrees: float) -> 'NamedDirectionByBuilder':
+        """Rotate by relative angle in degrees (for modifiers)
+
+        Positive = clockwise, Negative = counter-clockwise
+
+        Examples:
+            rig.modifier("drift").direction.by(15)              # Rotate 15° clockwise instantly
+            rig.modifier("drift").direction.by(-45).over(500)   # Rotate 45° counter-clockwise over 500ms
+        """
+        return NamedDirectionByBuilder(self.rig_state, self.name, degrees)
+
+
+class NamedDirectionByBuilder:
+    """Builder for named direction modifiers - similar to DirectionByBuilder but for modifiers"""
+    def __init__(self, rig_state: 'RigState', name: str, degrees: float):
+        self.rig_state = rig_state
+        self.name = name
+        self.degrees = degrees
+        self._easing = "linear"
+
+        # Timing configuration
+        self._in_duration_ms: Optional[float] = None
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
+
+    def __del__(self):
+        """Execute the operation when builder goes out of scope"""
+        try:
+            self._execute()
+        except:
+            pass
+
+    def _execute(self):
+        """Execute the configured operation"""
+        # Create and register named direction effect
+        dir_effect = DirectionEffect(self.degrees, self.name)
+        dir_effect.in_duration_ms = self._in_duration_ms  # Can be None for instant application
+        dir_effect.in_easing = self._easing
+        dir_effect.hold_duration_ms = self._hold_duration_ms
+
+        # PRD5: .hold() alone implies instant revert after hold period
+        if self._hold_duration_ms is not None and self._out_duration_ms is None:
+            dir_effect.out_duration_ms = 0
+        else:
+            dir_effect.out_duration_ms = self._out_duration_ms
+        dir_effect.out_easing = self._out_easing
+
+        self.rig_state.start()
+        self.rig_state._direction_effects.append(dir_effect)
+
+        # Track named modifier
+        # Remove any existing modifier with same name
+        if self.name in self.rig_state._named_direction_modifiers:
+            old_effect = self.rig_state._named_direction_modifiers[self.name]
+            if old_effect in self.rig_state._direction_effects:
+                self.rig_state._direction_effects.remove(old_effect)
+        self.rig_state._named_direction_modifiers[self.name] = dir_effect
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedDirectionByBuilder':
+        """Apply change over duration"""
+        self._in_duration_ms = duration_ms
+        self._easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'NamedDirectionByBuilder':
+        """Hold rotation at full strength for duration"""
+        self._hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedDirectionByBuilder':
+        """Revert to original direction - instant if duration=0, gradual otherwise"""
+        self._out_duration_ms = duration_ms if duration_ms > 0 else 0
+        self._out_easing = easing
+        return self
 
 
 class NamedForceBuilder:
@@ -2603,8 +2913,9 @@ class StateAccessor:
 
     @property
     def direction(self) -> Tuple[float, float]:
-        """Get current direction vector"""
-        return (self._rig._direction.x, self._rig._direction.y)
+        """Get current direction vector (with effects applied)"""
+        dir_vec = self._rig._get_effective_direction()
+        return (dir_vec.x, dir_vec.y)
 
     @property
     def pos(self) -> Tuple[int, int]:
@@ -2617,7 +2928,8 @@ class StateAccessor:
         effective_speed = self._rig._get_effective_speed()
         accel_velocity = self._rig._get_accel_velocity_contribution()
         total_speed = effective_speed + accel_velocity
-        velocity_vec = self._rig._direction * total_speed
+        effective_direction = self._rig._get_effective_direction()
+        velocity_vec = effective_direction * total_speed
         return (velocity_vec.x, velocity_vec.y)
 
 
@@ -2667,7 +2979,9 @@ class RigState:
 
         # Effects (temporary property modifications)
         self._effects: list[Effect] = []
+        self._direction_effects: list[DirectionEffect] = []
         self._named_modifiers: dict[str, Effect] = {}
+        self._named_direction_modifiers: dict[str, DirectionEffect] = {}
         self._named_forces: dict[str, Force] = {}  # Force entities
 
         # Acceleration effects tracking (separate from cruise speed)
@@ -2772,18 +3086,19 @@ class RigState:
         # Calculate effective speed and accel with effects applied
         effective_speed = self._get_effective_speed()
         effective_accel = self._get_effective_accel()
+        effective_direction = self._get_effective_direction()
         accel_velocity = self._get_accel_velocity_contribution()
 
         # Total velocity includes cruise velocity + accel velocity contributions
         total_speed = effective_speed + accel_velocity
-        total_velocity = self._direction * total_speed
+        total_velocity = effective_direction * total_speed
 
         # Determine cardinal/intercardinal direction
-        direction_cardinal = self._get_cardinal_direction(self._direction)
+        direction_cardinal = self._get_cardinal_direction(effective_direction)
 
         return {
             "position": position,
-            "direction": self._direction.to_tuple(),
+            "direction": effective_direction.to_tuple(),
             "direction_cardinal": direction_cardinal,
             "speed": self._speed,  # Base cruise speed
             "accel": self._accel,
@@ -2848,6 +3163,13 @@ class RigState:
             if effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
         return base_accel
+
+    def _get_effective_direction(self) -> Vec2:
+        """Get direction with all rotation effects applied"""
+        base_direction = self._direction
+        for dir_effect in self._direction_effects:
+            base_direction = dir_effect.update(base_direction)
+        return base_direction
 
     def _get_accel_velocity_contribution(self) -> float:
         """Get total velocity contribution from all acceleration effects
@@ -2917,8 +3239,7 @@ class RigState:
         # Compute final values
         final_speed = self._get_effective_speed()
         final_accel = self._get_effective_accel()
-        # Direction doesn't change with effects in current implementation
-        final_direction = self._direction
+        final_direction = self._get_effective_direction()
 
         # Set as new base
         self._speed = final_speed
@@ -2927,7 +3248,9 @@ class RigState:
 
         # Clear all effects and forces
         self._effects.clear()
+        self._direction_effects.clear()
         self._named_modifiers.clear()
+        self._named_direction_modifiers.clear()
         self._named_forces.clear()
         self._accel_velocities.clear()
 
@@ -3118,6 +3441,10 @@ class RigState:
         if len(self._effects) > 0:
             return False
 
+        # Check for active direction effects
+        if len(self._direction_effects) > 0:
+            return False
+
         # Check for active forces
         if len(self._named_forces) > 0:
             return False
@@ -3149,6 +3476,21 @@ class RigState:
             self._direction_transition.update(self)
             if self._direction_transition.complete:
                 self._direction_transition = None
+
+        # Update direction effects (temporary rotations)
+        for dir_effect in self._direction_effects[:]:
+            # Start effect if not started
+            if dir_effect.phase == "not_started":
+                dir_effect.start(self._direction)
+
+            # Direction effects don't update here - they're applied when getting effective direction
+
+            # Remove completed effects
+            if dir_effect.complete:
+                self._direction_effects.remove(dir_effect)
+                # Remove from named modifiers if it has a name
+                if dir_effect.name and dir_effect.name in self._named_direction_modifiers:
+                    del self._named_direction_modifiers[dir_effect.name]
 
         # Update effects (temporary property modifications)
         for effect in self._effects[:]:
@@ -3200,8 +3542,11 @@ class RigState:
             total_speed = min(total_speed, self.limits_max_speed)
         total_speed = max(0.0, total_speed)
 
+        # Get effective direction (with rotation effects applied)
+        effective_direction = self._get_effective_direction()
+
         # Base velocity vector
-        velocity = self._direction * total_speed
+        velocity = effective_direction * total_speed
 
         # Add force contributions via vector addition
         # Forces return velocity in pixels/frame (same units as base velocity)
