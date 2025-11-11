@@ -2757,14 +2757,10 @@ class EntityBuilder:
         # Force (independent entity)
         rig("gravity").direction(0, 1).accel(9.8)
         rig("wind").velocity(5, 0)
-        
-        # Anonymous (auto-cleanup)
-        rig().shift.speed.by(10).hold(2000).revert(1000)
     """
-    def __init__(self, rig_state: 'RigState', name: Optional[str], is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
         self._entity_type: Optional[Literal["transform", "force"]] = None
         
         # Lazy-initialized controllers
@@ -2799,7 +2795,7 @@ class EntityBuilder:
         """Access scale operations (multiplicative transforms)"""
         self._ensure_transform(".scale")
         if self._scale_builder is None:
-            self._scale_builder = ScaleBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._scale_builder = ScaleBuilder(self.rig_state, self.name)
         return self._scale_builder
     
     @property
@@ -2807,7 +2803,7 @@ class EntityBuilder:
         """Access shift operations (additive transforms)"""
         self._ensure_transform(".shift")
         if self._shift_builder is None:
-            self._shift_builder = ShiftBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._shift_builder = ShiftBuilder(self.rig_state, self.name)
         return self._shift_builder
     
     def velocity(self, x: float, y: float) -> 'EntityBuilder':
@@ -2868,10 +2864,9 @@ class EntityBuilder:
 
 class ScaleBuilder:
     """Builder for scale (multiplicative) transform operations"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
         self._speed_builder = None
         self._accel_builder = None
     
@@ -2879,23 +2874,22 @@ class ScaleBuilder:
     def speed(self) -> 'ScaleSpeedBuilder':
         """Access scale.speed operations"""
         if self._speed_builder is None:
-            self._speed_builder = ScaleSpeedBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._speed_builder = ScaleSpeedBuilder(self.rig_state, self.name)
         return self._speed_builder
     
     @property
     def accel(self) -> 'ScaleAccelBuilder':
         """Access scale.accel operations"""
         if self._accel_builder is None:
-            self._accel_builder = ScaleAccelBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._accel_builder = ScaleAccelBuilder(self.rig_state, self.name)
         return self._accel_builder
 
 
 class ShiftBuilder:
     """Builder for shift (additive) transform operations"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
         self._speed_builder = None
         self._accel_builder = None
         self._direction_builder = None
@@ -2905,37 +2899,36 @@ class ShiftBuilder:
     def speed(self) -> 'ShiftSpeedBuilder':
         """Access shift.speed operations"""
         if self._speed_builder is None:
-            self._speed_builder = ShiftSpeedBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._speed_builder = ShiftSpeedBuilder(self.rig_state, self.name)
         return self._speed_builder
     
     @property
     def accel(self) -> 'ShiftAccelBuilder':
         """Access shift.accel operations"""
         if self._accel_builder is None:
-            self._accel_builder = ShiftAccelBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._accel_builder = ShiftAccelBuilder(self.rig_state, self.name)
         return self._accel_builder
     
     @property
     def direction(self) -> 'ShiftDirectionBuilder':
         """Access shift.direction operations"""
         if self._direction_builder is None:
-            self._shift_direction_builder = ShiftDirectionBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._shift_direction_builder = ShiftDirectionBuilder(self.rig_state, self.name)
         return self._shift_direction_builder
     
     @property
     def pos(self) -> 'ShiftPosBuilder':
         """Access shift.pos operations"""
         if self._pos_builder is None:
-            self._pos_builder = ShiftPosBuilder(self.rig_state, self.name, self.is_anonymous)
+            self._pos_builder = ShiftPosBuilder(self.rig_state, self.name)
         return self._pos_builder
 
 
 class ScaleSpeedBuilder:
     """Builder for scale.speed transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
@@ -2974,10 +2967,9 @@ class ScaleSpeedBuilder:
 
 class ScaleAccelBuilder:
     """Builder for scale.accel transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
@@ -3015,10 +3007,9 @@ class ScaleAccelBuilder:
 
 class ShiftSpeedBuilder:
     """Builder for shift.speed transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
@@ -3056,10 +3047,9 @@ class ShiftSpeedBuilder:
 
 class ShiftAccelBuilder:
     """Builder for shift.accel transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
@@ -3097,10 +3087,9 @@ class ShiftAccelBuilder:
 
 class ShiftDirectionBuilder:
     """Builder for shift.direction transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def to(self, x: float, y: float) -> 'ShiftDirectionBuilder':
         """Set direction offset (replaces existing)"""
@@ -3116,10 +3105,9 @@ class ShiftDirectionBuilder:
 
 class ShiftPosBuilder:
     """Builder for shift.pos transform operations (.to/.by)"""
-    def __init__(self, rig_state: 'RigState', name: str, is_anonymous: bool = False):
+    def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-        self.is_anonymous = is_anonymous
     
     def to(self, x: float, y: float) -> 'ShiftPosBuilder':
         """Set position offset (replaces existing)"""
@@ -3698,11 +3686,8 @@ class RigState:
 
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
-        
-        # Anonymous entity counter (PRD 6)
-        self._anon_counter = 0
 
-    def __call__(self, name: Optional[str] = None) -> 'EntityBuilder':
+    def __call__(self, name: str) -> 'EntityBuilder':
         """Create or access a named entity (PRD 6 - unified API with type inference)
 
         Type is inferred based on operations used:
@@ -3717,17 +3702,8 @@ class RigState:
             # Force (independent)
             rig("gravity").direction(0, 1).accel(9.8)
             rig("wind").velocity(5, 0)
-            
-            # Anonymous (auto-cleanup with lifecycle)
-            rig().shift.speed.by(10).hold(2000).revert(1000)
         """
-        if name is None:
-            # Anonymous entity - auto-generate name
-            self._anon_counter += 1
-            name = f"_anon_{self._anon_counter}"
-            return EntityBuilder(self, name, is_anonymous=True)
-        else:
-            return EntityBuilder(self, name, is_anonymous=False)
+        return EntityBuilder(self, name)
 
     @property
     def modifier(self) -> NamedModifierNamespace:
