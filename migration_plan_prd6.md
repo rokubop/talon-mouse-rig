@@ -336,21 +336,21 @@ class EntityBuilder:
     def __init__(self, name: str):
         self._name = name
         self._entity_type: Optional[Literal["transform", "force"]] = None
-    
+
     @property
     def scale(self):
         if self._entity_type == "force":
             raise ValueError(f"Entity '{self._name}' is a force, cannot use .scale")
         self._entity_type = "transform"
         return ScaleBuilder(self)
-    
+
     @property
     def shift(self):
         if self._entity_type == "force":
             raise ValueError(f"Entity '{self._name}' is a force, cannot use .shift")
         self._entity_type = "transform"
         return ShiftBuilder(self)
-    
+
     def velocity(self, x, y):
         if self._entity_type == "transform":
             raise ValueError(f"Entity '{self._name}' is a transform, cannot set velocity")
@@ -491,7 +491,7 @@ rig("boost2").shift.speed.by(5)  # Ignored
 class RigState:
     def __init__(self):
         self._anon_counter = 0
-    
+
     def __call__(self, name: Optional[str] = None):
         if name is None:
             self._anon_counter += 1
@@ -620,21 +620,21 @@ def _compute_state(self):
     # 1. Start with base
     speed = self._speed
     direction = self._direction
-    
+
     # 2. Apply all transforms (in creation order)
     for transform in self._transforms_ordered:
         if transform.target == "speed":
             speed = (speed * transform.scale) + transform.shift
-    
+
     # 3. Apply all forces (vector addition)
     base_velocity = Vec2(direction.x * speed, direction.y * speed)
     for force in self._forces.values():
         base_velocity += force.velocity
-    
+
     # 4. Final state
     final_speed = base_velocity.magnitude()
     final_direction = base_velocity.normalized()
-    
+
     return final_speed, final_direction
 ```
 

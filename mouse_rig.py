@@ -31,19 +31,19 @@ Transforms (modify base properties):
     Scale (multiplicative):
         rig("sprint").scale.speed.to(2)         # Set multiplier to ×2
         rig("sprint").scale.speed.by(1)         # Add to multiplier (stacks)
-    
+
     Shift (additive):
         rig("boost").shift.speed.to(10)         # Set offset to +10
         rig("boost").shift.speed.by(5)          # Add to offset (stacks)
-    
+
     Stacking:
         .to(value)   # Set/replace (idempotent)
         .by(value)   # Add/stack (accumulates)
-    
+
     Max Constraints:
         rig("boost").shift.speed.by(10).max.speed(50)    # Cap final speed
         rig("boost").shift.speed.by(10).max.stack(3)     # Limit stack count
-    
+
     Stop:
         rig("sprint").stop()                    # Immediate stop
         rig("sprint").stop(500)                 # Fade out over 500ms
@@ -121,7 +121,7 @@ Complete Examples:
 Backward Compatibility (PRD 5):
     rig.modifier("boost").speed.mul(2)              # Still works
     rig.force("wind").speed(5).direction(0, 1)      # Still works
-    
+
     Prefer PRD 6 unified API for new code:
     rig("boost").scale.speed.to(2)                   # Clearer intent
     rig("wind").velocity(0, 5)                       # Simpler syntax
@@ -541,37 +541,37 @@ class PositionTransition(Transition):
 class TransformStack:
     """
     Tracks stacking behavior for transform operations.
-    
+
     - .to(value): Set/replace (idempotent)
     - .by(value): Add/stack (accumulates)
-    
+
     Supports both scale (multiplicative) and shift (additive) operations.
     """
     name: str  # Entity name
     property: str  # "speed", "accel", "direction", etc.
     operation_type: str  # "scale" or "shift"
-    
+
     # Stacking mode
     mode: Optional[Literal["to", "by"]] = None  # Determined by first call
-    
+
     # Values
     values: list[float] = None  # List of stacked values (for .by)
     single_value: Optional[float] = None  # Single value (for .to)
-    
+
     # Constraints
     max_value: Optional[float] = None  # Maximum computed value
     max_stack_count: Optional[int] = None  # Maximum number of stacks
-    
+
     def __post_init__(self):
         if self.values is None:
             self.values = []
-    
+
     def set_to(self, value: float) -> None:
         """Set value (replaces existing) - .to() operation"""
         self.mode = "to"
         self.single_value = value
         self.values = []  # Clear any stacked values
-    
+
     def add_by(self, value: float) -> None:
         """Add value (stacks) - .by() operation"""
         if self.mode == "to":
@@ -580,14 +580,14 @@ class TransformStack:
             self.single_value = None
         else:
             self.values.append(value)
-        
+
         self.mode = "by"
-        
+
         # Enforce max stack count
         if self.max_stack_count is not None and len(self.values) > self.max_stack_count:
             # Keep only the most recent values up to max
             self.values = self.values[-self.max_stack_count:]
-    
+
     def get_total(self) -> float:
         """Get total computed value"""
         if self.mode == "to":
@@ -596,7 +596,7 @@ class TransformStack:
             value = sum(self.values)
         else:
             value = 0.0
-        
+
         # Apply max constraint
         if self.max_value is not None:
             if self.operation_type == "scale":
@@ -605,25 +605,164 @@ class TransformStack:
                 # For shift, max constrains the final computed value, not the offset
                 # This will be applied at computation time
                 pass
-        
+
         return value
-    
+
     def apply_to_base(self, base_value: float) -> float:
         """Apply this transform to a base value"""
         total = self.get_total()
-        
+
         if self.operation_type == "scale":
             result = base_value * total
         elif self.operation_type == "shift":
             result = base_value + total
         else:
             result = base_value
-        
+
         # Apply max value constraint for final result
         if self.max_value is not None:
             result = min(result, self.max_value)
-        
+
         return result
+
+
+class TransformEffect:
+    """
+    Wrapper for TransformStack with lifecycle support.
+    
+    Applies a multiplier (0.0 to 1.0) to the transform based on lifecycle phase.
+    This allows transforms to fade in/out just like Effects.
+    """
+    def __init__(self, stack: TransformStack):
+        self.stack = stack
+        
+        # Lifecycle configuration
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+        
+        # Runtime state
+        self.phase: str = "not_started"
+        self.phase_start_time: Optional[float] = None
+        self.current_multiplier: float = 1.0  # How much of the transform is active
+        self.complete = False
+        
+        # For stopping
+        self.stop_requested = False
+        self.stop_duration_ms: Optional[float] = None
+        self.stop_easing: str = "linear"
+        self.stop_start_time: Optional[float] = None
+    
+    def start(self) -> None:
+        """Start the effect lifecycle"""
+        if self.in_duration_ms is not None:
+            self.phase = "in"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 0.0
+        elif self.hold_duration_ms is not None:
+            self.phase = "hold"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        elif self.out_duration_ms is not None:
+            self.phase = "out"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        else:
+            # No lifecycle - persist at full strength
+            self.phase = "hold"
+            self.current_multiplier = 1.0
+    
+    def update(self) -> float:
+        """Update lifecycle and return current multiplier"""
+        if self.complete:
+            return 0.0
+        
+        if self.stop_requested:
+            return self._update_stop()
+        
+        if self.phase == "not_started":
+            self.start()
+        
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
+        
+        if self.phase == "in":
+            if elapsed_ms >= self.in_duration_ms:
+                self.current_multiplier = 1.0
+                if self.hold_duration_ms is not None:
+                    self.phase = "hold"
+                    self.phase_start_time = current_time
+                elif self.out_duration_ms is not None:
+                    self.phase = "out"
+                    self.phase_start_time = current_time
+                else:
+                    self.phase = "hold"
+            else:
+                t = elapsed_ms / self.in_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                self.current_multiplier = easing_fn(t)
+        
+        elif self.phase == "hold":
+            if self.hold_duration_ms is not None:
+                if elapsed_ms >= self.hold_duration_ms:
+                    if self.out_duration_ms is not None:
+                        self.phase = "out"
+                        self.phase_start_time = current_time
+                    else:
+                        self.phase = "complete"
+                        self.complete = True
+                        return 0.0
+        
+        elif self.phase == "out":
+            if elapsed_ms >= self.out_duration_ms:
+                self.phase = "complete"
+                self.complete = True
+                return 0.0
+            else:
+                t = elapsed_ms / self.out_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                self.current_multiplier = 1.0 - easing_fn(t)
+        
+        return self.current_multiplier
+    
+    def _update_stop(self) -> float:
+        """Handle graceful stop with optional duration"""
+        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
+            self.complete = True
+            return 0.0
+        
+        if self.stop_start_time is None:
+            self.stop_start_time = time.perf_counter()
+        
+        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
+        if elapsed_ms >= self.stop_duration_ms:
+            self.complete = True
+            return 0.0
+        
+        t = elapsed_ms / self.stop_duration_ms
+        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
+        self.current_multiplier = 1.0 - easing_fn(t)
+        
+        return self.current_multiplier
+    
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop"""
+        self.stop_requested = True
+        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
+        self.stop_easing = easing
+    
+    def apply_to_base(self, base_value: float) -> float:
+        """Apply transform with current multiplier"""
+        if self.current_multiplier == 0.0:
+            return base_value
+        
+        # Get the full transform value
+        full_transform = self.stack.apply_to_base(base_value)
+        
+        # Interpolate between base and full transform based on multiplier
+        return lerp(base_value, full_transform, self.current_multiplier)
 
 
 # ============================================================================
@@ -2755,17 +2894,17 @@ class PositionByBuilder:
 class EntityBuilder:
     """
     Unified builder for named entities that infers type based on operations.
-    
+
     Type inference:
     - Uses .scale or .shift → Transform
     - Uses direct properties (.direction(), .speed(), .velocity()) → Force
     - Mixing transform and force operations → Error
-    
+
     Examples:
         # Transform (modifies base properties)
         rig("sprint").scale.speed.to(2)
         rig("boost").shift.speed.by(10)
-        
+
         # Force (independent entity)
         rig("gravity").direction(0, 1).accel(9.8)
         rig("wind").velocity(5, 0)
@@ -2774,14 +2913,14 @@ class EntityBuilder:
         self.rig_state = rig_state
         self.name = name
         self._entity_type: Optional[Literal["transform", "force"]] = None
-        
+
         # Lazy-initialized controllers
         self._scale_builder = None
         self._shift_builder = None
         self._speed_controller = None
         self._accel_controller = None
         self._direction_controller = None
-    
+
     def _ensure_transform(self, operation: str) -> None:
         """Ensure entity is locked to transform type"""
         if self._entity_type == "force":
@@ -2791,7 +2930,7 @@ class EntityBuilder:
                 f"Use a transform entity to modify base properties."
             )
         self._entity_type = "transform"
-    
+
     def _ensure_force(self, operation: str) -> None:
         """Ensure entity is locked to force type"""
         if self._entity_type == "transform":
@@ -2801,7 +2940,7 @@ class EntityBuilder:
                 f"Use a separate force entity for independent direction/velocity."
             )
         self._entity_type = "force"
-    
+
     @property
     def scale(self) -> 'ScaleBuilder':
         """Access scale operations (multiplicative transforms)"""
@@ -2809,7 +2948,7 @@ class EntityBuilder:
         if self._scale_builder is None:
             self._scale_builder = ScaleBuilder(self.rig_state, self.name)
         return self._scale_builder
-    
+
     @property
     def shift(self) -> 'ShiftBuilder':
         """Access shift operations (additive transforms)"""
@@ -2817,7 +2956,7 @@ class EntityBuilder:
         if self._shift_builder is None:
             self._shift_builder = ShiftBuilder(self.rig_state, self.name)
         return self._shift_builder
-    
+
     def velocity(self, x: float, y: float) -> 'EntityBuilder':
         """Set force velocity vector directly"""
         self._ensure_force(".velocity()")
@@ -2831,7 +2970,7 @@ class EntityBuilder:
             force_builder.direction(direction.x, direction.y)
             force_builder.speed(speed)
         return self
-    
+
     def direction(self, x: float, y: float) -> 'EntityBuilder':
         """Set force direction"""
         self._ensure_force(".direction()")
@@ -2839,7 +2978,7 @@ class EntityBuilder:
             self._direction_controller = NamedForceDirectionBuilder(self.rig_state, self.name)
         self._direction_controller(x, y)
         return self
-    
+
     def speed(self, value: float) -> 'EntityBuilder':
         """Set force speed"""
         self._ensure_force(".speed()")
@@ -2847,7 +2986,7 @@ class EntityBuilder:
             self._speed_controller = NamedForceSpeedController(self.rig_state, self.name)
         self._speed_controller(value)
         return self
-    
+
     def accel(self, value: float) -> 'EntityBuilder':
         """Set force acceleration"""
         self._ensure_force(".accel()")
@@ -2855,7 +2994,7 @@ class EntityBuilder:
             self._accel_controller = NamedForceAccelController(self.rig_state, self.name)
         self._accel_controller(value)
         return self
-    
+
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop this entity (works for both transforms and forces)"""
         if self._entity_type == "transform" or self._entity_type is None:
@@ -2866,7 +3005,7 @@ class EntityBuilder:
             if self.name in self.rig_state._named_direction_modifiers:
                 dir_effect = self.rig_state._named_direction_modifiers[self.name]
                 dir_effect.request_stop(duration_ms, easing)
-        
+
         if self._entity_type == "force" or self._entity_type is None:
             # Stop as force
             if self.name in self.rig_state._named_forces:
@@ -2881,14 +3020,14 @@ class ScaleBuilder:
         self.name = name
         self._speed_builder = None
         self._accel_builder = None
-    
+
     @property
     def speed(self) -> 'ScaleSpeedBuilder':
         """Access scale.speed operations"""
         if self._speed_builder is None:
             self._speed_builder = ScaleSpeedBuilder(self.rig_state, self.name)
         return self._speed_builder
-    
+
     @property
     def accel(self) -> 'ScaleAccelBuilder':
         """Access scale.accel operations"""
@@ -2906,28 +3045,28 @@ class ShiftBuilder:
         self._accel_builder = None
         self._direction_builder = None
         self._pos_builder = None
-    
+
     @property
     def speed(self) -> 'ShiftSpeedBuilder':
         """Access shift.speed operations"""
         if self._speed_builder is None:
             self._speed_builder = ShiftSpeedBuilder(self.rig_state, self.name)
         return self._speed_builder
-    
+
     @property
     def accel(self) -> 'ShiftAccelBuilder':
         """Access shift.accel operations"""
         if self._accel_builder is None:
             self._accel_builder = ShiftAccelBuilder(self.rig_state, self.name)
         return self._accel_builder
-    
+
     @property
     def direction(self) -> 'ShiftDirectionBuilder':
         """Access shift.direction operations"""
         if self._direction_builder is None:
             self._shift_direction_builder = ShiftDirectionBuilder(self.rig_state, self.name)
         return self._shift_direction_builder
-    
+
     @property
     def pos(self) -> 'ShiftPosBuilder':
         """Access shift.pos operations"""
@@ -2941,7 +3080,7 @@ class ScaleSpeedBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
         key = f"{self.name}:speed:scale"
@@ -2957,13 +3096,21 @@ class ScaleSpeedBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
     
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:speed:scale"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def to(self, multiplier: float) -> 'ScaleSpeedBuilder':
         """Set scale multiplier (replaces existing)"""
         stack = self._get_or_create_stack()
         stack.set_to(multiplier)
         self.rig_state.start()
         return self
-    
+
     def by(self, multiplier: float) -> 'ScaleSpeedBuilder':
         """Add to scale multiplier (stacks)"""
         stack = self._get_or_create_stack()
@@ -2971,6 +3118,26 @@ class ScaleSpeedBuilder:
         self.rig_state.start()
         return self
     
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ScaleSpeedBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+    
+    def hold(self, duration_ms: float) -> 'ScaleSpeedBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+    
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ScaleSpeedBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
     @property
     def max(self) -> 'MaxBuilder':
         """Access max constraints"""
@@ -2982,7 +3149,7 @@ class ScaleAccelBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
         key = f"{self.name}:accel:scale"
@@ -2997,13 +3164,21 @@ class ScaleAccelBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
     
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:accel:scale"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def to(self, multiplier: float) -> 'ScaleAccelBuilder':
         """Set scale multiplier (replaces existing)"""
         stack = self._get_or_create_stack()
         stack.set_to(multiplier)
         self.rig_state.start()
         return self
-    
+
     def by(self, multiplier: float) -> 'ScaleAccelBuilder':
         """Add to scale multiplier (stacks)"""
         stack = self._get_or_create_stack()
@@ -3011,6 +3186,26 @@ class ScaleAccelBuilder:
         self.rig_state.start()
         return self
     
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ScaleAccelBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+    
+    def hold(self, duration_ms: float) -> 'ScaleAccelBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+    
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ScaleAccelBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
     @property
     def max(self) -> 'MaxBuilder':
         """Access max constraints"""
@@ -3022,7 +3217,7 @@ class ShiftSpeedBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
         key = f"{self.name}:speed:shift"
@@ -3037,13 +3232,21 @@ class ShiftSpeedBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
     
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:speed:shift"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def to(self, offset: float) -> 'ShiftSpeedBuilder':
         """Set shift offset (replaces existing)"""
         stack = self._get_or_create_stack()
         stack.set_to(offset)
         self.rig_state.start()
         return self
-    
+
     def by(self, offset: float) -> 'ShiftSpeedBuilder':
         """Add to shift offset (stacks)"""
         stack = self._get_or_create_stack()
@@ -3051,6 +3254,26 @@ class ShiftSpeedBuilder:
         self.rig_state.start()
         return self
     
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftSpeedBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+    
+    def hold(self, duration_ms: float) -> 'ShiftSpeedBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+    
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftSpeedBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
     @property
     def max(self) -> 'MaxBuilder':
         """Access max constraints"""
@@ -3062,7 +3285,7 @@ class ShiftAccelBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def _get_or_create_stack(self) -> TransformStack:
         """Get or create the transform stack for this entity"""
         key = f"{self.name}:accel:shift"
@@ -3077,13 +3300,21 @@ class ShiftAccelBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
     
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:accel:shift"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def to(self, offset: float) -> 'ShiftAccelBuilder':
         """Set shift offset (replaces existing)"""
         stack = self._get_or_create_stack()
         stack.set_to(offset)
         self.rig_state.start()
         return self
-    
+
     def by(self, offset: float) -> 'ShiftAccelBuilder':
         """Add to shift offset (stacks)"""
         stack = self._get_or_create_stack()
@@ -3091,6 +3322,26 @@ class ShiftAccelBuilder:
         self.rig_state.start()
         return self
     
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftAccelBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+    
+    def hold(self, duration_ms: float) -> 'ShiftAccelBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+    
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftAccelBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
     @property
     def max(self) -> 'MaxBuilder':
         """Access max constraints"""
@@ -3102,12 +3353,12 @@ class ShiftDirectionBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def to(self, x: float, y: float) -> 'ShiftDirectionBuilder':
         """Set direction offset (replaces existing)"""
         # TODO: Implement in future step
         raise NotImplementedError("shift.direction not yet implemented")
-    
+
     def by(self, degrees: float) -> 'ShiftDirectionBuilder':
         """Rotate direction by degrees (stacks)"""
         controller = NamedDirectionController(self.rig_state, self.name)
@@ -3120,12 +3371,12 @@ class ShiftPosBuilder:
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
-    
+
     def to(self, x: float, y: float) -> 'ShiftPosBuilder':
         """Set position offset (replaces existing)"""
         # TODO: Implement in future step
         raise NotImplementedError("shift.pos not yet implemented")
-    
+
     def by(self, x: float, y: float) -> 'ShiftPosBuilder':
         """Add position offset (stacks)"""
         # TODO: Implement in future step
@@ -3139,21 +3390,21 @@ class MaxBuilder:
         self.name = name
         self.property = property
         self.operation_type = operation_type
-    
+
     def speed(self, value: float) -> 'MaxBuilder':
         """Set maximum speed constraint"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
         if key in self.rig_state._transform_stacks:
             self.rig_state._transform_stacks[key].max_value = value
         return self
-    
+
     def accel(self, value: float) -> 'MaxBuilder':
         """Set maximum accel constraint"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
         if key in self.rig_state._transform_stacks:
             self.rig_state._transform_stacks[key].max_value = value
         return self
-    
+
     def stack(self, count: int) -> 'MaxBuilder':
         """Set maximum stack count"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
@@ -3608,20 +3859,20 @@ class StateAccessor:
     @property
     def velocity(self) -> Tuple[float, float]:
         """Get total velocity vector (base + transforms + forces)
-        
+
         Pipeline: base → transforms (scale then shift) → forces (vector addition)
         """
         # Get transformed speed
         effective_speed = self._rig._get_effective_speed()
         accel_velocity = self._rig._get_effective_accel_velocity_contribution()
         total_speed = effective_speed + accel_velocity
-        
+
         # Get transformed direction
         effective_direction = self._rig._get_effective_direction()
-        
+
         # Base velocity (after transforms)
         velocity_vec = effective_direction * total_speed
-        
+
         # Add force contributions (independent velocity vectors)
         for force in self._rig._named_forces.values():
             # Forces contribute independent velocity vectors
@@ -3629,7 +3880,7 @@ class StateAccessor:
             force_speed = force._speed + force._velocity
             force_vec = force_dir * force_speed
             velocity_vec = velocity_vec + force_vec
-        
+
         return (velocity_vec.x, velocity_vec.y)
 
 
@@ -3687,8 +3938,9 @@ class RigState:
         # PRD 6: Transform stacks (scale/shift with .to/.by tracking)
         self._transform_stacks: dict[str, TransformStack] = {}  # key: "entity_name:property:op_type"
         self._transform_order: list[str] = []  # Track creation order for composition
-
-        # Acceleration effects tracking (separate from cruise speed)
+        
+        # PRD 6: Transform effects (lifecycle-aware wrappers for transform stacks)
+        self._transform_effects: dict[str, TransformEffect] = {}  # key: same as _transform_stacks        # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
         self._accel_velocities: dict[Effect, float] = {}
 
@@ -3727,7 +3979,7 @@ class RigState:
             # Transform (modifies base)
             rig("sprint").scale.speed.to(2)
             rig("boost").shift.speed.by(10)
-            
+
             # Force (independent)
             rig("gravity").direction(0, 1).accel(9.8)
             rig("wind").velocity(5, 0)
@@ -3856,16 +4108,16 @@ class RigState:
     def _get_effective_speed(self) -> float:
         """Get speed with all effects applied"""
         base_speed = self._speed
-        
+
         # Apply old effect system (PRD 5 - for backward compatibility)
         for effect in self._effects:
             if effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
-        
+
         # Apply new transform stacks (PRD 6)
         # Pipeline: base → all scale transforms → all shift transforms (in entity creation order)
         # This ensures scale always applies before shift, even within same entity
-        
+
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
@@ -3874,21 +4126,31 @@ class RigState:
             if stack.property == "speed" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
-        
+
         # Apply scale transforms first (in entity creation order)
         for entity_name in entity_order:
             scale_key = f"{entity_name}:speed:scale"
             if scale_key in self._transform_stacks:
                 stack = self._transform_stacks[scale_key]
-                base_speed = stack.apply_to_base(base_speed)
-        
+                # Check if there's a lifecycle effect wrapper
+                if scale_key in self._transform_effects:
+                    effect = self._transform_effects[scale_key]
+                    base_speed = effect.apply_to_base(base_speed)
+                else:
+                    base_speed = stack.apply_to_base(base_speed)
+
         # Then apply shift transforms (in entity creation order)
         for entity_name in entity_order:
             shift_key = f"{entity_name}:speed:shift"
             if shift_key in self._transform_stacks:
                 stack = self._transform_stacks[shift_key]
-                base_speed = stack.apply_to_base(base_speed)
-        
+                # Check if there's a lifecycle effect wrapper
+                if shift_key in self._transform_effects:
+                    effect = self._transform_effects[shift_key]
+                    base_speed = effect.apply_to_base(base_speed)
+                else:
+                    base_speed = stack.apply_to_base(base_speed)
+
         return max(0.0, base_speed)
 
     def _get_effective_accel(self) -> float:
@@ -3899,15 +4161,15 @@ class RigState:
         contributions separately.
         """
         base_accel = self._accel
-        
+
         # Apply old effect system (PRD 5 - for backward compatibility)
         for effect in self._effects:
             if effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
-        
+
         # Apply new transform stacks (PRD 6)
         # Pipeline: base → all scale transforms → all shift transforms (in entity creation order)
-        
+
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
@@ -3916,21 +4178,31 @@ class RigState:
             if stack.property == "accel" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
-        
+
         # Apply scale transforms first (in entity creation order)
         for entity_name in entity_order:
             scale_key = f"{entity_name}:accel:scale"
             if scale_key in self._transform_stacks:
                 stack = self._transform_stacks[scale_key]
-                base_accel = stack.apply_to_base(base_accel)
-        
+                # Check if there's a lifecycle effect wrapper
+                if scale_key in self._transform_effects:
+                    effect = self._transform_effects[scale_key]
+                    base_accel = effect.apply_to_base(base_accel)
+                else:
+                    base_accel = stack.apply_to_base(base_accel)
+
         # Then apply shift transforms (in entity creation order)
         for entity_name in entity_order:
             shift_key = f"{entity_name}:accel:shift"
             if shift_key in self._transform_stacks:
                 stack = self._transform_stacks[shift_key]
-                base_accel = stack.apply_to_base(base_accel)
-        
+                # Check if there's a lifecycle effect wrapper
+                if shift_key in self._transform_effects:
+                    effect = self._transform_effects[shift_key]
+                    base_accel = effect.apply_to_base(base_accel)
+                else:
+                    base_accel = stack.apply_to_base(base_accel)
+
         return base_accel
 
     def _get_effective_direction(self) -> Vec2:
@@ -4260,6 +4532,19 @@ class RigState:
                 # Remove from named modifiers if it has a name
                 if dir_effect.name and dir_effect.name in self._named_direction_modifiers:
                     del self._named_direction_modifiers[dir_effect.name]
+
+        # Update transform effects (lifecycle wrappers for transform stacks)
+        for key, transform_effect in list(self._transform_effects.items()):
+            # Start effect if not started
+            if transform_effect.phase == "not_started":
+                transform_effect.start()
+            
+            # Update lifecycle state
+            transform_effect.update(dt)
+            
+            # Remove completed effects
+            if transform_effect.complete:
+                del self._transform_effects[key]
 
         # Update effects (temporary property modifications)
         for effect in self._effects[:]:
