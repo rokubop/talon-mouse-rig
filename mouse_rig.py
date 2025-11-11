@@ -3833,11 +3833,31 @@ class RigState:
             if effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
         
-        # Apply new transform stacks (PRD 6) in creation order
-        # Pipeline: base → scale transforms → shift transforms
+        # Apply new transform stacks (PRD 6)
+        # Pipeline: base → all scale transforms → all shift transforms (in entity creation order)
+        # This ensures scale always applies before shift, even within same entity
+        
+        # Group by entity name to track first occurrence order
+        entity_order = []
+        entities_seen = set()
         for key in self._transform_order:
             stack = self._transform_stacks[key]
-            if stack.property == "speed":
+            if stack.property == "speed" and stack.name not in entities_seen:
+                entity_order.append(stack.name)
+                entities_seen.add(stack.name)
+        
+        # Apply scale transforms first (in entity creation order)
+        for entity_name in entity_order:
+            scale_key = f"{entity_name}:speed:scale"
+            if scale_key in self._transform_stacks:
+                stack = self._transform_stacks[scale_key]
+                base_speed = stack.apply_to_base(base_speed)
+        
+        # Then apply shift transforms (in entity creation order)
+        for entity_name in entity_order:
+            shift_key = f"{entity_name}:speed:shift"
+            if shift_key in self._transform_stacks:
+                stack = self._transform_stacks[shift_key]
                 base_speed = stack.apply_to_base(base_speed)
         
         return max(0.0, base_speed)
@@ -3856,10 +3876,30 @@ class RigState:
             if effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
         
-        # Apply new transform stacks (PRD 6) in creation order
+        # Apply new transform stacks (PRD 6)
+        # Pipeline: base → all scale transforms → all shift transforms (in entity creation order)
+        
+        # Group by entity name to track first occurrence order
+        entity_order = []
+        entities_seen = set()
         for key in self._transform_order:
             stack = self._transform_stacks[key]
-            if stack.property == "accel":
+            if stack.property == "accel" and stack.name not in entities_seen:
+                entity_order.append(stack.name)
+                entities_seen.add(stack.name)
+        
+        # Apply scale transforms first (in entity creation order)
+        for entity_name in entity_order:
+            scale_key = f"{entity_name}:accel:scale"
+            if scale_key in self._transform_stacks:
+                stack = self._transform_stacks[scale_key]
+                base_accel = stack.apply_to_base(base_accel)
+        
+        # Then apply shift transforms (in entity creation order)
+        for entity_name in entity_order:
+            shift_key = f"{entity_name}:accel:shift"
+            if shift_key in self._transform_stacks:
+                stack = self._transform_stacks[shift_key]
                 base_accel = stack.apply_to_base(base_accel)
         
         return base_accel
