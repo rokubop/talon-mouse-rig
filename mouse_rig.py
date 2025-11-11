@@ -3595,12 +3595,29 @@ class StateAccessor:
 
     @property
     def velocity(self) -> Tuple[float, float]:
-        """Get total velocity vector (speed + accel contributions)"""
+        """Get total velocity vector (base + transforms + forces)
+        
+        Pipeline: base → transforms (scale then shift) → forces (vector addition)
+        """
+        # Get transformed speed
         effective_speed = self._rig._get_effective_speed()
-        accel_velocity = self._rig._get_accel_velocity_contribution()
+        accel_velocity = self._rig._get_effective_accel_velocity_contribution()
         total_speed = effective_speed + accel_velocity
+        
+        # Get transformed direction
         effective_direction = self._rig._get_effective_direction()
+        
+        # Base velocity (after transforms)
         velocity_vec = effective_direction * total_speed
+        
+        # Add force contributions (independent velocity vectors)
+        for force in self._rig._named_forces.values():
+            # Forces contribute independent velocity vectors
+            force_dir = force._direction
+            force_speed = force._speed + force._velocity
+            force_vec = force_dir * force_speed
+            velocity_vec = velocity_vec + force_vec
+        
         return (velocity_vec.x, velocity_vec.y)
 
 
