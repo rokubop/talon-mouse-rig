@@ -522,6 +522,99 @@ class PositionTransition(Transition):
 
 
 # ============================================================================
+# TRANSFORM STACK (PRD 6 - tracks .to() vs .by() stacking for transforms)
+# ============================================================================
+
+@dataclass
+class TransformStack:
+    """
+    Tracks stacking behavior for transform operations.
+    
+    - .to(value): Set/replace (idempotent)
+    - .by(value): Add/stack (accumulates)
+    
+    Supports both scale (multiplicative) and shift (additive) operations.
+    """
+    name: str  # Entity name
+    property: str  # "speed", "accel", "direction", etc.
+    operation_type: str  # "scale" or "shift"
+    
+    # Stacking mode
+    mode: Optional[Literal["to", "by"]] = None  # Determined by first call
+    
+    # Values
+    values: list[float] = None  # List of stacked values (for .by)
+    single_value: Optional[float] = None  # Single value (for .to)
+    
+    # Constraints
+    max_value: Optional[float] = None  # Maximum computed value
+    max_stack_count: Optional[int] = None  # Maximum number of stacks
+    
+    def __post_init__(self):
+        if self.values is None:
+            self.values = []
+    
+    def set_to(self, value: float) -> None:
+        """Set value (replaces existing) - .to() operation"""
+        self.mode = "to"
+        self.single_value = value
+        self.values = []  # Clear any stacked values
+    
+    def add_by(self, value: float) -> None:
+        """Add value (stacks) - .by() operation"""
+        if self.mode == "to":
+            # Switching from .to() to .by() - start stacking from .to() value
+            self.values = [self.single_value, value]
+            self.single_value = None
+        else:
+            self.values.append(value)
+        
+        self.mode = "by"
+        
+        # Enforce max stack count
+        if self.max_stack_count is not None and len(self.values) > self.max_stack_count:
+            # Keep only the most recent values up to max
+            self.values = self.values[-self.max_stack_count:]
+    
+    def get_total(self) -> float:
+        """Get total computed value"""
+        if self.mode == "to":
+            value = self.single_value if self.single_value is not None else 0.0
+        elif self.mode == "by":
+            value = sum(self.values)
+        else:
+            value = 0.0
+        
+        # Apply max constraint
+        if self.max_value is not None:
+            if self.operation_type == "scale":
+                value = min(value, self.max_value)
+            elif self.operation_type == "shift":
+                # For shift, max constrains the final computed value, not the offset
+                # This will be applied at computation time
+                pass
+        
+        return value
+    
+    def apply_to_base(self, base_value: float) -> float:
+        """Apply this transform to a base value"""
+        total = self.get_total()
+        
+        if self.operation_type == "scale":
+            result = base_value * total
+        elif self.operation_type == "shift":
+            result = base_value + total
+        else:
+            result = base_value
+        
+        # Apply max value constraint for final result
+        if self.max_value is not None:
+            result = min(result, self.max_value)
+        
+        return result
+
+
+# ============================================================================
 # EFFECT SYSTEM (temporary property modifications with lifecycle)
 # ============================================================================
 
@@ -2843,18 +2936,35 @@ class ScaleSpeedBuilder:
         self.rig_state = rig_state
         self.name = name
         self.is_anonymous = is_anonymous
-        # TODO: Track .to() vs .by() mode and stacking
+    
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:speed:scale"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="speed",
+                operation_type="scale"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            # Track creation order
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
     
     def to(self, multiplier: float) -> 'ScaleSpeedBuilder':
         """Set scale multiplier (replaces existing)"""
-        # For now, delegate to existing .mul() implementation
-        controller = NamedSpeedController(self.rig_state, self.name)
-        controller.mul(multiplier)
+        stack = self._get_or_create_stack()
+        stack.set_to(multiplier)
+        self.rig_state.start()
         return self
     
     def by(self, multiplier: float) -> 'ScaleSpeedBuilder':
         """Add to scale multiplier (stacks)"""
-        # For now, delegate to existing .mul() implementation
+        stack = self._get_or_create_stack()
+        stack.add_by(multiplier)
+        self.rig_state.start()
+        return self
         # TODO: Implement proper stacking in Step 3
         controller = NamedSpeedController(self.rig_state, self.name)
         controller.mul(multiplier)
@@ -2868,16 +2978,32 @@ class ScaleAccelBuilder:
         self.name = name
         self.is_anonymous = is_anonymous
     
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:accel:scale"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="accel",
+                operation_type="scale"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
+    
     def to(self, multiplier: float) -> 'ScaleAccelBuilder':
         """Set scale multiplier (replaces existing)"""
-        controller = NamedAccelController(self.rig_state, self.name)
-        controller.mul(multiplier)
+        stack = self._get_or_create_stack()
+        stack.set_to(multiplier)
+        self.rig_state.start()
         return self
     
     def by(self, multiplier: float) -> 'ScaleAccelBuilder':
         """Add to scale multiplier (stacks)"""
-        controller = NamedAccelController(self.rig_state, self.name)
-        controller.mul(multiplier)
+        stack = self._get_or_create_stack()
+        stack.add_by(multiplier)
+        self.rig_state.start()
         return self
 
 
@@ -2888,18 +3014,32 @@ class ShiftSpeedBuilder:
         self.name = name
         self.is_anonymous = is_anonymous
     
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:speed:shift"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="speed",
+                operation_type="shift"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
+    
     def to(self, offset: float) -> 'ShiftSpeedBuilder':
         """Set shift offset (replaces existing)"""
-        controller = NamedSpeedController(self.rig_state, self.name)
-        # Use .by() for additive behavior
-        # TODO: Distinguish .to() vs .by() in Step 3
-        controller.by(offset)
+        stack = self._get_or_create_stack()
+        stack.set_to(offset)
+        self.rig_state.start()
         return self
     
     def by(self, offset: float) -> 'ShiftSpeedBuilder':
         """Add to shift offset (stacks)"""
-        controller = NamedSpeedController(self.rig_state, self.name)
-        controller.by(offset)
+        stack = self._get_or_create_stack()
+        stack.add_by(offset)
+        self.rig_state.start()
         return self
 
 
@@ -2910,16 +3050,32 @@ class ShiftAccelBuilder:
         self.name = name
         self.is_anonymous = is_anonymous
     
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:accel:shift"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="accel",
+                operation_type="shift"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
+    
     def to(self, offset: float) -> 'ShiftAccelBuilder':
         """Set shift offset (replaces existing)"""
-        controller = NamedAccelController(self.rig_state, self.name)
-        controller.by(offset)
+        stack = self._get_or_create_stack()
+        stack.set_to(offset)
+        self.rig_state.start()
         return self
     
     def by(self, offset: float) -> 'ShiftAccelBuilder':
         """Add to shift offset (stacks)"""
-        controller = NamedAccelController(self.rig_state, self.name)
-        controller.by(offset)
+        stack = self._get_or_create_stack()
+        stack.add_by(offset)
+        self.rig_state.start()
         return self
 
 
@@ -3464,6 +3620,10 @@ class RigState:
         self._named_modifiers: dict[str, Effect] = {}
         self._named_direction_modifiers: dict[str, DirectionEffect] = {}
         self._named_forces: dict[str, Force] = {}  # Force entities
+        
+        # PRD 6: Transform stacks (scale/shift with .to/.by tracking)
+        self._transform_stacks: dict[str, TransformStack] = {}  # key: "entity_name:property:op_type"
+        self._transform_order: list[str] = []  # Track creation order for composition
 
         # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
@@ -3645,9 +3805,19 @@ class RigState:
     def _get_effective_speed(self) -> float:
         """Get speed with all effects applied"""
         base_speed = self._speed
+        
+        # Apply old effect system (PRD 5 - for backward compatibility)
         for effect in self._effects:
             if effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
+        
+        # Apply new transform stacks (PRD 6) in creation order
+        # Pipeline: base → scale transforms → shift transforms
+        for key in self._transform_order:
+            stack = self._transform_stacks[key]
+            if stack.property == "speed":
+                base_speed = stack.apply_to_base(base_speed)
+        
         return max(0.0, base_speed)
 
     def _get_effective_accel(self) -> float:
@@ -3658,9 +3828,18 @@ class RigState:
         contributions separately.
         """
         base_accel = self._accel
+        
+        # Apply old effect system (PRD 5 - for backward compatibility)
         for effect in self._effects:
             if effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
+        
+        # Apply new transform stacks (PRD 6) in creation order
+        for key in self._transform_order:
+            stack = self._transform_stacks[key]
+            if stack.property == "accel":
+                base_accel = stack.apply_to_base(base_accel)
+        
         return base_accel
 
     def _get_effective_direction(self) -> Vec2:
