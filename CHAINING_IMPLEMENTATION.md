@@ -71,7 +71,7 @@ Each builder's `__getattr__` method:
 2. **Raises helpful error if timing found**:
    ```
    Cannot chain .{property} after using timing methods (.over, .hold, .revert).
-   
+
    Use separate statements:
      rig.speed(...).over(...)
      rig.accel(...)
@@ -119,7 +119,7 @@ Created `test_chaining.py` with test cases for:
    rig.direction(1, 0)
    rig.speed(10)
    rig.accel(2)
-   
+
    # After
    rig.direction(1, 0).speed(10).accel(2)
    ```

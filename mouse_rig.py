@@ -625,9 +625,9 @@ class Effect:
                     self.phase = "out"
                     self.phase_start_time = current_time
                 else:
-                    self.phase = "complete"
-                    self.complete = True
-                    return current_base_value
+                    # No hold or revert specified - persist at full strength
+                    self.phase = "hold"
+                    self.hold_duration_ms = None  # Persist indefinitely
             else:
                 # Update multiplier with easing
                 t = elapsed_ms / self.in_duration_ms
@@ -809,9 +809,9 @@ class DirectionEffect:
                     self.phase = "out"
                     self.phase_start_time = current_time
                 else:
-                    self.phase = "complete"
-                    self.complete = True
-                    return current_base_direction
+                    # No hold or revert specified - persist at full strength
+                    self.phase = "hold"
+                    self.hold_duration_ms = None  # Persist indefinitely
             else:
                 # Update multiplier with easing
                 t = elapsed_ms / self.in_duration_ms
@@ -1657,7 +1657,7 @@ class PropertyEffectBuilder:
                 self._in_duration_ms is not None or
                 self._in_easing != "linear"
             )
-            
+
             if has_timing:
                 raise AttributeError(
                     f"Cannot chain .{name} after using timing methods (.over, .in_out, .hold, .revert).\n\n"
@@ -1665,10 +1665,10 @@ class PropertyEffectBuilder:
                     f"  rig.{self.property_name}(...).over(...)\n"
                     f"  rig.{name}(...)"
                 )
-            
+
             # Execute current property change immediately
             self._execute()
-            
+
             # Return the appropriate property controller for chaining
             if name == 'speed':
                 return SpeedController(self._rig)
@@ -1678,7 +1678,7 @@ class PropertyEffectBuilder:
                 return PositionController(self._rig)
             elif name == 'direction':
                 return DirectionController(self._rig)
-                
+
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after {self.property_name} effect.\n\n"
@@ -1885,7 +1885,7 @@ class DirectionBuilder:
                 self._use_rate or
                 self._wait_duration_ms is not None
             )
-            
+
             if has_timing:
                 raise AttributeError(
                     f"Cannot chain .{name} after using timing methods (.over, .rate, .wait).\n\n"
@@ -1893,10 +1893,10 @@ class DirectionBuilder:
                     f"  rig.direction(...).over(...)\n"
                     f"  rig.{name}(...)"
                 )
-            
+
             # Execute current direction change immediately
             self._execute()
-            
+
             # Return the appropriate property controller for chaining
             if name == 'speed':
                 return SpeedController(self.rig_state)
@@ -1906,7 +1906,7 @@ class DirectionBuilder:
                 return PositionController(self.rig_state)
             elif name == 'direction':
                 return DirectionController(self.rig_state)
-                
+
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after 'direction'.\n\n"
@@ -2088,7 +2088,7 @@ class DirectionByBuilder:
                 self._hold_duration_ms is not None or
                 self._out_duration_ms is not None
             )
-            
+
             if has_timing:
                 raise AttributeError(
                     f"Cannot chain .{name} after using timing methods (.over, .rate, .wait, .hold, .revert).\n\n"
@@ -2096,10 +2096,10 @@ class DirectionByBuilder:
                     f"  rig.direction.by(...).over(...)\n"
                     f"  rig.{name}(...)"
                 )
-            
+
             # Execute current direction change immediately
             self._execute()
-            
+
             # Return the appropriate property controller for chaining
             if name == 'speed':
                 return SpeedController(self.rig_state)
@@ -2109,7 +2109,7 @@ class DirectionByBuilder:
                 return PositionController(self.rig_state)
             elif name == 'direction':
                 return DirectionController(self.rig_state)
-                
+
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after 'direction.by()'.\n\n"
@@ -2362,7 +2362,7 @@ class PositionToBuilder:
                 self._hold_duration_ms is not None or
                 self._revert_duration_ms is not None
             )
-            
+
             if has_timing:
                 raise AttributeError(
                     f"Cannot chain .{name} after using timing methods (.over, .wait, .hold, .revert).\n\n"
@@ -2370,13 +2370,13 @@ class PositionToBuilder:
                     f"  rig.pos.to(...).over(...)\n"
                     f"  rig.{name}(...)"
                 )
-            
+
             # Execute current position change immediately
             self._should_execute_instant = True
-            
+
             # Trigger execution via __del__
             self.__del__()
-            
+
             # Return the appropriate property controller for chaining
             if name == 'speed':
                 return SpeedController(self.rig_state)
@@ -2386,7 +2386,7 @@ class PositionToBuilder:
                 return PositionController(self.rig_state)
             elif name == 'direction':
                 return DirectionController(self.rig_state)
-                
+
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after pos.to().\n\n"
@@ -2604,7 +2604,7 @@ class PositionByBuilder:
                 self._hold_duration_ms is not None or
                 self._revert_duration_ms is not None
             )
-            
+
             if has_timing:
                 raise AttributeError(
                     f"Cannot chain .{name} after using timing methods (.over, .wait, .hold, .revert).\n\n"
@@ -2612,13 +2612,13 @@ class PositionByBuilder:
                     f"  rig.pos.by(...).over(...)\n"
                     f"  rig.{name}(...)"
                 )
-            
+
             # Execute current position change immediately
             self._should_execute_instant = True
-            
+
             # Trigger execution via __del__
             self.__del__()
-            
+
             # Return the appropriate property controller for chaining
             if name == 'speed':
                 return SpeedController(self.rig_state)
@@ -2628,7 +2628,7 @@ class PositionByBuilder:
                 return PositionController(self.rig_state)
             elif name == 'direction':
                 return DirectionController(self.rig_state)
-                
+
         elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
             raise AttributeError(
                 f"Cannot chain '{name}' after pos.by().\n\n"
@@ -2794,6 +2794,8 @@ class NamedDirectionByBuilder:
         self._hold_duration_ms: Optional[float] = None
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
+        self._use_rate: bool = False
+        self._rate_degrees_per_second: Optional[float] = None
 
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
@@ -2804,9 +2806,19 @@ class NamedDirectionByBuilder:
 
     def _execute(self):
         """Execute the configured operation"""
+        # Calculate duration from rate if needed
+        in_duration_ms = self._in_duration_ms
+        if self._use_rate and self._rate_degrees_per_second is not None:
+            angle_deg = abs(self.degrees)
+            if angle_deg < 0.1:
+                in_duration_ms = 1  # Minimal duration for near-zero turns
+            else:
+                duration_sec = angle_deg / self._rate_degrees_per_second
+                in_duration_ms = duration_sec * 1000
+
         # Create and register named direction effect
         dir_effect = DirectionEffect(self.degrees, self.name)
-        dir_effect.in_duration_ms = self._in_duration_ms  # Can be None for instant application
+        dir_effect.in_duration_ms = in_duration_ms  # Can be None for instant application
         dir_effect.in_easing = self._easing
         dir_effect.hold_duration_ms = self._hold_duration_ms
 
@@ -2832,6 +2844,12 @@ class NamedDirectionByBuilder:
         """Apply change over duration"""
         self._in_duration_ms = duration_ms
         self._easing = easing
+        return self
+
+    def rate(self, degrees_per_second: float) -> 'NamedDirectionByBuilder':
+        """Rotate by degrees at specified rate"""
+        self._use_rate = True
+        self._rate_degrees_per_second = degrees_per_second
         return self
 
     def hold(self, duration_ms: float) -> 'NamedDirectionByBuilder':

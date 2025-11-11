@@ -24,50 +24,50 @@ class Actions:
         """Move right"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
         # rig
 
     def mouse_rig_go_left():
         """Move left"""
         rig = actions.user.mouse_rig()
         rig.direction(-1, 0)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_up():
         """Move up"""
         rig = actions.user.mouse_rig()
         rig.direction(0, -1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_down():
         """Move down"""
         rig = actions.user.mouse_rig()
         rig.direction(0, 1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_up_right():
         """Move diagonally up-right"""
         rig = actions.user.mouse_rig()
         rig.direction(1, -1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_up_left():
         """Move diagonally up-left"""
         rig = actions.user.mouse_rig()
         rig.direction(-1, -1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_down_right():
         """Move diagonally down-right"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     def mouse_rig_go_down_left():
         """Move diagonally down-left"""
         rig = actions.user.mouse_rig()
         rig.direction(-1, 1)
-        rig.speed(2)
+        rig.speed(rig.state.speed or 2)
 
     # =========================================================================
     # SPEED CONTROL
@@ -144,7 +144,7 @@ class Actions:
     def mouse_rig_slowdown():
         """Temporary slowdown"""
         rig = actions.user.mouse_rig()
-        rig.speed.mul(0.1).hold(1000).revert(500)
+        rig.speed.mul(0.2).over(1000).revert(500)
 
     # =========================================================================
     # NAMED MODIFIERS
@@ -244,7 +244,8 @@ class Actions:
     def mouse_rig_turn_by_rate():
         """Turn at specific rate (90 degrees/sec)"""
         rig = actions.user.mouse_rig()
-        rig.direction(0, 1).rate(90)
+        # rig.direction(0, 1).rate(90)
+        rig.modifier("asdf").direction.by(90).rate(90)
 
     def mouse_rig_accel_speed():
         """Increase speed via acceleration"""
@@ -345,11 +346,11 @@ class Actions:
 
     def mouse_rig_no_timing_in_chains():
         """INVALID: Cannot mix timing with chaining
-        
+
         These would raise errors:
             rig.speed(4).over(100).accel(3)      # timing before chain
             rig.speed(4).accel(3).over(100)      # timing after chain
-        
+
         Instead, use separate statements:
         """
         rig = actions.user.mouse_rig()
