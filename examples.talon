@@ -1,114 +1,95 @@
-# Mouse Rig Examples - PRD 5 Voice Commands
-# Use these voice commands to test the mouse rig functionality
+# Mouse Rig Examples - Voice Commands
+# Comprehensive feature showcase for PRD6
 
 # =============================================================================
-# DIRECTION CONTROL
+# BASIC MOVEMENT
 # =============================================================================
 
-rig go right: user.mouse_rig_go_right()
-rig go left: user.mouse_rig_go_left()
-rig go up: user.mouse_rig_go_up()
-rig go down: user.mouse_rig_go_down()
+rig right: user.mouse_rig_go_right()
+rig left: user.mouse_rig_go_left()
+rig up: user.mouse_rig_go_up()
+rig down: user.mouse_rig_go_down()
 
-rig go up right: user.mouse_rig_go_up_right()
-rig go up left: user.mouse_rig_go_up_left()
-rig go down right: user.mouse_rig_go_down_right()
-rig go down left: user.mouse_rig_go_down_left()
+rig up right: user.mouse_rig_go_up_right()
+rig up left: user.mouse_rig_go_up_left()
+rig down right: user.mouse_rig_go_down_right()
+rig down left: user.mouse_rig_go_down_left()
 
 # =============================================================================
 # SPEED CONTROL
 # =============================================================================
 
-rig speed slow: user.mouse_rig_speed_slow()
-rig speed normal: user.mouse_rig_speed_normal()
-rig speed fast: user.mouse_rig_speed_fast()
-
-rig speed up: user.mouse_rig_speed_up()
-rig speed down: user.mouse_rig_speed_down()
-rig speed ramp: user.mouse_rig_speed_ramp()
+rig slow: user.mouse_rig_speed_slow()
+rig normal: user.mouse_rig_speed_normal()
+rig fast: user.mouse_rig_speed_fast()
+rig ramp up: user.mouse_rig_speed_ramp_up()
+rig ramp down: user.mouse_rig_speed_ramp_down()
 
 # =============================================================================
-# STOP CONTROL
+# TEMPORARY SPEED BOOSTS
 # =============================================================================
 
-rig stop: user.mouse_rig_stop()
-rig stop soft: user.mouse_rig_stop_soft()
-rig stop gentle: user.mouse_rig_stop_gentle()
-
-# =============================================================================
-# TEMPORARY EFFECTS
-# =============================================================================
-
-rig boost instant: user.mouse_rig_boost_instant()
+rig boost: user.mouse_rig_boost_instant()
 rig boost fade: user.mouse_rig_boost_fade()
 rig boost smooth: user.mouse_rig_boost_smooth()
-rig slow down: user.mouse_rig_slowdown()
+rig slowdown: user.mouse_rig_slowdown()
 
 # =============================================================================
-# NAMED EFFECTS
+# TRANSFORM SYSTEM - SCALE
 # =============================================================================
 
-rig turbo on: user.mouse_rig_turbo_on()
-rig turbo off: user.mouse_rig_turbo_off()
+rig sprint: user.mouse_rig_sprint_on()
+rig sprint off: user.mouse_rig_sprint_off()
+rig sprint smooth: user.mouse_rig_sprint_smooth()
+rig boost pad: user.mouse_rig_boost_pad()
+rig boost pad max: user.mouse_rig_boost_pad_max()
 
-rig thrust on: user.mouse_rig_thrust_on()
-rig thrust off: user.mouse_rig_thrust_off()
+# =============================================================================
+# TRANSFORM SYSTEM - DIRECTION
+# =============================================================================
 
-rig drift on: user.mouse_rig_drift_on()
+rig drift: user.mouse_rig_drift_on()
 rig drift off: user.mouse_rig_drift_off()
+rig drift smooth: user.mouse_rig_drift_smooth()
 
 # =============================================================================
-# NAMED FORCES
+# FORCE SYSTEM
 # =============================================================================
 
-rig gravity on: user.mouse_rig_gravity_on()
+rig gravity: user.mouse_rig_gravity_on()
 rig gravity off: user.mouse_rig_gravity_off()
-
-rig wind on: user.mouse_rig_wind_on()
-rig wind off: user.mouse_rig_wind_off()
-
-# =============================================================================
-# ACCELERATION CONTROL
-# =============================================================================
-
-rig accel on: user.mouse_rig_accel_on()
-rig accel off: user.mouse_rig_accel_off()
-rig accel boost: user.mouse_rig_accel_boost()
+rig wind: user.mouse_rig_wind_on()
+rig wind smooth: user.mouse_rig_wind_smooth()
 
 # =============================================================================
-# RATE-BASED TIMING
+# ACCELERATION
 # =============================================================================
 
-rig ramp by rate: user.mouse_rig_ramp_by_rate()
-rig turn by rate: user.mouse_rig_turn_by_rate()
-rig accel speed: user.mouse_rig_accel_speed()
+rig accel: user.mouse_rig_accel_on()
+rig decel: user.mouse_rig_accel_off()
+rig accel burst: user.mouse_rig_accel_burst()
 
 # =============================================================================
 # SMOOTH TURNS
 # =============================================================================
 
 rig turn right: user.mouse_rig_turn_right()
-rig turn down: user.mouse_rig_turn_down()
+rig turn left: user.mouse_rig_turn_left()
 rig reverse: user.mouse_rig_reverse()
 
 # =============================================================================
 # POSITION CONTROL
 # =============================================================================
 
-rig position center: user.mouse_rig_pos_center()
-rig position corner: user.mouse_rig_pos_corner()
+rig center: user.mouse_rig_pos_center()
 rig nudge right: user.mouse_rig_nudge_right()
+rig nudge down: user.mouse_rig_nudge_down()
 
 # =============================================================================
-# STATE & BAKING
+# STOPPING & STATE
 # =============================================================================
 
-rig show state: user.mouse_rig_show_state()
-rig bake: user.mouse_rig_bake_state()
-
-# =============================================================================
-# LAMBDA EXAMPLES
-# =============================================================================
-
-rig relative boost: user.mouse_rig_relative_boost()
-rig double speed: user.mouse_rig_double_speed()
+rig stop: user.mouse_rig_stop()
+rig stop smooth: user.mouse_rig_stop_smooth()
+rig bake: user.mouse_rig_bake()
+rig state: user.mouse_rig_show_state()

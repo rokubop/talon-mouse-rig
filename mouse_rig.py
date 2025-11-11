@@ -546,17 +546,18 @@ class TransformStack:
     - .by(value): Add/stack (accumulates)
 
     Supports both scale (multiplicative) and shift (additive) operations.
+    For vectors (direction, position), stores Vec2 objects.
     """
     name: str  # Entity name
-    property: str  # "speed", "accel", "direction", etc.
+    property: str  # "speed", "accel", "direction", "pos"
     operation_type: str  # "scale" or "shift"
 
     # Stacking mode
     mode: Optional[Literal["to", "by"]] = None  # Determined by first call
 
-    # Values
-    values: list[float] = None  # List of stacked values (for .by)
-    single_value: Optional[float] = None  # Single value (for .to)
+    # Values (scalar or vector)
+    values: list[Union[float, Vec2]] = None  # List of stacked values (for .by)
+    single_value: Optional[Union[float, Vec2]] = None  # Single value (for .to)
 
     # Constraints
     max_value: Optional[float] = None  # Maximum computed value
@@ -566,13 +567,13 @@ class TransformStack:
         if self.values is None:
             self.values = []
 
-    def set_to(self, value: float) -> None:
+    def set_to(self, value: Union[float, Vec2]) -> None:
         """Set value (replaces existing) - .to() operation"""
         self.mode = "to"
         self.single_value = value
         self.values = []  # Clear any stacked values
 
-    def add_by(self, value: float) -> None:
+    def add_by(self, value: Union[float, Vec2]) -> None:
         """Add value (stacks) - .by() operation"""
         if self.mode == "to":
             # Switching from .to() to .by() - start stacking from .to() value
@@ -588,17 +589,25 @@ class TransformStack:
             # Keep only the most recent values up to max
             self.values = self.values[-self.max_stack_count:]
 
-    def get_total(self) -> float:
+    def get_total(self) -> Union[float, Vec2]:
         """Get total computed value"""
         if self.mode == "to":
-            value = self.single_value if self.single_value is not None else 0.0
+            value = self.single_value if self.single_value is not None else self._get_zero_value()
         elif self.mode == "by":
-            value = sum(self.values)
+            if not self.values:
+                return self._get_zero_value()
+            # Sum scalars or vectors
+            if isinstance(self.values[0], Vec2):
+                value = Vec2(0, 0)
+                for v in self.values:
+                    value = value + v
+            else:
+                value = sum(self.values)
         else:
-            value = 0.0
+            value = self._get_zero_value()
 
-        # Apply max constraint
-        if self.max_value is not None:
+        # Apply max constraint (scalars only)
+        if self.max_value is not None and isinstance(value, float):
             if self.operation_type == "scale":
                 value = min(value, self.max_value)
             elif self.operation_type == "shift":
@@ -608,19 +617,35 @@ class TransformStack:
 
         return value
 
-    def apply_to_base(self, base_value: float) -> float:
+    def _get_zero_value(self) -> Union[float, Vec2]:
+        """Get zero value appropriate for property type"""
+        if self.property in ["direction", "pos"]:
+            return Vec2(0, 0)
+        return 0.0
+
+    def apply_to_base(self, base_value: Union[float, Vec2]) -> Union[float, Vec2]:
         """Apply this transform to a base value"""
         total = self.get_total()
 
         if self.operation_type == "scale":
-            result = base_value * total
+            # For vectors, scale applies to magnitude only
+            if isinstance(base_value, Vec2):
+                # For direction: scale the magnitude (though this might not make sense)
+                # We'll keep the direction and scale its magnitude
+                result = base_value * total if isinstance(total, float) else base_value
+            else:
+                result = base_value * total
         elif self.operation_type == "shift":
-            result = base_value + total
+            # For vectors, shift adds the offset
+            if isinstance(base_value, Vec2) and isinstance(total, Vec2):
+                result = base_value + total
+            else:
+                result = base_value + total
         else:
             result = base_value
 
-        # Apply max value constraint for final result
-        if self.max_value is not None:
+        # Apply max value constraint for final result (scalars only)
+        if self.max_value is not None and isinstance(result, float):
             result = min(result, self.max_value)
 
         return result
@@ -629,32 +654,32 @@ class TransformStack:
 class TransformEffect:
     """
     Wrapper for TransformStack with lifecycle support.
-    
+
     Applies a multiplier (0.0 to 1.0) to the transform based on lifecycle phase.
     This allows transforms to fade in/out just like Effects.
     """
     def __init__(self, stack: TransformStack):
         self.stack = stack
-        
+
         # Lifecycle configuration
         self.in_duration_ms: Optional[float] = None
         self.in_easing: str = "linear"
         self.hold_duration_ms: Optional[float] = None
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
-        
+
         # Runtime state
         self.phase: str = "not_started"
         self.phase_start_time: Optional[float] = None
         self.current_multiplier: float = 1.0  # How much of the transform is active
         self.complete = False
-        
+
         # For stopping
         self.stop_requested = False
         self.stop_duration_ms: Optional[float] = None
         self.stop_easing: str = "linear"
         self.stop_start_time: Optional[float] = None
-    
+
     def start(self) -> None:
         """Start the effect lifecycle"""
         if self.in_duration_ms is not None:
@@ -673,21 +698,21 @@ class TransformEffect:
             # No lifecycle - persist at full strength
             self.phase = "hold"
             self.current_multiplier = 1.0
-    
+
     def update(self) -> float:
         """Update lifecycle and return current multiplier"""
         if self.complete:
             return 0.0
-        
+
         if self.stop_requested:
             return self._update_stop()
-        
+
         if self.phase == "not_started":
             self.start()
-        
+
         current_time = time.perf_counter()
         elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
-        
+
         if self.phase == "in":
             if elapsed_ms >= self.in_duration_ms:
                 self.current_multiplier = 1.0
@@ -703,7 +728,7 @@ class TransformEffect:
                 t = elapsed_ms / self.in_duration_ms
                 easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
                 self.current_multiplier = easing_fn(t)
-        
+
         elif self.phase == "hold":
             if self.hold_duration_ms is not None:
                 if elapsed_ms >= self.hold_duration_ms:
@@ -714,7 +739,7 @@ class TransformEffect:
                         self.phase = "complete"
                         self.complete = True
                         return 0.0
-        
+
         elif self.phase == "out":
             if elapsed_ms >= self.out_duration_ms:
                 self.phase = "complete"
@@ -724,43 +749,43 @@ class TransformEffect:
                 t = elapsed_ms / self.out_duration_ms
                 easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
                 self.current_multiplier = 1.0 - easing_fn(t)
-        
+
         return self.current_multiplier
-    
+
     def _update_stop(self) -> float:
         """Handle graceful stop with optional duration"""
         if self.stop_duration_ms is None or self.stop_duration_ms == 0:
             self.complete = True
             return 0.0
-        
+
         if self.stop_start_time is None:
             self.stop_start_time = time.perf_counter()
-        
+
         elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
         if elapsed_ms >= self.stop_duration_ms:
             self.complete = True
             return 0.0
-        
+
         t = elapsed_ms / self.stop_duration_ms
         easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
         self.current_multiplier = 1.0 - easing_fn(t)
-        
+
         return self.current_multiplier
-    
+
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the effect to stop"""
         self.stop_requested = True
         self.stop_duration_ms = duration_ms if duration_ms is not None else 0
         self.stop_easing = easing
-    
+
     def apply_to_base(self, base_value: float) -> float:
         """Apply transform with current multiplier"""
         if self.current_multiplier == 0.0:
             return base_value
-        
+
         # Get the full transform value
         full_transform = self.stack.apply_to_base(base_value)
-        
+
         # Interpolate between base and full transform based on multiplier
         return lerp(base_value, full_transform, self.current_multiplier)
 
@@ -1145,7 +1170,7 @@ class Force:
     """
     Independent entity with its own speed, acceleration, and direction.
     Forces combine with base rig via vector addition.
-    
+
     Supports lifecycle: in (fade in) → hold → out (fade out/revert)
     """
     def __init__(self, name: str, rig_state: 'RigState'):
@@ -1164,22 +1189,22 @@ class Force:
         self.phase: Literal["not_started", "in", "hold", "out", "complete"] = "not_started"
         self.start_time: Optional[float] = None
         self.phase_start_time: Optional[float] = None
-        
+
         # Lifecycle timing
         self.in_duration_ms: Optional[float] = None
         self.in_easing: str = "linear"
         self.hold_duration_ms: Optional[float] = None
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
-        
+
         # Initial values for lifecycle
         self.initial_speed = 0.0
         self.initial_accel = 0.0
         self.initial_velocity = 0.0
-        
+
         # Current lifecycle multiplier (0.0 to 1.0)
         self.multiplier = 1.0
-        
+
         self.complete = False
 
     def start(self) -> None:
@@ -1187,12 +1212,12 @@ class Force:
         if self.phase == "not_started":
             self.start_time = time.perf_counter()
             self.phase_start_time = self.start_time
-            
+
             # Store initial values
             self.initial_speed = self._speed
             self.initial_accel = self._accel
             self.initial_velocity = self._velocity
-            
+
             # Determine starting phase
             if self.in_duration_ms is not None and self.in_duration_ms > 0:
                 self.phase = "in"
@@ -1213,10 +1238,10 @@ class Force:
         """
         if self.complete:
             return Vec2(0, 0)
-        
+
         if self.phase == "not_started":
             self.start()
-        
+
         # Update lifecycle phase
         self._update_lifecycle()
 
@@ -1237,10 +1262,10 @@ class Force:
         if self.phase == "complete":
             self.complete = True
             return
-        
+
         current_time = time.perf_counter()
         elapsed_ms = (current_time - self.phase_start_time) * 1000
-        
+
         if self.phase == "in":
             if self.in_duration_ms is None or self.in_duration_ms == 0:
                 # Instant in
@@ -1251,11 +1276,11 @@ class Force:
                 t = min(1.0, elapsed_ms / self.in_duration_ms)
                 easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
                 self.multiplier = easing_fn(t)
-                
+
                 if t >= 1.0:
                     self.multiplier = 1.0
                     self._transition_to_hold()
-        
+
         elif self.phase == "hold":
             if self.hold_duration_ms is None:
                 # Hold indefinitely
@@ -1264,7 +1289,7 @@ class Force:
                 # Hold for duration
                 if elapsed_ms >= self.hold_duration_ms:
                     self._transition_to_out()
-        
+
         elif self.phase == "out":
             if self.out_duration_ms is None or self.out_duration_ms == 0:
                 # Instant out
@@ -1275,11 +1300,11 @@ class Force:
                 t = min(1.0, elapsed_ms / self.out_duration_ms)
                 easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
                 self.multiplier = 1.0 - easing_fn(t)
-                
+
                 if t >= 1.0:
                     self.multiplier = 0.0
                     self.phase = "complete"
-    
+
     def _transition_to_hold(self) -> None:
         """Transition from 'in' to 'hold' phase"""
         self.phase_start_time = time.perf_counter()
@@ -1288,7 +1313,7 @@ class Force:
         else:
             # No hold or out, we're done
             self.phase = "complete"
-    
+
     def _transition_to_out(self) -> None:
         """Transition from 'hold' to 'out' phase"""
         self.phase_start_time = time.perf_counter()
@@ -3070,7 +3095,7 @@ class EntityBuilder:
             self._accel_controller = NamedForceAccelController(self.rig_state, self.name)
         self._accel_controller(value)
         return self
-    
+
     def over(self, duration_ms: float, easing: str = "linear") -> 'EntityBuilder':
         """Fade in force over duration (force lifecycle only)"""
         self._ensure_force(".over()")
@@ -3079,7 +3104,7 @@ class EntityBuilder:
             force.in_duration_ms = duration_ms
             force.in_easing = easing
         return self
-    
+
     def hold(self, duration_ms: float = None) -> 'EntityBuilder':
         """Maintain force for duration (force lifecycle only)"""
         self._ensure_force(".hold()")
@@ -3087,7 +3112,7 @@ class EntityBuilder:
             force = self.rig_state._named_forces[self.name]
             force.hold_duration_ms = duration_ms
         return self
-    
+
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EntityBuilder':
         """Fade out/revert force (force lifecycle only)"""
         self._ensure_force(".revert()")
@@ -3197,7 +3222,7 @@ class ScaleSpeedBuilder:
             if key not in self.rig_state._transform_order:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
-    
+
     def _get_or_create_effect(self) -> TransformEffect:
         """Get or create the transform effect wrapper"""
         key = f"{self.name}:speed:scale"
@@ -3219,20 +3244,20 @@ class ScaleSpeedBuilder:
         stack.add_by(multiplier)
         self.rig_state.start()
         return self
-    
+
     def over(self, duration_ms: float, easing: str = "linear") -> 'ScaleSpeedBuilder':
         """Fade in over duration"""
         effect = self._get_or_create_effect()
         effect.in_duration_ms = duration_ms
         effect.in_easing = easing
         return self
-    
+
     def hold(self, duration_ms: float) -> 'ScaleSpeedBuilder':
         """Maintain for duration"""
         effect = self._get_or_create_effect()
         effect.hold_duration_ms = duration_ms
         return self
-    
+
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ScaleSpeedBuilder':
         """Revert to original state"""
         effect = self._get_or_create_effect()
@@ -3265,7 +3290,7 @@ class ScaleAccelBuilder:
             if key not in self.rig_state._transform_order:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
-    
+
     def _get_or_create_effect(self) -> TransformEffect:
         """Get or create the transform effect wrapper"""
         key = f"{self.name}:accel:scale"
@@ -3287,20 +3312,20 @@ class ScaleAccelBuilder:
         stack.add_by(multiplier)
         self.rig_state.start()
         return self
-    
+
     def over(self, duration_ms: float, easing: str = "linear") -> 'ScaleAccelBuilder':
         """Fade in over duration"""
         effect = self._get_or_create_effect()
         effect.in_duration_ms = duration_ms
         effect.in_easing = easing
         return self
-    
+
     def hold(self, duration_ms: float) -> 'ScaleAccelBuilder':
         """Maintain for duration"""
         effect = self._get_or_create_effect()
         effect.hold_duration_ms = duration_ms
         return self
-    
+
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ScaleAccelBuilder':
         """Revert to original state"""
         effect = self._get_or_create_effect()
@@ -3333,7 +3358,7 @@ class ShiftSpeedBuilder:
             if key not in self.rig_state._transform_order:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
-    
+
     def _get_or_create_effect(self) -> TransformEffect:
         """Get or create the transform effect wrapper"""
         key = f"{self.name}:speed:shift"
@@ -3355,20 +3380,20 @@ class ShiftSpeedBuilder:
         stack.add_by(offset)
         self.rig_state.start()
         return self
-    
+
     def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftSpeedBuilder':
         """Fade in over duration"""
         effect = self._get_or_create_effect()
         effect.in_duration_ms = duration_ms
         effect.in_easing = easing
         return self
-    
+
     def hold(self, duration_ms: float) -> 'ShiftSpeedBuilder':
         """Maintain for duration"""
         effect = self._get_or_create_effect()
         effect.hold_duration_ms = duration_ms
         return self
-    
+
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftSpeedBuilder':
         """Revert to original state"""
         effect = self._get_or_create_effect()
@@ -3401,7 +3426,7 @@ class ShiftAccelBuilder:
             if key not in self.rig_state._transform_order:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
-    
+
     def _get_or_create_effect(self) -> TransformEffect:
         """Get or create the transform effect wrapper"""
         key = f"{self.name}:accel:shift"
@@ -3423,20 +3448,20 @@ class ShiftAccelBuilder:
         stack.add_by(offset)
         self.rig_state.start()
         return self
-    
+
     def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftAccelBuilder':
         """Fade in over duration"""
         effect = self._get_or_create_effect()
         effect.in_duration_ms = duration_ms
         effect.in_easing = easing
         return self
-    
+
     def hold(self, duration_ms: float) -> 'ShiftAccelBuilder':
         """Maintain for duration"""
         effect = self._get_or_create_effect()
         effect.hold_duration_ms = duration_ms
         return self
-    
+
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftAccelBuilder':
         """Revert to original state"""
         effect = self._get_or_create_effect()
@@ -3451,50 +3476,170 @@ class ShiftAccelBuilder:
 
 
 class ShiftDirectionBuilder:
-    """Builder for shift.direction transform operations (.to/.by)"""
+    """Builder for shift.direction transform operations (.to/.by)
+
+    Both .to() and .by() work with rotation in degrees (delta from base direction).
+    - .to(degrees): Set rotation offset to specific degrees (replaces)
+    - .by(degrees): Add rotation degrees (stacks)
+    """
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
-    def to(self, x: float, y: float) -> 'ShiftDirectionBuilder':
-        """Set direction offset (replaces existing)"""
-        # TODO: Implement in future step
-        raise NotImplementedError("shift.direction not yet implemented")
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:direction:shift"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="direction",
+                operation_type="shift"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
+
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:direction:shift"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
+    def to(self, degrees: float) -> 'ShiftDirectionBuilder':
+        """Set rotation offset to specific degrees (replaces existing)
+
+        Example:
+            rig("drift").shift.direction.to(45)    # Rotate 45° from base
+            rig("drift").shift.direction.to(90)    # Replace with 90° rotation
+        """
+        stack = self._get_or_create_stack()
+        stack.set_to(degrees)
+        self.rig_state.start()
+        return self
 
     def by(self, degrees: float) -> 'ShiftDirectionBuilder':
-        """Rotate direction by degrees (stacks)"""
-        controller = NamedDirectionController(self.rig_state, self.name)
-        controller.by(degrees)
+        """Add rotation degrees (stacks)
+
+        Example:
+            rig("drift").shift.direction.by(45)    # Rotate 45°
+            rig("drift").shift.direction.by(45)    # Add another 45° = 90° total
+        """
+        stack = self._get_or_create_stack()
+        stack.add_by(degrees)
+        self.rig_state.start()
         return self
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftDirectionBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'ShiftDirectionBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftDirectionBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "direction", "shift")
 
 
 class ShiftPosBuilder:
-    """Builder for shift.pos transform operations (.to/.by)"""
+    """Builder for shift.pos transform operations (.to/.by)
+
+    Both .to() and .by() work with position offset vectors (delta from base position).
+    - .to(x, y): Set position offset to specific delta (replaces)
+    - .by(x, y): Add position offset delta (stacks)
+    """
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
         self.name = name
 
+    def _get_or_create_stack(self) -> TransformStack:
+        """Get or create the transform stack for this entity"""
+        key = f"{self.name}:pos:shift"
+        if key not in self.rig_state._transform_stacks:
+            stack = TransformStack(
+                name=self.name,
+                property="pos",
+                operation_type="shift"
+            )
+            self.rig_state._transform_stacks[key] = stack
+            if key not in self.rig_state._transform_order:
+                self.rig_state._transform_order.append(key)
+        return self.rig_state._transform_stacks[key]
+
+    def _get_or_create_effect(self) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:pos:shift"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack()
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def to(self, x: float, y: float) -> 'ShiftPosBuilder':
-        """Set position offset vector (replaces existing)"""
-        # Store as a position glide transition
-        glide = PositionTransition(
-            self.rig_state._pos,
-            Vec2(x, y),
-            0,  # Instant
-            "linear"
-        )
-        glide.name = self.name  # Mark with entity name for tracking
-        self.rig_state._position_transitions.append(glide)
+        """Set position offset to specific delta (replaces existing)
+
+        Example:
+            # Base position (100, 100)
+            rig("offset").shift.pos.to(5, 5)    # Offset by (5,5) → position (105, 105)
+            rig("offset").shift.pos.to(10, 10)  # Replace offset → position (110, 110)
+        """
+        stack = self._get_or_create_stack()
+        stack.set_to(Vec2(x, y))
         self.rig_state.start()
         return self
 
     def by(self, x: float, y: float) -> 'ShiftPosBuilder':
-        """Add position offset (stacks)"""
-        # Accumulate position offset relative to current position
-        offset = Vec2(x, y)
-        self.rig_state._pos = self.rig_state._pos + offset
+        """Add position offset delta (stacks)
+
+        Example:
+            rig("offset").shift.pos.by(5, 5)    # Add offset (5, 5)
+            rig("offset").shift.pos.by(5, 5)    # Add another (5, 5) = total (10, 10)
+        """
+        stack = self._get_or_create_stack()
+        stack.add_by(Vec2(x, y))
         self.rig_state.start()
         return self
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'ShiftPosBuilder':
+        """Fade in over duration"""
+        effect = self._get_or_create_effect()
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'ShiftPosBuilder':
+        """Maintain for duration"""
+        effect = self._get_or_create_effect()
+        effect.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'ShiftPosBuilder':
+        """Revert to original state"""
+        effect = self._get_or_create_effect()
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+        return self
+
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "pos", "shift")
 
 
 class MaxBuilder:
@@ -3505,6 +3650,24 @@ class MaxBuilder:
         self.property = property
         self.operation_type = operation_type
 
+    def __call__(self, value: Union[float, int]) -> 'MaxBuilder':
+        """Set max constraint on current property (context-aware shorthand)
+
+        Examples:
+            rig("boost").shift.speed.by(10).max(50)         # max speed value
+            rig("drift").shift.direction.by(45).max(90)     # max rotation degrees
+            rig("boost").shift.speed.by(10).max.stack(3)    # max stack count
+        """
+        if self.property == "speed":
+            return self.speed(value)
+        elif self.property == "accel":
+            return self.accel(value)
+        elif self.property == "direction":
+            return self.direction(value)
+        elif self.property == "pos":
+            return self.pos(value)
+        return self
+
     def speed(self, value: float) -> 'MaxBuilder':
         """Set maximum speed constraint"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
@@ -3514,6 +3677,28 @@ class MaxBuilder:
 
     def accel(self, value: float) -> 'MaxBuilder':
         """Set maximum accel constraint"""
+        key = f"{self.name}:{self.property}:{self.operation_type}"
+        if key in self.rig_state._transform_stacks:
+            self.rig_state._transform_stacks[key].max_value = value
+        return self
+
+    def direction(self, value: float) -> 'MaxBuilder':
+        """Set maximum direction rotation constraint (in degrees)
+
+        Example:
+            rig("drift").shift.direction.by(45).max.direction(90)  # Cap at 90° total
+        """
+        key = f"{self.name}:{self.property}:{self.operation_type}"
+        if key in self.rig_state._transform_stacks:
+            self.rig_state._transform_stacks[key].max_value = value
+        return self
+
+    def pos(self, value: float) -> 'MaxBuilder':
+        """Set maximum position offset magnitude constraint
+
+        Example:
+            rig("shake").shift.pos.by(10, 10).max.pos(50)  # Cap total offset magnitude
+        """
         key = f"{self.name}:{self.property}:{self.operation_type}"
         if key in self.rig_state._transform_stacks:
             self.rig_state._transform_stacks[key].max_value = value
@@ -4048,11 +4233,11 @@ class RigState:
         self._named_modifiers: dict[str, Effect] = {}
         self._named_direction_modifiers: dict[str, DirectionEffect] = {}
         self._named_forces: dict[str, Force] = {}  # Force entities
-        
+
         # PRD 6: Transform stacks (scale/shift with .to/.by tracking)
         self._transform_stacks: dict[str, TransformStack] = {}  # key: "entity_name:property:op_type"
         self._transform_order: list[str] = []  # Track creation order for composition
-        
+
         # PRD 6: Transform effects (lifecycle-aware wrappers for transform stacks)
         self._transform_effects: dict[str, TransformEffect] = {}  # key: same as _transform_stacks        # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
@@ -4320,11 +4505,87 @@ class RigState:
         return base_accel
 
     def _get_effective_direction(self) -> Vec2:
-        """Get direction with all rotation effects applied"""
+        """Get direction with all rotation effects and transforms applied"""
         base_direction = self._direction
+
+        # Apply old direction effects system (PRD 5 - for backward compatibility)
         for dir_effect in self._direction_effects:
             base_direction = dir_effect.update(base_direction)
+
+        # Apply new transform stacks (PRD 6) - direction shifts (rotation)
+        # Only shift makes sense for direction (rotation by degrees)
+        # Group by entity name to track first occurrence order
+        entity_order = []
+        entities_seen = set()
+        for key in self._transform_order:
+            if key not in self._transform_stacks:
+                continue
+            stack = self._transform_stacks[key]
+            if stack.property == "direction" and stack.name not in entities_seen:
+                entity_order.append(stack.name)
+                entities_seen.add(stack.name)
+
+        # Apply shift transforms (rotation in degrees, in entity creation order)
+        for entity_name in entity_order:
+            shift_key = f"{entity_name}:direction:shift"
+            if shift_key in self._transform_stacks:
+                stack = self._transform_stacks[shift_key]
+                # Get total rotation in degrees
+                total_degrees = stack.get_total()
+
+                # Check if there's a lifecycle effect wrapper
+                if shift_key in self._transform_effects:
+                    effect = self._transform_effects[shift_key]
+                    multiplier = effect.current_multiplier
+                    total_degrees = total_degrees * multiplier
+
+                # Apply rotation
+                if abs(total_degrees) > 1e-6:
+                    angle_rad = math.radians(total_degrees)
+                    cos_a = math.cos(angle_rad)
+                    sin_a = math.sin(angle_rad)
+                    new_x = base_direction.x * cos_a - base_direction.y * sin_a
+                    new_y = base_direction.x * sin_a + base_direction.y * cos_a
+                    base_direction = Vec2(new_x, new_y).normalized()
+
         return base_direction
+
+    def _get_position_offset(self) -> Vec2:
+        """Get total position offset from all position transforms"""
+        offset = Vec2(0, 0)
+
+        # Apply position transform stacks (PRD 6)
+        # Group by entity name to track first occurrence order
+        entity_order = []
+        entities_seen = set()
+        for key in self._transform_order:
+            if key not in self._transform_stacks:
+                continue
+            stack = self._transform_stacks[key]
+            if stack.property == "pos" and stack.name not in entities_seen:
+                entity_order.append(stack.name)
+                entities_seen.add(stack.name)
+
+        # Apply shift transforms (position offsets, in entity creation order)
+        for entity_name in entity_order:
+            shift_key = f"{entity_name}:pos:shift"
+            if shift_key in self._transform_stacks:
+                stack = self._transform_stacks[shift_key]
+                # Get total position offset vector
+                total_offset = stack.get_total()
+
+                # Check if there's a lifecycle effect wrapper
+                if shift_key in self._transform_effects:
+                    effect = self._transform_effects[shift_key]
+                    multiplier = effect.current_multiplier
+                    # Lerp from zero to full offset based on multiplier
+                    total_offset = total_offset * multiplier
+
+                # Add to cumulative offset
+                if isinstance(total_offset, Vec2):
+                    offset = offset + total_offset
+
+        return offset
 
     def _get_accel_velocity_contribution(self) -> float:
         """Get total velocity contribution from all acceleration effects
@@ -4652,10 +4913,10 @@ class RigState:
             # Start effect if not started
             if transform_effect.phase == "not_started":
                 transform_effect.start()
-            
+
             # Update lifecycle state
             transform_effect.update(dt)
-            
+
             # Remove completed effects
             if transform_effect.complete:
                 del self._transform_effects[key]
@@ -4732,6 +4993,10 @@ class RigState:
 
         # Update position from velocity
         position_delta = velocity
+
+        # Apply position transforms (shift.pos offsets)
+        position_offset = self._get_position_offset()
+        position_delta = position_delta + position_offset
 
         # Apply position transitions (glides)
         for pos_transition in self._position_transitions[:]:
