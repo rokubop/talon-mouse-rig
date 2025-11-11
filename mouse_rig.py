@@ -2965,10 +2965,11 @@ class ScaleSpeedBuilder:
         stack.add_by(multiplier)
         self.rig_state.start()
         return self
-        # TODO: Implement proper stacking in Step 3
-        controller = NamedSpeedController(self.rig_state, self.name)
-        controller.mul(multiplier)
-        return self
+    
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "speed", "scale")
 
 
 class ScaleAccelBuilder:
@@ -3005,6 +3006,11 @@ class ScaleAccelBuilder:
         stack.add_by(multiplier)
         self.rig_state.start()
         return self
+    
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "accel", "scale")
 
 
 class ShiftSpeedBuilder:
@@ -3041,6 +3047,11 @@ class ShiftSpeedBuilder:
         stack.add_by(offset)
         self.rig_state.start()
         return self
+    
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "speed", "shift")
 
 
 class ShiftAccelBuilder:
@@ -3077,6 +3088,11 @@ class ShiftAccelBuilder:
         stack.add_by(offset)
         self.rig_state.start()
         return self
+    
+    @property
+    def max(self) -> 'MaxBuilder':
+        """Access max constraints"""
+        return MaxBuilder(self.rig_state, self.name, "accel", "shift")
 
 
 class ShiftDirectionBuilder:
@@ -3114,6 +3130,36 @@ class ShiftPosBuilder:
         """Add position offset (stacks)"""
         # TODO: Implement in future step
         raise NotImplementedError("shift.pos not yet implemented")
+
+
+class MaxBuilder:
+    """Builder for max constraints on transform operations"""
+    def __init__(self, rig_state: 'RigState', name: str, property: str, operation_type: str):
+        self.rig_state = rig_state
+        self.name = name
+        self.property = property
+        self.operation_type = operation_type
+    
+    def speed(self, value: float) -> 'MaxBuilder':
+        """Set maximum speed constraint"""
+        key = f"{self.name}:{self.property}:{self.operation_type}"
+        if key in self.rig_state._transform_stacks:
+            self.rig_state._transform_stacks[key].max_value = value
+        return self
+    
+    def accel(self, value: float) -> 'MaxBuilder':
+        """Set maximum accel constraint"""
+        key = f"{self.name}:{self.property}:{self.operation_type}"
+        if key in self.rig_state._transform_stacks:
+            self.rig_state._transform_stacks[key].max_value = value
+        return self
+    
+    def stack(self, count: int) -> 'MaxBuilder':
+        """Set maximum stack count"""
+        key = f"{self.name}:{self.property}:{self.operation_type}"
+        if key in self.rig_state._transform_stacks:
+            self.rig_state._transform_stacks[key].max_stack_count = count
+        return self
 
 
 class NamedModifierBuilder:
