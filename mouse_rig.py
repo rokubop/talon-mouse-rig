@@ -1,14 +1,13 @@
 """
-Talon Mouse Rig - Continuous motion-based mouse control system (PRD 5)
+Talon Mouse Rig - Continuous motion-based mouse control system (PRD 6)
 
 A fluent, stateful mouse control API with:
-- Continuous movement (direction + speed)
+- Unified entity API with type inference (transforms vs forces)
+- Scale/shift transform operations with stacking semantics
+- Independent force entities with velocity vectors
 - Smooth transitions with easing
-- Rate-based and time-based changes
 - Temporary effects with lifecycle (.over()/.hold()/.revert())
-- Named effects (modifiers) and forces (independent entities)
-- Acceleration-based movement
-- Position control (glides)
+- Max constraints on transforms
 - State management and baking
 
 Core Properties:
@@ -23,11 +22,44 @@ Basic Usage:
     rig.speed(10)                # Set base speed
     rig.speed.to(20).over(500)   # Ramp to 20 over 500ms
 
-Value Modifiers:
-    .to(value)      # Set to absolute value
-    .by(delta)      # Add/subtract relative value
-    .mul(factor)    # Multiply by factor
-    .div(divisor)   # Divide by divisor
+Unified Entity API (PRD 6):
+    Type is inferred based on operations:
+    - .scale/.shift → Transform (modifies base properties)
+    - .direction()/.speed()/.velocity() → Force (independent entity)
+
+Transforms (modify base properties):
+    Scale (multiplicative):
+        rig("sprint").scale.speed.to(2)         # Set multiplier to ×2
+        rig("sprint").scale.speed.by(1)         # Add to multiplier (stacks)
+    
+    Shift (additive):
+        rig("boost").shift.speed.to(10)         # Set offset to +10
+        rig("boost").shift.speed.by(5)          # Add to offset (stacks)
+    
+    Stacking:
+        .to(value)   # Set/replace (idempotent)
+        .by(value)   # Add/stack (accumulates)
+    
+    Max Constraints:
+        rig("boost").shift.speed.by(10).max.speed(50)    # Cap final speed
+        rig("boost").shift.speed.by(10).max.stack(3)     # Limit stack count
+    
+    Stop:
+        rig("sprint").stop()                    # Immediate stop
+        rig("sprint").stop(500)                 # Fade out over 500ms
+
+Forces (independent entities):
+    rig("gravity").direction(0, 1).accel(9.8)   # Constant downward accel
+    rig("wind").velocity(5, 0)                  # Direct velocity vector
+    rig("wind").direction(1, 0).speed(5)        # Or separate setters
+    rig("wind").stop(500)                       # Fade out
+
+Composition Pipeline:
+    base → transforms (scale then shift, in creation order) → forces (vector addition)
+
+Direct Temporary Effects (no naming needed):
+    rig.speed.mul(2).hold(1000).revert(500)     # Temporary speed boost
+    rig.speed.by(10).over(300).revert(300)      # Fade in/out
 
 Timing:
     Time-based:
@@ -35,40 +67,14 @@ Timing:
 
     Rate-based (no easing, constant rate):
         .rate(value)              # Context-aware rate
-        .rate.accel(value)        # Via acceleration
-        .rate.speed(value)        # Via speed (position only)
 
-Temporary Effects (auto-remove after lifecycle):
+Lifecycle:
     .over(duration)                # Fade in over duration
     .hold(duration)                # Maintain for duration
     .revert(duration?, easing?)    # Revert to original
 
-    Examples:
-        rig.speed.mul(2).revert(500)                     # Instant apply, revert over 500ms
-        rig.speed.mul(2).hold(1000)                      # Hold 1s, instant revert
-        rig.speed.mul(2).over(300).hold(1000).revert(500) # Fade in, hold, fade out
-
-Named Modifiers (relative changes to base, stoppable):
-    rig.modifier("boost").speed.mul(2)              # Multiply base by 2
-    rig.modifier("boost").stop()                    # Immediate stop
-    rig.modifier("boost").stop(500, "ease_out")     # Fade out over 500ms
-    rig.modifier.stop_all()                         # Stop all modifiers
-
-    Constraints: Only .mul(), .by(), .div() allowed
-    Modifiers recalculate when base changes
-
-Named Forces (independent entities, absolute values only):
-    rig.force("wind").speed(5)                      # Set force speed
-    rig.force("wind").direction(0, 1)               # Set force direction
-    rig.force("gravity").accel(9.8)                 # Set force acceleration
-    rig.force("wind").stop(500)                     # Fade out over 500ms
-    rig.force.stop_all()                            # Stop all forces
-
-    Constraints: Only .to() or direct setters allowed
-    Forces remain constant regardless of base changes
-
 State Management:
-    rig.state.speed       # Computed speed (base + modifiers)
+    rig.state.speed       # Computed speed (base + transforms + forces)
     rig.state.accel       # Computed acceleration
     rig.state.direction   # Current direction
     rig.state.pos         # Current position
@@ -79,12 +85,9 @@ State Management:
     rig.base.direction    # Base direction only
 
 Baking & Stopping:
-    rig.bake()                      # Flatten modifiers into base, clear all
+    rig.bake()                      # Flatten transforms into base, clear all
     rig.stop()                      # Bake, clear, speed=0 (instant)
     rig.stop(500, "ease_out")       # Bake, clear, decelerate over 500ms
-
-Lambda Support:
-    rig.speed.by(lambda state: state.speed * 0.5).revert(1000)  # +50% boost
 
 Direction:
     rig.direction(1, 0)              # Right
@@ -100,19 +103,28 @@ Position:
     rig.pos.by(50, 0)                # Move by offset
 
 Complete Examples:
-    # Speed boost pad
+    # WASD with sprint
+    rig.direction(1, 0).speed(10)                    # Move right
+    rig("sprint").scale.speed.to(2)                  # Hold shift to sprint
+    rig("sprint").stop()                             # Release shift
+
+    # Stacking boost pads
+    rig("boost").shift.speed.by(5).max.stack(3)      # Hit pad (stacks up to 3)
+
+    # Gravity + wind
+    rig("gravity").direction(0, 1).accel(9.8)        # Always pulls down
+    rig("wind").velocity(5, 0).hold(3000).revert(1000)  # Temporary gust
+
+    # Temporary speed boost (direct on rig)
     rig.speed.mul(1.5).hold(2000).revert(1000)
 
-    # Thrust control (repeatable)
-    rig.force("thrust").accel(10)             # Key down
-    rig.force("thrust").stop(2000)            # Key up
-
-    # Gravity
-    rig.force("gravity").speed(9.8).direction(0, 1)
-    rig.force("gravity").stop(500)
-
-    # Dynamic boost based on current speed
-    rig.speed.by(lambda state: state.speed * 0.5).revert(1000)
+Backward Compatibility (PRD 5):
+    rig.modifier("boost").speed.mul(2)              # Still works
+    rig.force("wind").speed(5).direction(0, 1)      # Still works
+    
+    Prefer PRD 6 unified API for new code:
+    rig("boost").scale.speed.to(2)                   # Clearer intent
+    rig("wind").velocity(0, 5)                       # Simpler syntax
 """
 
 from talon import Module, actions, ctrl, cron, settings, app
