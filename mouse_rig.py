@@ -1145,6 +1145,8 @@ class Force:
     """
     Independent entity with its own speed, acceleration, and direction.
     Forces combine with base rig via vector addition.
+    
+    Supports lifecycle: in (fade in) → hold → out (fade out/revert)
     """
     def __init__(self, name: str, rig_state: 'RigState'):
         self.name = name
@@ -1158,18 +1160,50 @@ class Force:
         # Integrated velocity from acceleration
         self._velocity = 0.0
 
-        # Stopping state
-        self.stop_requested = False
-        self.stop_duration_ms: Optional[float] = None
-        self.stop_easing = "linear"
-        self.stop_start_time: Optional[float] = None
-        self.stop_initial_speed = 0.0
-        self.stop_initial_velocity = 0.0
+        # Lifecycle state (similar to TransformEffect)
+        self.phase: Literal["not_started", "in", "hold", "out", "complete"] = "not_started"
+        self.start_time: Optional[float] = None
+        self.phase_start_time: Optional[float] = None
+        
+        # Lifecycle timing
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+        
+        # Initial values for lifecycle
+        self.initial_speed = 0.0
+        self.initial_accel = 0.0
+        self.initial_velocity = 0.0
+        
+        # Current lifecycle multiplier (0.0 to 1.0)
+        self.multiplier = 1.0
+        
         self.complete = False
+
+    def start(self) -> None:
+        """Start the force lifecycle"""
+        if self.phase == "not_started":
+            self.start_time = time.perf_counter()
+            self.phase_start_time = self.start_time
+            
+            # Store initial values
+            self.initial_speed = self._speed
+            self.initial_accel = self._accel
+            self.initial_velocity = self._velocity
+            
+            # Determine starting phase
+            if self.in_duration_ms is not None and self.in_duration_ms > 0:
+                self.phase = "in"
+                self.multiplier = 0.0  # Start from 0 and fade in
+            else:
+                self.phase = "hold" if self.hold_duration_ms is not None else "complete"
+                self.multiplier = 1.0
 
     def update(self, dt: float) -> Vec2:
         """
-        Update force and return its velocity vector contribution.
+        Update force lifecycle and return its velocity vector contribution.
 
         Args:
             dt: Delta time in seconds
@@ -1179,56 +1213,98 @@ class Force:
         """
         if self.complete:
             return Vec2(0, 0)
-
-        # Handle stop request
-        if self.stop_requested:
-            return self._update_stop(dt)
+        
+        if self.phase == "not_started":
+            self.start()
+        
+        # Update lifecycle phase
+        self._update_lifecycle()
 
         # Integrate acceleration into velocity
         if abs(self._accel) > 1e-6:
             self._velocity += self._accel * dt
 
-        # Total speed is base speed + integrated velocity
-        total_speed = self._speed + self._velocity
+        # Apply lifecycle multiplier to speed and velocity
+        effective_speed = self._speed * self.multiplier
+        effective_velocity = self._velocity * self.multiplier
+        total_speed = effective_speed + effective_velocity
 
         # Return velocity vector
         return self._direction * total_speed
 
-    def _update_stop(self, dt: float) -> Vec2:
-        """Handle gradual stopping of the force"""
-        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
-            # Immediate stop
+    def _update_lifecycle(self) -> None:
+        """Update lifecycle phase and multiplier"""
+        if self.phase == "complete":
             self.complete = True
-            return Vec2(0, 0)
-
-        # Initialize stop
-        if self.stop_start_time is None:
-            self.stop_start_time = time.perf_counter()
-            self.stop_initial_speed = self._speed
-            self.stop_initial_velocity = self._velocity
-
-        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
-
-        if elapsed_ms >= self.stop_duration_ms:
-            self.complete = True
-            return Vec2(0, 0)
-
-        # Fade out both speed and velocity
-        t = elapsed_ms / self.stop_duration_ms
-        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
-        multiplier = 1.0 - easing_fn(t)
-
-        current_speed = self.stop_initial_speed * multiplier
-        current_velocity = self.stop_initial_velocity * multiplier
-        total_speed = current_speed + current_velocity
-
-        return self._direction * total_speed
+            return
+        
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000
+        
+        if self.phase == "in":
+            if self.in_duration_ms is None or self.in_duration_ms == 0:
+                # Instant in
+                self.multiplier = 1.0
+                self._transition_to_hold()
+            else:
+                # Fade in
+                t = min(1.0, elapsed_ms / self.in_duration_ms)
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                self.multiplier = easing_fn(t)
+                
+                if t >= 1.0:
+                    self.multiplier = 1.0
+                    self._transition_to_hold()
+        
+        elif self.phase == "hold":
+            if self.hold_duration_ms is None:
+                # Hold indefinitely
+                self.multiplier = 1.0
+            else:
+                # Hold for duration
+                if elapsed_ms >= self.hold_duration_ms:
+                    self._transition_to_out()
+        
+        elif self.phase == "out":
+            if self.out_duration_ms is None or self.out_duration_ms == 0:
+                # Instant out
+                self.multiplier = 0.0
+                self.phase = "complete"
+            else:
+                # Fade out
+                t = min(1.0, elapsed_ms / self.out_duration_ms)
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                self.multiplier = 1.0 - easing_fn(t)
+                
+                if t >= 1.0:
+                    self.multiplier = 0.0
+                    self.phase = "complete"
+    
+    def _transition_to_hold(self) -> None:
+        """Transition from 'in' to 'hold' phase"""
+        self.phase_start_time = time.perf_counter()
+        if self.hold_duration_ms is not None or self.out_duration_ms is not None:
+            self.phase = "hold"
+        else:
+            # No hold or out, we're done
+            self.phase = "complete"
+    
+    def _transition_to_out(self) -> None:
+        """Transition from 'hold' to 'out' phase"""
+        self.phase_start_time = time.perf_counter()
+        if self.out_duration_ms is not None:
+            self.phase = "out"
+        else:
+            # No out phase, we're done
+            self.phase = "complete"
 
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the force to stop, optionally over a duration"""
-        self.stop_requested = True
-        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
-        self.stop_easing = easing
+        # Transition to out phase
+        self.out_duration_ms = duration_ms if duration_ms is not None else 0
+        self.out_easing = easing
+        self.phase_start_time = time.perf_counter()
+        self.phase = "out"
 
 
 # ============================================================================
@@ -2994,6 +3070,32 @@ class EntityBuilder:
             self._accel_controller = NamedForceAccelController(self.rig_state, self.name)
         self._accel_controller(value)
         return self
+    
+    def over(self, duration_ms: float, easing: str = "linear") -> 'EntityBuilder':
+        """Fade in force over duration (force lifecycle only)"""
+        self._ensure_force(".over()")
+        if self.name in self.rig_state._named_forces:
+            force = self.rig_state._named_forces[self.name]
+            force.in_duration_ms = duration_ms
+            force.in_easing = easing
+        return self
+    
+    def hold(self, duration_ms: float = None) -> 'EntityBuilder':
+        """Maintain force for duration (force lifecycle only)"""
+        self._ensure_force(".hold()")
+        if self.name in self.rig_state._named_forces:
+            force = self.rig_state._named_forces[self.name]
+            force.hold_duration_ms = duration_ms
+        return self
+    
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EntityBuilder':
+        """Fade out/revert force (force lifecycle only)"""
+        self._ensure_force(".revert()")
+        if self.name in self.rig_state._named_forces:
+            force = self.rig_state._named_forces[self.name]
+            force.out_duration_ms = duration_ms
+            force.out_easing = easing
+        return self
 
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop this entity (works for both transforms and forces)"""
@@ -3373,14 +3475,26 @@ class ShiftPosBuilder:
         self.name = name
 
     def to(self, x: float, y: float) -> 'ShiftPosBuilder':
-        """Set position offset (replaces existing)"""
-        # TODO: Implement in future step
-        raise NotImplementedError("shift.pos not yet implemented")
+        """Set position offset vector (replaces existing)"""
+        # Store as a position glide transition
+        glide = PositionTransition(
+            self.rig_state._pos,
+            Vec2(x, y),
+            0,  # Instant
+            "linear"
+        )
+        glide.name = self.name  # Mark with entity name for tracking
+        self.rig_state._position_transitions.append(glide)
+        self.rig_state.start()
+        return self
 
     def by(self, x: float, y: float) -> 'ShiftPosBuilder':
         """Add position offset (stacks)"""
-        # TODO: Implement in future step
-        raise NotImplementedError("shift.pos not yet implemented")
+        # Accumulate position offset relative to current position
+        offset = Vec2(x, y)
+        self.rig_state._pos = self.rig_state._pos + offset
+        self.rig_state.start()
+        return self
 
 
 class MaxBuilder:

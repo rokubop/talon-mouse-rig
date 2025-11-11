@@ -470,3 +470,58 @@ class Actions:
         # - Scales multiply base: 20 * (2.0 + 1.0) = 60 (at full strength)
         # - Shifts add: 60 + 15 + 10 = 85 (at full strength)
         # - Each fade independently per timing settings
+
+    def mouse_rig_prd6_force_lifecycle():
+        """PRD6: Force entities with full lifecycle support
+        
+        Forces now support .over(), .hold(), and .revert() just like transforms.
+        """
+        rig = actions.user.mouse_rig()
+        
+        # Setup base movement
+        rig.direction(1, 0).speed(10)
+        
+        # Temporary wind force - fade in, hold, fade out
+        rig("wind").velocity(0, 5).over(300).hold(2000).revert(500)
+        # Wind pushes down, fades in over 300ms, holds for 2s, fades out over 500ms
+        
+        # Gravity with instant application and timed removal
+        rig("gravity").direction(0, 1).accel(9.8).hold(5000).revert(1000)
+        # Instant on, lasts 5s, then fades out over 1s
+        
+        # Boost pad - instant force, instant removal after duration
+        rig("boost_pad").velocity(10, 0).hold(500).revert(0)
+        # Instant 10px/s boost for 500ms, then instant removal
+
+    def mouse_rig_prd6_shift_pos():
+        """PRD6: Position shifting with .to() and .by()"""
+        rig = actions.user.mouse_rig()
+        
+        # Set position offset (teleport-like)
+        rig("warp").shift.pos.to(100, 100)
+        # Instantly offset position by (100, 100)
+        
+        # Stack position offsets
+        rig("nudge1").shift.pos.by(10, 0)   # +10 right
+        rig("nudge2").shift.pos.by(0, -10)  # +10 up
+        # Total offset: (10, -10)
+        
+        # Replace with new offset
+        rig("warp").shift.pos.to(50, 50)
+        # Now offset is (50, 50) + nudges
+
+    def mouse_rig_prd6_drift_rotation():
+        """PRD6: Direction rotation with shift.direction.by()"""
+        rig = actions.user.mouse_rig()
+        
+        # Moving right
+        rig.direction(1, 0).speed(10)
+        
+        # Add drift rotation
+        rig("drift").shift.direction.by(-15).over(200).hold(1000).revert(300)
+        # Rotates direction -15° over 200ms, holds for 1s, rotates back over 300ms
+        
+        # Multiple drift effects stack
+        rig("drift2").shift.direction.by(10).over(100)
+        # Total rotation: -15° + 10° = -5° (when both at full strength)
+
