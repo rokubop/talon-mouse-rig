@@ -1,5 +1,5 @@
 # Mouse Rig Examples - Voice Commands
-# Comprehensive feature showcase for PRD6
+# Comprehensive feature showcase for PRD 7
 
 # =============================================================================
 # BASIC MOVEMENT
@@ -32,17 +32,33 @@ rig ramp down: user.mouse_rig_speed_ramp_down()
 rig boost: user.mouse_rig_boost_instant()
 rig boost fade: user.mouse_rig_boost_fade()
 rig boost smooth: user.mouse_rig_boost_smooth()
-rig slowdown: user.mouse_rig_slowdown()
 
 # =============================================================================
-# TRANSFORM SYSTEM - SCALE
+# TRANSFORM SYSTEM - REPLACE MODE (DEFAULT)
 # =============================================================================
 
 rig sprint: user.mouse_rig_sprint_on()
 rig sprint off: user.mouse_rig_sprint_off()
-rig sprint smooth: user.mouse_rig_sprint_smooth()
+rig slow mode: user.mouse_rig_slow_mode_on()
+rig slow mode off: user.mouse_rig_slow_mode_off()
+
+# =============================================================================
+# TRANSFORM SYSTEM - SHORTHAND SYNTAX
+# =============================================================================
+
+rig boost simple: user.mouse_rig_boost_simple()
+rig drift simple: user.mouse_rig_drift_simple()
+rig offset simple: user.mouse_rig_offset_simple()
+rig offset stop: user.mouse_rig_offset_reset()
+# =============================================================================
+# TRANSFORM SYSTEM - STACKING
+# =============================================================================
+
 rig boost pad: user.mouse_rig_boost_pad()
 rig boost pad max: user.mouse_rig_boost_pad_max()
+rig boost pad short: user.mouse_rig_boost_pad_shorthand()
+rig boost pad timeout: user.mouse_rig_boost_pad_with_timeout()
+rig rage: user.mouse_rig_rage_stacks()
 
 # =============================================================================
 # TRANSFORM SYSTEM - DIRECTION
