@@ -592,13 +592,26 @@ class TransformStack:
         if not self.values:
             return self._get_zero_value()
 
-        # Sum all values
-        if isinstance(self.values[0], Vec2):
-            value = Vec2(0, 0)
-            for v in self.values:
-                value = value + v
+        # For mul/div, multiply all values together (multiplicative stacking)
+        if self.operation_type in ["mul", "div"]:
+            if isinstance(self.values[0], Vec2):
+                # Not typical, but if needed, sum for vectors
+                value = Vec2(0, 0)
+                for v in self.values:
+                    value = value + v
+            else:
+                # Multiply scalars: [2, 1.5] → 2 * 1.5 = 3.0
+                value = 1.0
+                for v in self.values:
+                    value *= v
         else:
-            value = sum(self.values)
+            # For add/sub, sum all values (additive stacking)
+            if isinstance(self.values[0], Vec2):
+                value = Vec2(0, 0)
+                for v in self.values:
+                    value = value + v
+            else:
+                value = sum(self.values)
 
         # Apply max constraint (scalars only)
         if self.max_value is not None and isinstance(value, float):
@@ -617,15 +630,16 @@ class TransformStack:
         total = self.get_total()
 
         if self.operation_type in ["mul", "div"]:
-            # Multiplicative: base * (1.0 + total)
-            # For .mul(2), total = 2, so base * (1.0 + 2) = base * 3
-            # For .mul(0.5), total = 0.5, so base * (1.0 + 0.5) = base * 1.5
+            # Multiplicative: base * total
+            # For .mul(2), total = 2, so base * 2 (double)
+            # For .div(2), stores 1/2 = 0.5, so base * 0.5 (half)
+            # Multiple .mul() calls stack multiplicatively via product
             if isinstance(base_value, Vec2):
                 # For vectors, scale the magnitude
-                multiplier = 1.0 + total if isinstance(total, float) else 1.0
+                multiplier = total if isinstance(total, float) else 1.0
                 result = base_value * multiplier
             else:
-                result = base_value * (1.0 + total)
+                result = base_value * total
         elif self.operation_type in ["add", "sub"]:
             # Additive: base + total
             if isinstance(base_value, Vec2) and isinstance(total, Vec2):
@@ -3050,6 +3064,9 @@ class TransformBuilder:
                 if key in self.rig_state._transform_order:
                     self.rig_state._transform_order.remove(key)
 
+        # Start the update loop to apply the revert (especially important when stopped)
+        self.rig_state.start()
+
 
 class TransformSpeedBuilder:
     """Builder for transform speed operations (mul/div/add/sub)"""
@@ -3057,6 +3074,15 @@ class TransformSpeedBuilder:
         self.rig_state = rig_state
         self.name = name
         self._last_op_type: Optional[str] = None  # Track last operation for .stack()
+        self._started = False  # Track if we've called start()
+
+    def __del__(self):
+        """Auto-start when builder goes out of scope if not already started"""
+        try:
+            if not self._started and self._last_op_type is not None:
+                self.rig_state.start()
+        except:
+            pass  # Ignore errors during cleanup
 
     def __call__(self, value: float) -> 'TransformSpeedBuilder':
         """Shorthand for add operation (delta from base)
@@ -3094,7 +3120,7 @@ class TransformSpeedBuilder:
         stack = self._get_or_create_stack("mul")
         stack.add_operation(value)
         self._last_op_type = "mul"
-        self.rig_state.start()
+        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
     def div(self, value: float) -> 'TransformSpeedBuilder':
@@ -3104,7 +3130,7 @@ class TransformSpeedBuilder:
         stack = self._get_or_create_stack("div")
         stack.add_operation(1.0 / value)
         self._last_op_type = "div"
-        self.rig_state.start()
+        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
     def add(self, value: float) -> 'TransformSpeedBuilder':
@@ -3112,7 +3138,7 @@ class TransformSpeedBuilder:
         stack = self._get_or_create_stack("add")
         stack.add_operation(value)
         self._last_op_type = "add"
-        self.rig_state.start()
+        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
     def sub(self, value: float) -> 'TransformSpeedBuilder':
@@ -3120,7 +3146,7 @@ class TransformSpeedBuilder:
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-value)
         self._last_op_type = "sub"
-        self.rig_state.start()
+        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
     def stack(self, max_count: Optional[int] = None) -> 'TransformSpeedBuilder':
@@ -3141,37 +3167,57 @@ class TransformSpeedBuilder:
             self.rig_state._transform_stacks[key].max_stack_count = max_count
         return self
 
-    def over(self, duration_ms: float, easing: str = "linear", op_type: str = "add") -> 'TransformSpeedBuilder':
-        """Fade in over duration (need to know which operation type to apply to)"""
-        # Get the most recently used operation type's effect
-        for op in ["mul", "div", "add", "sub"]:
-            key = f"{self.name}:speed:{op}"
-            if key in self.rig_state._transform_effects:
-                effect = self.rig_state._transform_effects[key]
-                effect.in_duration_ms = duration_ms
-                effect.in_easing = easing
-                break
+    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformSpeedBuilder':
+        """Fade in over duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Create or get the effect for the last operation
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+
+        # Start the update loop if not already started
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
         return self
 
-    def hold(self, duration_ms: float, op_type: str = "add") -> 'TransformSpeedBuilder':
+    def hold(self, duration_ms: float) -> 'TransformSpeedBuilder':
         """Maintain for duration"""
-        for op in ["mul", "div", "add", "sub"]:
-            key = f"{self.name}:speed:{op}"
-            if key in self.rig_state._transform_effects:
-                effect = self.rig_state._transform_effects[key]
-                effect.hold_duration_ms = duration_ms
-                break
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Create or get the effect for the last operation
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.hold_duration_ms = duration_ms
+
+        # Start the update loop if not already started
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
         return self
 
     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformSpeedBuilder':
         """Revert to original state"""
-        for op in ["mul", "div", "add", "sub"]:
-            key = f"{self.name}:speed:{op}"
-            if key in self.rig_state._transform_effects:
-                effect = self.rig_state._transform_effects[key]
-                effect.out_duration_ms = duration_ms
-                effect.out_easing = easing
-                break
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Create or get the effect for the last operation
+        effect = self._get_or_create_effect(self._last_op_type)
+
+        # If no hold duration is set and we have fade-in, add instant hold
+        # This ensures: .over(300).revert(300) = fade in, then fade out
+        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
+            effect.hold_duration_ms = 0
+
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+
+        # Start the update loop if not already started
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
         return self
 
     @property
@@ -3187,6 +3233,15 @@ class TransformAccelBuilder:
         self.rig_state = rig_state
         self.name = name
         self._last_op_type: Optional[str] = None
+        self._started = False
+
+    def __del__(self):
+        """Auto-start when builder goes out of scope if not already started"""
+        try:
+            if not self._started and self._last_op_type is not None:
+                self.rig_state.start()
+        except:
+            pass
 
     def __call__(self, value: float) -> 'TransformAccelBuilder':
         """Shorthand for add operation (delta from base)"""
@@ -3206,12 +3261,19 @@ class TransformAccelBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
 
+    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:accel:{op_type}"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack(op_type)
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def mul(self, value: float) -> 'TransformAccelBuilder':
         """Multiply accel (default: replaces, use .stack() for multiple)"""
         stack = self._get_or_create_stack("mul")
         stack.add_operation(value)
         self._last_op_type = "mul"
-        self.rig_state.start()
         return self
 
     def div(self, value: float) -> 'TransformAccelBuilder':
@@ -3221,7 +3283,6 @@ class TransformAccelBuilder:
         stack = self._get_or_create_stack("div")
         stack.add_operation(1.0 / value)
         self._last_op_type = "div"
-        self.rig_state.start()
         return self
 
     def add(self, value: float) -> 'TransformAccelBuilder':
@@ -3229,7 +3290,6 @@ class TransformAccelBuilder:
         stack = self._get_or_create_stack("add")
         stack.add_operation(value)
         self._last_op_type = "add"
-        self.rig_state.start()
         return self
 
     def sub(self, value: float) -> 'TransformAccelBuilder':
@@ -3237,7 +3297,6 @@ class TransformAccelBuilder:
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-value)
         self._last_op_type = "sub"
-        self.rig_state.start()
         return self
 
     def stack(self, max_count: Optional[int] = None) -> 'TransformAccelBuilder':
@@ -3250,6 +3309,52 @@ class TransformAccelBuilder:
             self.rig_state._transform_stacks[key].max_stack_count = max_count
         return self
 
+    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformAccelBuilder':
+        """Fade in over duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def hold(self, duration_ms: float) -> 'TransformAccelBuilder':
+        """Maintain for duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.hold_duration_ms = duration_ms
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformAccelBuilder':
+        """Revert to original state"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+
+        # If no hold duration is set and we have fade-in, add instant hold
+        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
+            effect.hold_duration_ms = 0
+
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
 
 class TransformDirectionBuilder:
     """Builder for transform direction operations (rotation in degrees)"""
@@ -3257,6 +3362,15 @@ class TransformDirectionBuilder:
         self.rig_state = rig_state
         self.name = name
         self._last_op_type: Optional[str] = None
+        self._started = False
+
+    def __del__(self):
+        """Auto-start when builder goes out of scope if not already started"""
+        try:
+            if not self._started and self._last_op_type is not None:
+                self.rig_state.start()
+        except:
+            pass
 
     def __call__(self, degrees: float) -> 'TransformDirectionBuilder':
         """Shorthand for add operation (rotate by degrees)"""
@@ -3276,12 +3390,19 @@ class TransformDirectionBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
 
+    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:direction:{op_type}"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack(op_type)
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def add(self, degrees: float) -> 'TransformDirectionBuilder':
         """Rotate by degrees (default: replaces, use .stack() for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(degrees)
         self._last_op_type = "add"
-        self.rig_state.start()
         return self
 
     def sub(self, degrees: float) -> 'TransformDirectionBuilder':
@@ -3289,7 +3410,6 @@ class TransformDirectionBuilder:
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-degrees)
         self._last_op_type = "sub"
-        self.rig_state.start()
         return self
 
     def stack(self, max_count: Optional[int] = None) -> 'TransformDirectionBuilder':
@@ -3314,6 +3434,52 @@ class TransformDirectionBuilder:
         self.rig_state.start()
         return self
 
+    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformDirectionBuilder':
+        """Fade in over duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def hold(self, duration_ms: float) -> 'TransformDirectionBuilder':
+        """Maintain for duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.hold_duration_ms = duration_ms
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformDirectionBuilder':
+        """Revert to original state"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+
+        # If no hold duration is set and we have fade-in, add instant hold
+        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
+            effect.hold_duration_ms = 0
+
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
 
 class TransformPosBuilder:
     """Builder for transform position operations (offsets)"""
@@ -3321,6 +3487,15 @@ class TransformPosBuilder:
         self.rig_state = rig_state
         self.name = name
         self._last_op_type: Optional[str] = None
+        self._started = False
+
+    def __del__(self):
+        """Auto-start when builder goes out of scope if not already started"""
+        try:
+            if not self._started and self._last_op_type is not None:
+                self.rig_state.start()
+        except:
+            pass
 
     def __call__(self, x: float, y: float) -> 'TransformPosBuilder':
         """Shorthand for add operation (position offset)"""
@@ -3340,12 +3515,19 @@ class TransformPosBuilder:
                 self.rig_state._transform_order.append(key)
         return self.rig_state._transform_stacks[key]
 
+    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
+        """Get or create the transform effect wrapper"""
+        key = f"{self.name}:pos:{op_type}"
+        if key not in self.rig_state._transform_effects:
+            stack = self._get_or_create_stack(op_type)
+            self.rig_state._transform_effects[key] = TransformEffect(stack)
+        return self.rig_state._transform_effects[key]
+
     def add(self, x: float, y: float) -> 'TransformPosBuilder':
         """Add position offset (default: replaces, use .stack() for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(Vec2(x, y))
         self._last_op_type = "add"
-        self.rig_state.start()
         return self
 
     def sub(self, x: float, y: float) -> 'TransformPosBuilder':
@@ -3353,7 +3535,6 @@ class TransformPosBuilder:
         stack = self._get_or_create_stack("sub")
         stack.add_operation(Vec2(-x, -y))
         self._last_op_type = "sub"
-        self.rig_state.start()
         return self
 
     def stack(self, max_count: Optional[int] = None) -> 'TransformPosBuilder':
@@ -3375,6 +3556,52 @@ class TransformPosBuilder:
         stack = self._get_or_create_stack("add")
         stack.values = [Vec2(x, y)]
         self.rig_state.start()
+        return self
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformPosBuilder':
+        """Fade in over duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def hold(self, duration_ms: float) -> 'TransformPosBuilder':
+        """Maintain for duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.hold_duration_ms = duration_ms
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformPosBuilder':
+        """Revert to original state"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+
+        # If no hold duration is set and we have fade-in, add instant hold
+        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
+            effect.hold_duration_ms = 0
+
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
         return self
 
 
@@ -4003,6 +4230,9 @@ class RigState:
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
 
+        # Position offset tracking (for transforms)
+        self._last_position_offset = Vec2(0, 0)
+
     def transform(self, name: str) -> 'TransformBuilder':
         """Create or access a named transform entity (PRD 7)
 
@@ -4401,12 +4631,16 @@ class RigState:
         This takes the current computed values (base + effects + forces) and
         makes them the new base values, then clears all effects and forces.
 
+        For position transforms: The offset has already been applied to the cursor
+        via delta tracking in _update_frame(), so we just clear the transforms
+        and reset tracking.
+
         Examples:
             rig.speed(10)
             rig.modifier("boost").speed.mul(2)  # computed speed = 20
             rig.bake()                          # base speed now 20, modifier cleared
         """
-        # Compute final values
+        # Compute final values for speed/accel/direction
         final_speed = self._get_effective_speed()
         final_accel = self._get_effective_accel()
         final_direction = self._get_effective_direction()
@@ -4415,6 +4649,11 @@ class RigState:
         self._speed = final_speed
         self._accel = final_accel
         self._direction = final_direction
+
+        # Reset position offset tracking
+        # (The cursor is already at the offset position from delta tracking,
+        #  so we just reset to prepare for future transforms)
+        self._last_position_offset = Vec2(0, 0)
 
         # Clear all effects and forces
         self._effects.clear()
@@ -4632,6 +4871,14 @@ class RigState:
         if len(self._pending_wait_jobs) > 0:
             return False
 
+        # Check for active transforms (PRD 7)
+        if len(self._transform_stacks) > 0:
+            return False
+
+        # Check for active transform effects (lifecycle wrappers)
+        if len(self._transform_effects) > 0:
+            return False
+
         return True
 
     def _update_frame(self) -> None:
@@ -4673,12 +4920,17 @@ class RigState:
             if transform_effect.phase == "not_started":
                 transform_effect.start()
 
-            # Update lifecycle state
-            transform_effect.update(dt)
+            # Update lifecycle state (uses perf_counter internally, no dt needed)
+            transform_effect.update()
 
-            # Remove completed effects
+            # Remove completed effects and their underlying stacks
             if transform_effect.complete:
                 del self._transform_effects[key]
+                # Also remove the transform stack so it stops being applied
+                if key in self._transform_stacks:
+                    del self._transform_stacks[key]
+                if key in self._transform_order:
+                    self._transform_order.remove(key)
 
         # Update effects (temporary property modifications)
         for effect in self._effects[:]:
@@ -4763,17 +5015,23 @@ class RigState:
         # Apply subpixel adjustment to prevent rounding drift
         dx_int, dy_int = self._subpixel_adjuster.adjust(position_delta.x, position_delta.y)
 
-        # Move the cursor only if we have integer pixels to move
-        if dx_int != 0 or dy_int != 0:
-            current_x, current_y = ctrl.mouse_pos()
-            new_x = current_x + dx_int
-            new_y = current_y + dy_int
+        # Get current position
+        current_x, current_y = ctrl.mouse_pos()
 
-            # Apply position transforms (static offsets) to final position
-            position_offset = self._get_position_offset()
-            new_x += int(position_offset.x)
-            new_y += int(position_offset.y)
+        # Calculate new position from velocity
+        new_x = current_x + dx_int
+        new_y = current_y + dy_int
 
+        # Apply position transforms (static offsets)
+        # Only apply the CHANGE in offset since last frame
+        position_offset = self._get_position_offset()
+        offset_delta = position_offset - self._last_position_offset
+        new_x += int(offset_delta.x)
+        new_y += int(offset_delta.y)
+        self._last_position_offset = position_offset
+
+        # Move the cursor if position changed (either from velocity or offset)
+        if new_x != current_x or new_y != current_y:
             _mouse_move(new_x, new_y)
 
         # Auto-stop if completely idle

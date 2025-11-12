@@ -108,7 +108,7 @@ class Actions:
     def mouse_rig_boost_instant():
         """Instant speed boost, hold 2s, instant revert"""
         rig = actions.user.mouse_rig()
-        rig.speed.by(10).hold(2000).revert()
+        rig.speed(10)
 
     def mouse_rig_boost_fade():
         """Fade in boost over 300ms, hold 2s, fade out over 500ms"""
@@ -127,7 +127,7 @@ class Actions:
     def mouse_rig_sprint_on():
         """Enable sprint mode (4x speed) - replaces on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.transform("sprint").speed.mul(4)
+        rig.transform("sprint").speed.mul(2).over(1000).revert(1000)
 
     def mouse_rig_sprint_off():
         """Disable sprint mode"""
@@ -161,7 +161,7 @@ class Actions:
     def mouse_rig_offset_simple():
         """Simple position offset using shorthand syntax"""
         rig = actions.user.mouse_rig()
-        rig.transform("wobble").pos(5, 5)
+        rig.transform("wobble").pos(5, 5).stack()
 
     def mouse_rig_offset_reset():
         """Reset position offset"""
@@ -175,7 +175,7 @@ class Actions:
     def mouse_rig_boost_pad():
         """Boost pad that stacks when hit multiple times (unlimited)"""
         rig = actions.user.mouse_rig()
-        rig.transform("boost_pad").speed.add(10).stack()
+        rig.transform("boost_pad").speed.add(2).stack()
 
     def mouse_rig_boost_pad_max():
         """Boost pad with max 3 stacks (max +30)"""
