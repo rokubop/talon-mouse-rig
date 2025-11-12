@@ -233,7 +233,7 @@ class Actions:
     def mouse_rig_wind_on():
         """Wind gust from the right"""
         rig = actions.user.mouse_rig()
-        rig.force("wind").velocity(10, 0)
+        rig.force("wind").direction(1, 0).speed(10)
 
     def mouse_rig_wind_smooth():
         """Wind with smooth fade"""
@@ -285,7 +285,7 @@ class Actions:
     def mouse_rig_pos_center():
         """Glide to screen center"""
         rig = actions.user.mouse_rig()
-        rig.pos.to(960, 540).over(1000, "ease_in_out")
+        rig.pos.to(960, 540).over(350, "ease_in_out")
 
     def mouse_rig_nudge_right():
         """Nudge position right"""

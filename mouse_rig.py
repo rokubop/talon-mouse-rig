@@ -1228,7 +1228,8 @@ class Force:
                 self.phase = "in"
                 self.multiplier = 0.0  # Start from 0 and fade in
             else:
-                self.phase = "hold" if self.hold_duration_ms is not None else "complete"
+                # No fade-in, go straight to hold (indefinite by default)
+                self.phase = "hold"
                 self.multiplier = 1.0
 
     def update(self, dt: float) -> Vec2:
@@ -3927,6 +3928,26 @@ class NamedForceBuilder:
         """Set direction for this named force"""
         return NamedForceDirectionBuilder(self.rig_state, self.name, x, y)
 
+    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceBuilder':
+        """Fade in the force over duration"""
+        force = self._get_force()
+        force.in_duration_ms = duration_ms
+        force.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'NamedForceBuilder':
+        """Hold the force at full strength for duration"""
+        force = self._get_force()
+        force.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceBuilder':
+        """Fade out the force over duration"""
+        force = self._get_force()
+        force.out_duration_ms = duration_ms
+        force.out_easing = easing
+        return self
+
     def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Stop the named force
 
@@ -3964,6 +3985,26 @@ class NamedForceSpeedController:
         force = self._get_force()
         force._speed = value
         self.rig_state.start()  # Ensure ticking is active
+        return self
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceSpeedController':
+        """Fade in the force over duration"""
+        force = self._get_force()
+        force.in_duration_ms = duration_ms
+        force.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'NamedForceSpeedController':
+        """Hold the force at full strength for duration"""
+        force = self._get_force()
+        force.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceSpeedController':
+        """Fade out the force over duration"""
+        force = self._get_force()
+        force.out_duration_ms = duration_ms
+        force.out_easing = easing
         return self
 
     def by(self, delta: float) -> 'NamedForceSpeedController':
@@ -4011,6 +4052,26 @@ class NamedForceAccelController:
         self.rig_state.start()  # Ensure ticking is active
         return self
 
+    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceAccelController':
+        """Fade in the force over duration"""
+        force = self._get_force()
+        force.in_duration_ms = duration_ms
+        force.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'NamedForceAccelController':
+        """Hold the force at full strength for duration"""
+        force = self._get_force()
+        force.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceAccelController':
+        """Fade out the force over duration"""
+        force = self._get_force()
+        force.out_duration_ms = duration_ms
+        force.out_easing = easing
+        return self
+
     def by(self, delta: float) -> 'NamedForceAccelController':
         """ERROR: Forces cannot use .by() - use rig.modifier() for relative modifiers"""
         raise ValueError(
@@ -4053,6 +4114,57 @@ class NamedForceDirectionBuilder:
             self.rig_state.start()  # Ensure ticking is active
         except:
             pass
+
+    @property
+    def speed(self) -> 'NamedForceSpeedController':
+        """Access speed property for chaining"""
+        # Set direction immediately
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+
+        return NamedForceSpeedController(self.rig_state, self.name)
+
+    @property
+    def accel(self) -> 'NamedForceAccelController':
+        """Access accel property for chaining"""
+        # Set direction immediately
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+
+        return NamedForceAccelController(self.rig_state, self.name)
+
+    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceDirectionBuilder':
+        """Fade in the force over duration"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+        force.in_duration_ms = duration_ms
+        force.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> 'NamedForceDirectionBuilder':
+        """Hold the force at full strength for duration"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+        force.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceDirectionBuilder':
+        """Fade out the force over duration"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+        force.out_duration_ms = duration_ms
+        force.out_easing = easing
+        return self
 
 class NamedModifierNamespace:
     """Namespace for rig.modifier operations"""
