@@ -37,7 +37,6 @@ class PropertyEffectBuilder:
         self._out_easing: str = "linear"
 
         # Callback support
-        self._wait_duration_ms: Optional[float] = None
         self._then_callback: Optional[Callable] = None
 
         # Named modifier
@@ -457,7 +456,6 @@ class DirectionByBuilder:
         self._duration_ms: Optional[float] = None
         self._use_rate: bool = False
         self._rate_degrees_per_second: Optional[float] = None
-        self._wait_duration_ms: Optional[float] = None
 
         # Temporary effect support
         self._hold_duration_ms: Optional[float] = None
@@ -539,22 +537,12 @@ class DirectionByBuilder:
             self.rig_state._direction_transition = None
             self.rig_state.start()  # Ensure ticking is active
 
-            # Execute callback immediately or after wait duration
-            if self._wait_duration_ms is not None and self._then_callback:
-                job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
-                self.rig_state._pending_wait_jobs.append(job)
-            elif self._then_callback:
+            # Execute callback immediately
+            if self._then_callback:
                 self._then_callback()
 
     def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionByBuilder':
         """Rotate by degrees over time"""
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .over() after .wait() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
-                "  - For smooth rotation over time: rig.direction.by(45).over(500).then(callback)"
-            )
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
@@ -562,29 +550,9 @@ class DirectionByBuilder:
 
     def rate(self, degrees_per_second: float) -> 'DirectionByBuilder':
         """Rotate by degrees at specified rate"""
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .rate() after .wait() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
-                "  - For smooth rotation at rate: rig.direction.by(45).rate(90).then(callback)"
-            )
         self._should_execute_instant = False
         self._use_rate = True
         self._rate_degrees_per_second = degrees_per_second
-        return self
-
-    def wait(self, duration_ms: float) -> 'DirectionByBuilder':
-        """Rotate immediately and wait for duration before executing .then() callback"""
-        if self._duration_ms is not None or self._use_rate:
-            raise ValueError(
-                "Cannot use .wait() after .over() or .rate() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant rotation with delay: rig.direction.by(45).wait(500).then(callback)\n"
-                "  - For smooth rotation over time: rig.direction.by(45).over(500).then(callback)\n"
-                "  - For smooth rotation at rate: rig.direction.by(45).rate(90).then(callback)"
-            )
-        self._wait_duration_ms = duration_ms
         return self
 
     def hold(self, duration_ms: float) -> 'DirectionByBuilder':
@@ -611,14 +579,13 @@ class DirectionByBuilder:
             has_timing = (
                 self._duration_ms is not None or
                 self._use_rate or
-                self._wait_duration_ms is not None or
                 self._hold_duration_ms is not None or
                 self._out_duration_ms is not None
             )
 
             if has_timing:
                 raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .rate, .wait, .hold, .revert).\n\n"
+                    f"Cannot chain .{name} after using timing methods (.over, .rate, .hold, .revert).\n\n"
                     "Use separate statements:\n"
                     f"  rig.direction.by(...).over(...)\n"
                     f"  rig.{name}(...)"
@@ -657,11 +624,11 @@ class DirectionController:
         return DirectionBuilder(self.rig_state, Vec2(x, y), instant=True)
 
     def to(self, x: float, y: float) -> DirectionBuilder:
-        """Set direction to absolute vector (can use with .over(), .rate(), .wait(), .then())"""
+        """Set direction to absolute vector (can use with .over(), .rate(), .then())"""
         return DirectionBuilder(self.rig_state, Vec2(x, y), instant=True)
 
     def by(self, degrees: float) -> DirectionByBuilder:
-        """Rotate by relative angle in degrees (can use with .over(), .rate(), .wait(), .then())
+        """Rotate by relative angle in degrees (can use with .over(), .rate(), .then())
 
         Positive = clockwise, Negative = counter-clockwise
 
@@ -698,7 +665,6 @@ class PositionToBuilder:
         self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
-        self._wait_duration_ms: Optional[float] = None
         self._hold_duration_ms: Optional[float] = None
         self._revert_duration_ms: Optional[float] = None
         self._revert_easing: str = "linear"
@@ -711,31 +677,12 @@ class PositionToBuilder:
 
     def over(self, duration_ms: float, easing: str = None) -> 'PositionToBuilder':
         """Glide to position over time"""
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .over() after .wait()\n"
-                ".wait() is for instant actions with a delay before the callback.\n"
-                ".over() is for smooth transitions over time.\n\n"
-                "Valid patterns:\n"
-                "  - Instant move, wait, then callback: rig.pos.to(x, y).wait(500).then(callback)\n"
-                "  - Glide over time, then callback:    rig.pos.to(x, y).over(2000).then(callback)\n\n"
-                "Did you mean: rig.pos.to(x, y).over(duration)?"
-            )
         # Disable instant execution since we're doing a transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         if easing is not None:
             self._easing = easing
         self._current_stage = "after_forward"
-        return self
-
-    def wait(self, duration_ms: float) -> 'PositionToBuilder':
-        """Add delay before executing .then() callback
-
-        - After instant move: snap to position, wait, then callback
-        - After .over(): glide over time, then wait additional duration, then callback
-        """
-        self._wait_duration_ms = duration_ms
         return self
 
     def ease(self, easing_type: str = DEFAULT_EASING) -> 'PositionToBuilder':
@@ -871,12 +818,8 @@ class PositionToBuilder:
                 # Instant move
                 ctrl.mouse_move(int(self.x), int(self.y))
 
-                # Execute callback immediately or after wait duration
-                if self._wait_duration_ms is not None and self._after_forward_callback:
-                    # Wait for duration, then execute callback
-                    job = cron.after(f"{self._wait_duration_ms}ms", self._after_forward_callback)
-                    self.rig_state._pending_wait_jobs.append(job)
-                elif self._after_forward_callback:
+                # Execute callback immediately
+                if self._after_forward_callback:
                     self._after_forward_callback()
         except:
             pass  # Ignore errors during cleanup
@@ -888,7 +831,6 @@ class PositionToBuilder:
             # Check if any timing has been configured
             has_timing = (
                 self._duration_ms is not None or
-                self._wait_duration_ms is not None or
                 self._hold_duration_ms is not None or
                 self._revert_duration_ms is not None
             )
@@ -927,7 +869,7 @@ class PositionToBuilder:
         raise AttributeError(_error_unknown_builder_attribute(
             'PositionToBuilder',
             name,
-            'over, wait, hold, revert, then'
+            'over, hold, revert, then'
         ))
 
 
@@ -941,7 +883,6 @@ class PositionByBuilder:
         self._easing = "ease_in_out"
         self._duration_ms = None
         self._should_execute_instant = instant
-        self._wait_duration_ms: Optional[float] = None
         self._hold_duration_ms: Optional[float] = None
         self._revert_duration_ms: Optional[float] = None
         self._revert_easing: str = "linear"
@@ -954,31 +895,12 @@ class PositionByBuilder:
 
     def over(self, duration_ms: float, easing: str = None) -> 'PositionByBuilder':
         """Glide by offset over time"""
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .over() after .wait()\n"
-                ".wait() is for instant actions with a delay before the callback.\n"
-                ".over() is for smooth transitions over time.\n\n"
-                "Valid patterns:\n"
-                "  - Instant move, wait, then callback: rig.pos.by(dx, dy).wait(500).then(callback)\n"
-                "  - Glide over time, then callback:    rig.pos.by(dx, dy).over(2000).then(callback)\n\n"
-                "Did you mean: rig.pos.by(dx, dy).over(duration)?"
-            )
         # Disable instant execution since we're doing a transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         if easing is not None:
             self._easing = easing
         self._current_stage = "after_forward"
-        return self
-
-    def wait(self, duration_ms: float) -> 'PositionByBuilder':
-        """Add delay before executing .then() callback
-
-        - After instant move: apply offset, wait, then callback
-        - After .over(): glide over time, then wait additional duration, then callback
-        """
-        self._wait_duration_ms = duration_ms
         return self
 
     def ease(self, easing_type: str = DEFAULT_EASING) -> 'PositionByBuilder':
@@ -1114,12 +1036,8 @@ class PositionByBuilder:
                 current_x, current_y = ctrl.mouse_pos()
                 ctrl.mouse_move(int(current_x + self.dx), int(current_y + self.dy))
 
-                # Execute callback immediately or after wait duration
-                if self._wait_duration_ms is not None and self._after_forward_callback:
-                    # Wait for duration, then execute callback
-                    job = cron.after(f"{self._wait_duration_ms}ms", self._after_forward_callback)
-                    self.rig_state._pending_wait_jobs.append(job)
-                elif self._after_forward_callback:
+                # Execute callback immediately
+                if self._after_forward_callback:
                     self._after_forward_callback()
         except:
             pass  # Ignore errors during cleanup
@@ -1131,14 +1049,13 @@ class PositionByBuilder:
             # Check if any timing has been configured
             has_timing = (
                 self._duration_ms is not None or
-                self._wait_duration_ms is not None or
                 self._hold_duration_ms is not None or
                 self._revert_duration_ms is not None
             )
 
             if has_timing:
                 raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .wait, .hold, .revert).\n\n"
+                    f"Cannot chain .{name} after using timing methods (.over, .hold, .revert).\n\n"
                     "Use separate statements:\n"
                     f"  rig.pos.by(...).over(...)\n"
                     f"  rig.{name}(...)"
@@ -1170,7 +1087,7 @@ class PositionByBuilder:
         raise AttributeError(_error_unknown_builder_attribute(
             'PositionByBuilder',
             name,
-            'over, wait, hold, revert, then'
+            'over, hold, revert, then'
         ))
 
 
@@ -1188,7 +1105,6 @@ class SpeedBuilder:
         self._should_execute_instant = instant
         self._then_callback: Optional[Callable] = None
         self._duration_ms: Optional[float] = None
-        self._wait_duration_ms: Optional[float] = None
 
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
@@ -1227,37 +1143,14 @@ class SpeedBuilder:
             self.rig_state._brake_transition = None
             self.rig_state.start()  # Ensure ticking is active
 
-            # Execute callback immediately or after wait duration
-            if self._wait_duration_ms is not None and self._then_callback:
-                # Wait for duration, then execute callback
-                job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
-                self.rig_state._pending_wait_jobs.append(job)
-            elif self._then_callback:
+            # Execute callback immediately
+            if self._then_callback:
                 self._then_callback()
 
     def over(self, duration_ms: float) -> 'SpeedBuilder':
         """Ramp to target speed over time"""
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .over() after .wait() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant change with delay: rig.speed(10).wait(500).then(callback)\n"
-                "  - For transition over time: rig.speed(10).over(500).then(callback)"
-            )
         self._should_execute_instant = False
         self._duration_ms = duration_ms
-        return self
-
-    def wait(self, duration_ms: float) -> 'SpeedBuilder':
-        """Set speed immediately and wait for duration before executing .then() callback"""
-        if self._duration_ms is not None:
-            raise ValueError(
-                "Cannot use .wait() after .over() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant change with delay: rig.speed(10).wait(500).then(callback)\n"
-                "  - For transition over time: rig.speed(10).over(500).then(callback)"
-            )
-        self._wait_duration_ms = duration_ms
         return self
 
     def ease(self, easing_type: str = DEFAULT_EASING) -> 'SpeedBuilder':
