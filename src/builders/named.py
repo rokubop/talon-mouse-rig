@@ -1,12 +1,117 @@
 """Named entity builders for PRD 8 forces"""
 
 import time
-from typing import Optional, Callable, TYPE_CHECKING
+from typing import Optional, Callable, TYPE_CHECKING, TypeVar, Generic
 from ..core import Vec2
 from ..effects import Force
 
 if TYPE_CHECKING:
     from ..state import RigState
+
+# Type variable for self-return types in base class
+T = TypeVar('T', bound='ForcePropertyController')
+
+
+class ForcePropertyController(Generic[T]):
+    """
+    Generic base class for force property controllers (speed/accel).
+    Handles all operations (to/by/mul/div) and lifecycle methods (over/hold/revert).
+    Subclasses only need to specify _property_name.
+    """
+    # Override in subclasses: "speed" or "accel"
+    _property_name: str = None
+
+    def __init__(self, rig_state: 'RigState', name: str):
+        self.rig_state = rig_state
+        self.name = name
+
+    def _get_force(self) -> Force:
+        """Get or create the Force object"""
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+        return self.rig_state._named_forces[self.name]
+
+    def _get_current_value(self) -> float:
+        """Get the current property value from the force"""
+        force = self._get_force()
+        if self._property_name == "speed":
+            return force._speed
+        elif self._property_name == "accel":
+            return force._accel
+        else:
+            raise ValueError(f"Unknown property: {self._property_name}")
+
+    def _set_value(self, value: float) -> None:
+        """Set the property value on the force"""
+        force = self._get_force()
+        if self._property_name == "speed":
+            force._speed = value
+        elif self._property_name == "accel":
+            force._accel = value
+        else:
+            raise ValueError(f"Unknown property: {self._property_name}")
+        self.rig_state.start()  # Ensure ticking is active
+
+    def __call__(self, value: float) -> T:
+        """Set property directly (absolute)"""
+        return self.to(value)
+
+    def to(self, value: float) -> T:
+        """Set property to absolute value"""
+        self._set_value(value)
+        return self
+
+    def by(self, delta: float) -> T:
+        """Add delta to current property value"""
+        current = self._get_current_value()
+        self._set_value(current + delta)
+        return self
+
+    def mul(self, factor: float) -> T:
+        """Multiply current property value by factor"""
+        current = self._get_current_value()
+        self._set_value(current * factor)
+        return self
+
+    def div(self, divisor: float) -> T:
+        """Divide current property value by divisor"""
+        if abs(divisor) < 1e-10:
+            raise ValueError(f"Cannot divide {self._property_name} by zero")
+        current = self._get_current_value()
+        self._set_value(current / divisor)
+        return self
+
+    def add(self, delta: float) -> T:
+        """Add delta to current property value (alias for .by())"""
+        return self.by(delta)
+
+    def sub(self, delta: float) -> T:
+        """Subtract from current property value"""
+        return self.by(-delta)
+
+    def subtract(self, delta: float) -> T:
+        """Subtract from current property value (alias for .sub())"""
+        return self.sub(delta)
+
+    def over(self, duration_ms: float, easing: str = "linear") -> T:
+        """Fade in the force over duration"""
+        force = self._get_force()
+        force.in_duration_ms = duration_ms
+        force.in_easing = easing
+        return self
+
+    def hold(self, duration_ms: float) -> T:
+        """Hold the force at full strength for duration"""
+        force = self._get_force()
+        force.hold_duration_ms = duration_ms
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> T:
+        """Fade out the force over duration"""
+        force = self._get_force()
+        force.out_duration_ms = duration_ms
+        force.out_easing = easing
+        return self
 
 
 class NamedForceBuilder:
@@ -77,135 +182,14 @@ class NamedForceBuilder:
 
 
 
-class NamedForceSpeedController:
-    """Speed controller for named forces - only allows absolute setters"""
-    def __init__(self, rig_state: 'RigState', name: str):
-        self.rig_state = rig_state
-        self.name = name
-
-    def _get_force(self) -> Force:
-        """Get or create the Force object"""
-        if self.name not in self.rig_state._named_forces:
-            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
-        return self.rig_state._named_forces[self.name]
-
-    def __call__(self, value: float) -> 'NamedForceSpeedController':
-        """Set speed directly (absolute)"""
-        return self.to(value)
-
-    def to(self, value: float) -> 'NamedForceSpeedController':
-        """Set speed to absolute value"""
-        force = self._get_force()
-        force._speed = value
-        self.rig_state.start()  # Ensure ticking is active
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceSpeedController':
-        """Fade in the force over duration"""
-        force = self._get_force()
-        force.in_duration_ms = duration_ms
-        force.in_easing = easing
-        return self
-
-    def hold(self, duration_ms: float) -> 'NamedForceSpeedController':
-        """Hold the force at full strength for duration"""
-        force = self._get_force()
-        force.hold_duration_ms = duration_ms
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceSpeedController':
-        """Fade out the force over duration"""
-        force = self._get_force()
-        force.out_duration_ms = duration_ms
-        force.out_easing = easing
-        return self
-
-    def by(self, delta: float) -> 'NamedForceSpeedController':
-        """ERROR: Forces cannot use .by() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.by)."
-        )
-
-    def mul(self, factor: float) -> 'NamedForceSpeedController':
-        """ERROR: Forces cannot use .mul() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.mul)."
-        )
-
-    def div(self, divisor: float) -> 'NamedForceSpeedController':
-        """ERROR: Forces cannot use .div() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.div)."
-        )
+class NamedForceSpeedController(ForcePropertyController['NamedForceSpeedController']):
+    """Speed controller for named forces - supports all operations (to/by/mul/div)"""
+    _property_name = "speed"
 
 
-
-class NamedForceAccelController:
-    """Accel controller for named forces - only allows absolute setters"""
-    def __init__(self, rig_state: 'RigState', name: str):
-        self.rig_state = rig_state
-        self.name = name
-
-    def _get_force(self) -> Force:
-        """Get or create the Force object"""
-        if self.name not in self.rig_state._named_forces:
-            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
-        return self.rig_state._named_forces[self.name]
-
-    def __call__(self, value: float) -> 'NamedForceAccelController':
-        """Set accel directly (absolute)"""
-        return self.to(value)
-
-    def to(self, value: float) -> 'NamedForceAccelController':
-        """Set accel to absolute value"""
-        force = self._get_force()
-        force._accel = value
-        self.rig_state.start()  # Ensure ticking is active
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceAccelController':
-        """Fade in the force over duration"""
-        force = self._get_force()
-        force.in_duration_ms = duration_ms
-        force.in_easing = easing
-        return self
-
-    def hold(self, duration_ms: float) -> 'NamedForceAccelController':
-        """Hold the force at full strength for duration"""
-        force = self._get_force()
-        force.hold_duration_ms = duration_ms
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceAccelController':
-        """Fade out the force over duration"""
-        force = self._get_force()
-        force.out_duration_ms = duration_ms
-        force.out_easing = easing
-        return self
-
-    def by(self, delta: float) -> 'NamedForceAccelController':
-        """ERROR: Forces cannot use .by() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.by)."
-        )
-
-    def mul(self, factor: float) -> 'NamedForceAccelController':
-        """ERROR: Forces cannot use .mul() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.mul)."
-        )
-
-    def div(self, divisor: float) -> 'NamedForceAccelController':
-        """ERROR: Forces cannot use .div() - use rig.modifier() for relative modifiers"""
-        raise ValueError(
-            f"Forces can only use absolute setters (.to, direct values). "
-            f"Use rig.modifier('{self.name}') for relative modifiers (.div)."
-        )
+class NamedForceAccelController(ForcePropertyController['NamedForceAccelController']):
+    """Accel controller for named forces - supports all operations (to/by/mul/div)"""
+    _property_name = "accel"
 
 
 
