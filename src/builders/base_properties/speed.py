@@ -89,13 +89,9 @@ class SpeedController:
         """Add delta to current speed"""
         return PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
 
-    def subtract(self, delta: float) -> PropertyEffectBuilder:
+    def sub(self, delta: float) -> PropertyEffectBuilder:
         """Subtract from current speed"""
         return PropertyEffectBuilder(self.rig_state, "speed", "by", -delta)
-
-    def sub(self, delta: float) -> PropertyEffectBuilder:
-        """Subtract from current speed (shorthand for subtract)"""
-        return self.subtract(delta)
 
     def mul(self, factor: float) -> PropertyEffectBuilder:
         """Multiply speed by factor"""

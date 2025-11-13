@@ -23,9 +23,17 @@ class AccelController:
         """Set accel to absolute value (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "accel", "to", value)
 
-    def by(self, delta: float) -> PropertyEffectBuilder:
-        """Add delta to accel (can use with .over(), .hold(), .revert())"""
+    def add(self, delta: float) -> PropertyEffectBuilder:
+        """Add delta to current accel"""
         return PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+
+    def by(self, delta: float) -> PropertyEffectBuilder:
+        """Add delta to accel (alias for .add())"""
+        return PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+
+    def sub(self, delta: float) -> PropertyEffectBuilder:
+        """Subtract from current accel"""
+        return PropertyEffectBuilder(self.rig_state, "accel", "by", -delta)
 
     def mul(self, factor: float) -> PropertyEffectBuilder:
         """Multiply accel by factor (can use with .over(), .hold(), .revert())"""

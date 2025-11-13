@@ -89,10 +89,6 @@ class ForcePropertyController(Generic[T]):
         """Subtract from current property value"""
         return self.by(-delta)
 
-    def subtract(self, delta: float) -> T:
-        """Subtract from current property value (alias for .sub())"""
-        return self.sub(delta)
-
     def over(self, duration_ms: float, easing: str = "linear") -> T:
         """Fade in the force over duration"""
         force = self._get_force()
