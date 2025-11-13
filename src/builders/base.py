@@ -1305,7 +1305,8 @@ class SpeedBuilder:
 
 
 
-class SpeedAdjustBuilder:
+class SpeedController:
+    """Controller for speed operations (accessed via rig.speed)"""
     """Builder for speed.add() and speed.subtract() operations"""
     def __init__(self, rig_state: 'RigState', delta: float, instant: bool = False):
         self.rig_state = rig_state
@@ -1627,32 +1628,31 @@ class SpeedController:
         """Set speed instantly or return builder for .over()"""
         return SpeedBuilder(self.rig_state, value, instant=True)
 
-    def add(self, delta: float) -> SpeedAdjustBuilder:
-        """Add to current speed (legacy - use .by() for new code)"""
-        return SpeedAdjustBuilder(self.rig_state, delta, instant=True)
+    def add(self, delta: float) -> 'PropertyEffectBuilder':
+        """Add to current speed (alias for .by())"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
 
-    def subtract(self, delta: float) -> SpeedAdjustBuilder:
-        """Subtract from current speed (legacy - use .by() with negative for new code)"""
-        return self.add(-delta)
+    def subtract(self, delta: float) -> 'PropertyEffectBuilder':
+        """Subtract from current speed"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "by", -delta)
 
-    def sub(self, delta: float) -> SpeedAdjustBuilder:
+    def sub(self, delta: float) -> 'PropertyEffectBuilder':
         """Subtract from current speed (shorthand for subtract)"""
         return self.subtract(delta)
 
-    def multiply(self, factor: float) -> SpeedMultiplyBuilder:
-        """Multiply current speed by factor (legacy - use .mul() for new code)"""
-        return SpeedMultiplyBuilder(self.rig_state, factor, instant=True)
+    def multiply(self, factor: float) -> 'PropertyEffectBuilder':
+        """Multiply current speed by factor (alias for .mul())"""
+        return PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
 
     def mul(self, factor: float) -> 'PropertyEffectBuilder':
         """Multiply speed by factor (can use with .over(), .hold(), .revert())"""
         return PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
 
-    def divide(self, divisor: float) -> SpeedDivideBuilder:
-        """Divide current speed by divisor (legacy - use .div() for new code)"""
+    def divide(self, divisor: float) -> 'PropertyEffectBuilder':
+        """Divide current speed by divisor (alias for .div())"""
         if abs(divisor) < 1e-10:
             raise ValueError("Cannot divide speed by zero")
-
-        return SpeedDivideBuilder(self.rig_state, divisor, instant=True)
+        return PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
 
     def div(self, divisor: float) -> 'PropertyEffectBuilder':
         """Divide speed by divisor (can use with .over(), .hold(), .revert())"""
