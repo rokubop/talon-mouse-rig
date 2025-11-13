@@ -1,4 +1,4 @@
-"""Named entity builders for PRD 8 forces"""
+"""Force builders for PRD 8 - independent velocity sources"""
 
 import time
 from typing import Optional, Callable, TYPE_CHECKING, TypeVar, Generic

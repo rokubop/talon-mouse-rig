@@ -18,7 +18,7 @@ from .builders.base import (
     SpeedController, AccelController, DirectionController, DirectionByBuilder
 )
 from .builders.effect import EffectBuilder
-from .builders.named import NamedForceNamespace, NamedForceBuilder
+from .builders.force import NamedForceNamespace, NamedForceBuilder
 
 class RigState:
     """Core state for the mouse rig"""
