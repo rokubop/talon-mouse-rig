@@ -2,12 +2,13 @@
 
 from typing import TYPE_CHECKING
 from .shared import PropertyEffectBuilder
+from ..contracts import PropertyOperationsContract
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class AccelController:
+class AccelController(PropertyOperationsContract['PropertyEffectBuilder']):
     """Controller for acceleration operations (accessed via rig.accel)"""
     def __init__(self, rig_state: 'RigState'):
         self.rig_state = rig_state

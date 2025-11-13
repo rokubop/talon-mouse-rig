@@ -8,6 +8,7 @@ from ...core import (
     Vec2, DEFAULT_EASING, PositionTransition,
     _error_unknown_builder_attribute
 )
+from ..contracts import TimingMethodsContract
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -27,7 +28,7 @@ class PositionController:
         return PositionBuilder(self.rig_state, dx, dy, mode="relative", instant=True)
 
 
-class PositionBuilder:
+class PositionBuilder(TimingMethodsContract['PositionBuilder']):
     """
     Unified builder for position operations - handles both absolute (.to()) and relative (.by()).
 

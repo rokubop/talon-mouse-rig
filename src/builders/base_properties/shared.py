@@ -2,12 +2,13 @@
 
 import time
 from typing import Optional, Callable, Union, TYPE_CHECKING
+from ..contracts import TimingMethodsContract
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class PropertyEffectBuilder:
+class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
     """
     Universal builder for property effects supporting both permanent (.over())
     and temporary (.revert()/.hold()) modifications.

@@ -3,6 +3,7 @@
 from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic
 from ..core import Vec2
 from ..effects import EffectStack, EffectLifecycle
+from .contracts import PropertyOperationsContract
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
 T = TypeVar('T', bound='EffectBuilderBase')
 
 
-class EffectBuilderBase(Generic[T]):
+class EffectBuilderBase(PropertyOperationsContract[T]):
     """
     Base class for all effect property builders.
     Consolidates shared implementation for operations and timing methods.

@@ -9,12 +9,13 @@ from ...core import (
     _error_unknown_builder_attribute
 )
 from ...effects import DirectionEffect
+from ..contracts import TimingMethodsContract
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class DirectionBuilder:
+class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
     """Builder for direction operations with .over() support"""
     def __init__(self, rig_state: 'RigState', target_direction: Vec2, instant: bool = False):
         self.rig_state = rig_state
@@ -151,7 +152,7 @@ class DirectionBuilder:
         raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, rate, then'))
 
 
-class DirectionByBuilder:
+class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
     """Builder for direction.by(degrees) - relative rotation"""
     def __init__(self, rig_state: 'RigState', degrees: float, instant: bool = False):
         self.rig_state = rig_state
@@ -336,7 +337,7 @@ class DirectionController:
         return DirectionBuilder(self.rig_state, Vec2(x, y), instant=True)
 
     def by(self, degrees: float) -> DirectionByBuilder:
-        """Rotate by relative angle in degrees (can use with .over(), .rate(), .then())
+        """Rotate by relative angle in degrees (alias for .add())
 
         Positive = clockwise, Negative = counter-clockwise
 
@@ -346,3 +347,21 @@ class DirectionController:
             rig.direction.by(180).rate(90)    # Rotate 180° at 90°/sec
         """
         return DirectionByBuilder(self.rig_state, degrees, instant=True)
+
+    def add(self, degrees: float) -> DirectionByBuilder:
+        """Add angle in degrees - clockwise rotation
+
+        Examples:
+            rig.direction.add(90)             # Rotate 90° clockwise
+            rig.direction.add(45).over(500)   # Rotate 45° clockwise over 500ms
+        """
+        return DirectionByBuilder(self.rig_state, degrees, instant=True)
+
+    def sub(self, degrees: float) -> DirectionByBuilder:
+        """Subtract angle in degrees - counter-clockwise rotation
+
+        Examples:
+            rig.direction.sub(90)             # Rotate 90° counter-clockwise
+            rig.direction.sub(45).over(500)   # Rotate 45° counter-clockwise over 500ms
+        """
+        return DirectionByBuilder(self.rig_state, -degrees, instant=True)

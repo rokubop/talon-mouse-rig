@@ -4,6 +4,7 @@ import time
 from typing import Optional, Callable, TYPE_CHECKING, TypeVar, Generic
 from ..core import Vec2
 from ..effects import Force
+from .contracts import PropertyOperationsContract, TimingMethodsContract
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 T = TypeVar('T', bound='ForcePropertyController')
 
 
-class ForcePropertyController(Generic[T]):
+class ForcePropertyController(PropertyOperationsContract[T]):
     """
     Generic base class for force property controllers (speed/accel).
     Handles all operations (to/by/mul/div) and timing methods (over/hold/revert).
@@ -110,7 +111,7 @@ class ForcePropertyController(Generic[T]):
         return self
 
 
-class NamedForceBuilder:
+class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
     """Builder for named forces - independent entities with their own speed/direction/accel"""
     def __init__(self, rig_state: 'RigState', name: str):
         self.rig_state = rig_state
@@ -189,7 +190,7 @@ class NamedForceAccelController(ForcePropertyController['NamedForceAccelControll
 
 
 
-class NamedForceDirectionBuilder:
+class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuilder']):
     """Direction builder for named forces"""
     def __init__(self, rig_state: 'RigState', name: str, x: float, y: float):
         self.rig_state = rig_state
