@@ -23,8 +23,7 @@ from .direction import (
 # Position builders
 from .position import (
     PositionController,
-    PositionToBuilder,
-    PositionByBuilder,
+    PositionBuilder,
 )
 
 __all__ = [
@@ -40,6 +39,5 @@ __all__ = [
     "DirectionController",
     # Position
     "PositionController",
-    "PositionToBuilder",
-    "PositionByBuilder",
+    "PositionBuilder",
 ]
