@@ -15,7 +15,7 @@ T = TypeVar('T', bound='ForcePropertyController')
 class ForcePropertyController(Generic[T]):
     """
     Generic base class for force property controllers (speed/accel).
-    Handles all operations (to/by/mul/div) and lifecycle methods (over/hold/revert).
+    Handles all operations (to/by/mul/div) and timing methods (over/hold/revert).
     Subclasses only need to specify _property_name.
     """
     # Override in subclasses: "speed" or "accel"

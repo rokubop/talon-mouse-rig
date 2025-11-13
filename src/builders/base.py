@@ -4,34 +4,28 @@ This module maintains compatibility with existing imports while allowing
 the codebase to be organized into focused, smaller modules.
 """
 
-# Property builders (speed, accel)
-from .property import (
+# Base properties (speed, accel, direction, position)
+from .base_properties import (
     PropertyEffectBuilder,
     PropertyRateNamespace,
     SpeedBuilder,
     SpeedController,
     AccelController,
-)
-
-# Direction builders
-from .direction import (
     DirectionBuilder,
     DirectionByBuilder,
     DirectionController,
-)
-
-# Position builders
-from .position import (
     PositionController,
     PositionBuilder,
 )
 
 __all__ = [
-    # Property
+    # Shared
     "PropertyEffectBuilder",
     "PropertyRateNamespace",
+    # Speed
     "SpeedBuilder",
     "SpeedController",
+    # Accel
     "AccelController",
     # Direction
     "DirectionBuilder",

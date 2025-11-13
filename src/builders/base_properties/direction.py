@@ -4,14 +4,14 @@ import math
 from typing import Optional, Callable, TYPE_CHECKING
 from talon import ctrl, cron
 
-from ..core import (
+from ...core import (
     Vec2, clamp, DirectionTransition,
     _error_unknown_builder_attribute
 )
-from ..effects import DirectionEffect
+from ...effects import DirectionEffect
 
 if TYPE_CHECKING:
-    from ..state import RigState
+    from ...state import RigState
 
 
 class DirectionBuilder:
@@ -128,10 +128,10 @@ class DirectionBuilder:
 
             # Return the appropriate property controller for chaining
             if name == 'speed':
-                from .property import SpeedController
+                from .speed import SpeedController
                 return SpeedController(self.rig_state)
             elif name == 'accel':
-                from .property import AccelController
+                from .accel import AccelController
                 return AccelController(self.rig_state)
             elif name == 'pos':
                 from .position import PositionController
@@ -302,10 +302,10 @@ class DirectionByBuilder:
 
             # Return the appropriate property controller for chaining
             if name == 'speed':
-                from .property import SpeedController
+                from .speed import SpeedController
                 return SpeedController(self.rig_state)
             elif name == 'accel':
-                from .property import AccelController
+                from .accel import AccelController
                 return AccelController(self.rig_state)
             elif name == 'pos':
                 from .position import PositionController

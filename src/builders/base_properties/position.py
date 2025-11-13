@@ -4,13 +4,13 @@ import time
 from typing import Optional, Callable, TYPE_CHECKING, Literal
 from talon import ctrl, cron
 
-from ..core import (
+from ...core import (
     Vec2, DEFAULT_EASING, PositionTransition,
     _error_unknown_builder_attribute
 )
 
 if TYPE_CHECKING:
-    from ..state import RigState
+    from ...state import RigState
 
 
 class PositionController:
@@ -267,10 +267,10 @@ class PositionBuilder:
 
             # Return the appropriate property controller for chaining
             if name == 'speed':
-                from .property import SpeedController
+                from .speed import SpeedController
                 return SpeedController(self.rig_state)
             elif name == 'accel':
-                from .property import AccelController
+                from .accel import AccelController
                 return AccelController(self.rig_state)
             elif name == 'pos':
                 return PositionController(self.rig_state)

@@ -14,7 +14,7 @@ T = TypeVar('T', bound='EffectBuilderBase')
 class EffectBuilderBase(Generic[T]):
     """
     Base class for all effect property builders.
-    Consolidates shared implementation for operations and lifecycle methods.
+    Consolidates shared implementation for operations and timing methods.
     Subclasses only need to specify property name and override type hints.
     """
     # Override in subclasses
