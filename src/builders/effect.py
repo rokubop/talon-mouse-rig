@@ -1,11 +1,197 @@
 """Effect builders for PRD 8 named effects"""
 
-from typing import Optional, TYPE_CHECKING, Union
+from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic
 from ..core import Vec2
 from ..effects import EffectStack, EffectLifecycle
 
 if TYPE_CHECKING:
     from ..state import RigState
+
+# Type variable for self-return types in base class
+T = TypeVar('T', bound='EffectBuilderBase')
+
+
+class EffectBuilderBase(Generic[T]):
+    """
+    Base class for all effect property builders.
+    Consolidates shared implementation for operations and lifecycle methods.
+    Subclasses only need to specify property name and override type hints.
+    """
+    # Override in subclasses
+    _property_name: str = None
+
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
+        self.rig_state = rig_state
+        self.name = name
+        self.strict_mode = strict_mode
+        self._last_op_type: Optional[str] = None
+        self._started = False
+
+    def __del__(self):
+        """Auto-start when builder goes out of scope if not already started"""
+        try:
+            if not self._started and self._last_op_type is not None:
+                self.rig_state.start()
+        except:
+            pass
+
+    def __call__(self, value: Union[float, Vec2]) -> T:
+        """Shorthand for add/to operation - strict mode disallows this"""
+        if self.strict_mode:
+            raise ValueError(
+                f"Strict syntax required for effects. "
+                f"Use .to({value}) for absolute value or .add({value}) for delta. "
+                f"Shorthand syntax like .{self._property_name}({value}) is not allowed for effects."
+            )
+        return self.to(value)
+
+    def _get_or_create_stack(self, op_type: str) -> EffectStack:
+        """Get or create the effect stack for this operation type"""
+        key = f"{self.name}:{self._property_name}:{op_type}"
+        if key not in self.rig_state._effect_stacks:
+            stack = EffectStack(
+                name=self.name,
+                property=self._property_name,
+                operation_type=op_type
+            )
+            self.rig_state._effect_stacks[key] = stack
+            if key not in self.rig_state._effect_order:
+                self.rig_state._effect_order.append(key)
+        return self.rig_state._effect_stacks[key]
+
+    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
+        """Get or create the effect lifecycle wrapper"""
+        key = f"{self.name}:{self._property_name}:{op_type}"
+        if key not in self.rig_state._effect_lifecycles:
+            stack = self._get_or_create_stack(op_type)
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+        return self.rig_state._effect_lifecycles[key]
+
+    def to(self, value: Union[float, Vec2]) -> T:
+        """Set absolute value"""
+        stack = self._get_or_create_stack("to")
+        stack.add_operation(value)
+        self._last_op_type = "to"
+        return self
+
+    def mul(self, value: float) -> T:
+        """Multiply (default: replaces, use .on_repeat("stack") for multiple)"""
+        stack = self._get_or_create_stack("mul")
+        stack.add_operation(value)
+        self._last_op_type = "mul"
+        return self
+
+    def div(self, value: float) -> T:
+        """Divide (default: replaces, use .on_repeat("stack") for multiple)"""
+        if abs(value) < 1e-6:
+            raise ValueError("Cannot divide by zero or near-zero value")
+        stack = self._get_or_create_stack("div")
+        stack.add_operation(1.0 / value)
+        self._last_op_type = "div"
+        return self
+
+    def add(self, value: Union[float, Vec2]) -> T:
+        """Add delta (default: replaces, use .on_repeat("stack") for multiple)"""
+        stack = self._get_or_create_stack("add")
+        stack.add_operation(value)
+        self._last_op_type = "add"
+        return self
+
+    def by(self, value: Union[float, Vec2]) -> T:
+        """Alias for add() - add delta"""
+        return self.add(value)
+
+    def sub(self, value: Union[float, Vec2]) -> T:
+        """Subtract (default: replaces, use .on_repeat("stack") for multiple)"""
+        stack = self._get_or_create_stack("sub")
+        stack.add_operation(-value if isinstance(value, (int, float)) else Vec2(-value.x, -value.y))
+        self._last_op_type = "sub"
+        return self
+
+    def on_repeat(self, strategy: str = "replace", *args) -> T:
+        """Configure behavior when effect is called multiple times
+
+        Strategies:
+            "replace" (default): New call replaces existing effect, resets duration
+            "stack" [max_count]: Stack effects (unlimited or with max count)
+            "extend": Extend duration from current phase, cancel pending revert
+            "queue": Queue effects to run sequentially
+            "ignore": Ignore new calls while effect is active
+            "throttle" [ms]: Rate limit calls (minimum time between calls)
+
+        Examples:
+            .add(10).on_repeat("stack")          # Unlimited stacking
+            .add(10).on_repeat("stack", 3)       # Max 3 stacks
+            .add(10).on_repeat("replace")        # Default behavior
+            .add(10).on_repeat("extend")         # Extend duration
+            .add(10).on_repeat("throttle", 500)  # Max 1 call per 500ms
+        """
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .on_repeat() to - call .to()/.mul()/.div()/.add()/.sub() first")
+
+        key = f"{self.name}:{self._property_name}:{self._last_op_type}"
+
+        if strategy == "stack":
+            max_count = args[0] if args else None
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = max_count
+        elif strategy == "replace":
+            pass
+        elif strategy in ("extend", "queue", "ignore", "throttle"):
+            if key in self.rig_state._effect_lifecycles:
+                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
+                if strategy == "throttle" and args:
+                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+        else:
+            raise ValueError(f"Unknown repeat strategy: {strategy}. Use: replace, stack, extend, queue, ignore, throttle")
+
+        return self
+
+    def over(self, duration_ms: float, easing: str = "linear") -> T:
+        """Fade in over duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.in_duration_ms = duration_ms
+        effect.in_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def hold(self, duration_ms: float) -> T:
+        """Maintain for duration"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.hold_duration_ms = duration_ms
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
+
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> T:
+        """Revert to original state"""
+        if self._last_op_type is None:
+            raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
+
+        effect = self._get_or_create_effect(self._last_op_type)
+
+        # If no hold duration is set and we have fade-in, add instant hold
+        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
+            effect.hold_duration_ms = 0
+
+        effect.out_duration_ms = duration_ms
+        effect.out_easing = easing
+
+        if not self._started:
+            self.rig_state.start()
+            self._started = True
+        return self
 
 class EffectBuilder:
     """
@@ -85,430 +271,26 @@ class EffectBuilder:
 
 
 
-class EffectSpeedBuilder:
+class EffectSpeedBuilder(EffectBuilderBase['EffectSpeedBuilder']):
     """Builder for effect speed operations (to/mul/div/add/sub)"""
-    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
-        self.rig_state = rig_state
-        self.name = name
-        self.strict_mode = strict_mode
-        self._last_op_type: Optional[str] = None  # Track last operation for .stack()
-        self._started = False  # Track if we've called start()
-
-    def __del__(self):
-        """Auto-start when builder goes out of scope if not already started"""
-        try:
-            if not self._started and self._last_op_type is not None:
-                self.rig_state.start()
-        except:
-            pass  # Ignore errors during cleanup
-
-    def __call__(self, value: float) -> 'EffectSpeedBuilder':
-        """Shorthand for add operation (delta from base)
-
-        In strict mode (effects), this raises an error.
-        In loose mode (base rig, forces), equivalent to .to(value).
-
-        Example:
-            rig.force("boost").speed(10)      # Loose mode: Same as .to(10)
-            rig.effect("boost").speed(10)     # Strict mode: ERROR - use .to(10) or .add(10)
-        """
-        if self.strict_mode:
-            raise ValueError(
-                f"Strict syntax required for effects. "
-                f"Use .to({value}) for absolute value or .add({value}) for delta. "
-                f"Shorthand syntax like .speed({value}) is not allowed for effects."
-            )
-        return self.to(value)
-
-    def _get_or_create_stack(self, op_type: str) -> EffectStack:
-        """Get or create the effect stack for this operation type"""
-        key = f"{self.name}:speed:{op_type}"
-        if key not in self.rig_state._effect_stacks:
-            stack = EffectStack(
-                name=self.name,
-                property="speed",
-                operation_type=op_type
-            )
-            self.rig_state._effect_stacks[key] = stack
-            # Track creation order
-            if key not in self.rig_state._effect_order:
-                self.rig_state._effect_order.append(key)
-        return self.rig_state._effect_stacks[key]
-
-    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
-        """Get or create the effect lifecycle wrapper"""
-        key = f"{self.name}:speed:{op_type}"
-        if key not in self.rig_state._effect_lifecycles:
-            stack = self._get_or_create_stack(op_type)
-            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
-        return self.rig_state._effect_lifecycles[key]
-
-    def to(self, value: float) -> 'EffectSpeedBuilder':
-        """Set absolute speed value"""
-        stack = self._get_or_create_stack("to")
-        stack.add_operation(value)
-        self._last_op_type = "to"
-        return self
-
-    def mul(self, value: float) -> 'EffectSpeedBuilder':
-        """Multiply speed (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("mul")
-        stack.add_operation(value)
-        self._last_op_type = "mul"
-        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
-        return self
-
-    def div(self, value: float) -> 'EffectSpeedBuilder':
-        """Divide speed (default: replaces, use .on_repeat("stack") for multiple)"""
-        if abs(value) < 1e-6:
-            raise ValueError("Cannot divide by zero or near-zero value")
-        stack = self._get_or_create_stack("div")
-        stack.add_operation(1.0 / value)
-        self._last_op_type = "div"
-        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
-        return self
-
-    def add(self, value: float) -> 'EffectSpeedBuilder':
-        """Add to speed (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("add")
-        stack.add_operation(value)
-        self._last_op_type = "add"
-        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
-        return self
-
-    def by(self, value: float) -> 'EffectSpeedBuilder':
-        """Alias for add() - add delta to speed"""
-        return self.add(value)
-
-    def sub(self, value: float) -> 'EffectSpeedBuilder':
-        """Subtract from speed (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("sub")
-        stack.add_operation(-value)
-        self._last_op_type = "sub"
-        # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
-        return self
-
-    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectSpeedBuilder':
-        """Configure behavior when effect is called multiple times
-
-        Strategies:
-            "replace" (default): New call replaces existing effect, resets duration
-            "stack" [max_count]: Stack effects (unlimited or with max count)
-            "extend": Extend duration from current phase, cancel pending revert
-            "queue": Queue effects to run sequentially
-            "ignore": Ignore new calls while effect is active
-            "throttle" [ms]: Rate limit calls (minimum time between calls)
-
-        Examples:
-            .add(10).on_repeat("stack")          # Unlimited stacking
-            .add(10).on_repeat("stack", 3)       # Max 3 stacks
-            .add(10).on_repeat("replace")        # Default behavior
-            .add(10).on_repeat("extend")         # Extend duration
-            .add(10).on_repeat("throttle", 500)  # Max 1 call per 500ms
-        """
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .on_repeat() to - call .to()/.mul()/.div()/.add()/.sub() first")
-
-        key = f"{self.name}:speed:{self._last_op_type}"
-
-        if strategy == "stack":
-            # Stack strategy: allow multiple instances to accumulate
-            max_count = args[0] if args else None
-            if key in self.rig_state._effect_stacks:
-                self.rig_state._effect_stacks[key].max_stack_count = max_count
-        elif strategy == "replace":
-            # Replace is default behavior - no special handling needed
-            pass
-        elif strategy in ("extend", "queue", "ignore", "throttle"):
-            # These strategies need to be implemented in the effect lifecycle
-            # For now, store the strategy on the effect
-            if key in self.rig_state._effect_lifecycles:
-                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
-                if strategy == "throttle" and args:
-                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
-        else:
-            raise ValueError(f"Unknown repeat strategy: {strategy}. Use: replace, stack, extend, queue, ignore, throttle")
-
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectSpeedBuilder':
-        """Fade in over duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
-
-        # Create or get the effect for the last operation
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.in_duration_ms = duration_ms
-        effect.in_easing = easing
-
-        # Start the update loop if not already started
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def hold(self, duration_ms: float) -> 'EffectSpeedBuilder':
-        """Maintain for duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
-
-        # Create or get the effect for the last operation
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.hold_duration_ms = duration_ms
-
-        # Start the update loop if not already started
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectSpeedBuilder':
-        """Revert to original state"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
-
-        # Create or get the effect for the last operation
-        effect = self._get_or_create_effect(self._last_op_type)
-
-        # If no hold duration is set and we have fade-in, add instant hold
-        # This ensures: .over(300).revert(300) = fade in, then fade out
-        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
-            effect.hold_duration_ms = 0
-
-        effect.out_duration_ms = duration_ms
-        effect.out_easing = easing
-
-        # Start the update loop if not already started
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
+    _property_name = "speed"
 
     @property
     def max(self) -> 'MaxBuilder':
         """Access max constraints"""
-        # Return a max builder that can set constraints on all operation types
         return MaxBuilder(self.rig_state, self.name, "speed", None)
 
 
 
-class EffectAccelBuilder:
+class EffectAccelBuilder(EffectBuilderBase['EffectAccelBuilder']):
     """Builder for effect accel operations (to/mul/div/add/sub)"""
-    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
-        self.rig_state = rig_state
-        self.name = name
-        self.strict_mode = strict_mode
-        self._last_op_type: Optional[str] = None
-        self._started = False
-
-    def __del__(self):
-        """Auto-start when builder goes out of scope if not already started"""
-        try:
-            if not self._started and self._last_op_type is not None:
-                self.rig_state.start()
-        except:
-            pass
-
-    def __call__(self, value: float) -> 'EffectAccelBuilder':
-        """Shorthand for to operation
-
-        In strict mode (effects), this raises an error.
-        In loose mode (base rig, forces), equivalent to .to(value).
-        """
-        if self.strict_mode:
-            raise ValueError(
-                f"Strict syntax required for effects. "
-                f"Use .to({value}) for absolute value or .add({value}) for delta. "
-                f"Shorthand syntax like .accel({value}) is not allowed for effects."
-            )
-        return self.to(value)
-
-    def _get_or_create_stack(self, op_type: str) -> EffectStack:
-        """Get or create the effect stack for this operation type"""
-        key = f"{self.name}:accel:{op_type}"
-        if key not in self.rig_state._effect_stacks:
-            stack = EffectStack(
-                name=self.name,
-                property="accel",
-                operation_type=op_type
-            )
-            self.rig_state._effect_stacks[key] = stack
-            if key not in self.rig_state._effect_order:
-                self.rig_state._effect_order.append(key)
-        return self.rig_state._effect_stacks[key]
-
-    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
-        """Get or create the effect lifecycle wrapper"""
-        key = f"{self.name}:accel:{op_type}"
-        if key not in self.rig_state._effect_lifecycles:
-            stack = self._get_or_create_stack(op_type)
-            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
-        return self.rig_state._effect_lifecycles[key]
-
-    def to(self, value: float) -> 'EffectAccelBuilder':
-        """Set absolute accel value"""
-        stack = self._get_or_create_stack("to")
-        stack.add_operation(value)
-        self._last_op_type = "to"
-        return self
-
-    def mul(self, value: float) -> 'EffectAccelBuilder':
-        """Multiply accel (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("mul")
-        stack.add_operation(value)
-        self._last_op_type = "mul"
-        return self
-
-    def div(self, value: float) -> 'EffectAccelBuilder':
-        """Divide accel (default: replaces, use .on_repeat("stack") for multiple)"""
-        if abs(value) < 1e-6:
-            raise ValueError("Cannot divide by zero or near-zero value")
-        stack = self._get_or_create_stack("div")
-        stack.add_operation(1.0 / value)
-        self._last_op_type = "div"
-        return self
-
-    def add(self, value: float) -> 'EffectAccelBuilder':
-        """Add to accel (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("add")
-        stack.add_operation(value)
-        self._last_op_type = "add"
-        return self
-
-    def by(self, value: float) -> 'EffectAccelBuilder':
-        """Alias for add() - add delta to accel"""
-        return self.add(value)
-
-    def sub(self, value: float) -> 'EffectAccelBuilder':
-        """Subtract from accel (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("sub")
-        stack.add_operation(-value)
-        self._last_op_type = "sub"
-        return self
-
-    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectAccelBuilder':
-        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .on_repeat() to - call .to()/.mul()/.div()/.add()/.sub() first")
-
-        key = f"{self.name}:accel:{self._last_op_type}"
-
-        if strategy == "stack":
-            max_count = args[0] if args else None
-            if key in self.rig_state._effect_stacks:
-                self.rig_state._effect_stacks[key].max_stack_count = max_count
-        elif strategy == "replace":
-            pass
-        elif strategy in ("extend", "queue", "ignore", "throttle"):
-            if key in self.rig_state._effect_lifecycles:
-                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
-                if strategy == "throttle" and args:
-                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
-        else:
-            raise ValueError(f"Unknown repeat strategy: {strategy}")
-
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectAccelBuilder':
-        """Fade in over duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.in_duration_ms = duration_ms
-        effect.in_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def hold(self, duration_ms: float) -> 'EffectAccelBuilder':
-        """Maintain for duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.hold_duration_ms = duration_ms
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectAccelBuilder':
-        """Revert to original state"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-
-        # If no hold duration is set and we have fade-in, add instant hold
-        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
-            effect.hold_duration_ms = 0
-
-        effect.out_duration_ms = duration_ms
-        effect.out_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
+    _property_name = "accel"
 
 
 
-class EffectDirectionBuilder:
+class EffectDirectionBuilder(EffectBuilderBase['EffectDirectionBuilder']):
     """Builder for effect direction operations (rotation in degrees)"""
-    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
-        self.rig_state = rig_state
-        self.name = name
-        self.strict_mode = strict_mode
-        self._last_op_type: Optional[str] = None
-        self._started = False
-
-    def __del__(self):
-        """Auto-start when builder goes out of scope if not already started"""
-        try:
-            if not self._started and self._last_op_type is not None:
-                self.rig_state.start()
-        except:
-            pass
-
-    def __call__(self, *args) -> 'EffectDirectionBuilder':
-        """Shorthand for to operation
-
-        In strict mode (effects), this raises an error.
-        In loose mode (base rig, forces), equivalent to .to(degrees) or .to(x, y).
-        """
-        if self.strict_mode:
-            raise ValueError(
-                f"Strict syntax required for effects. "
-                f"Use .to(...) for absolute value or .add(...) for delta. "
-                f"Shorthand syntax like .direction(...) is not allowed for effects."
-            )
-        return self.to(*args)
-
-    def _get_or_create_stack(self, op_type: str) -> EffectStack:
-        """Get or create the effect stack for this operation type"""
-        key = f"{self.name}:direction:{op_type}"
-        if key not in self.rig_state._effect_stacks:
-            stack = EffectStack(
-                name=self.name,
-                property="direction",
-                operation_type=op_type
-            )
-            self.rig_state._effect_stacks[key] = stack
-            if key not in self.rig_state._effect_order:
-                self.rig_state._effect_order.append(key)
-        return self.rig_state._effect_stacks[key]
-
-    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
-        """Get or create the effect lifecycle wrapper"""
-        key = f"{self.name}:direction:{op_type}"
-        if key not in self.rig_state._effect_lifecycles:
-            stack = self._get_or_create_stack(op_type)
-            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
-        return self.rig_state._effect_lifecycles[key]
+    _property_name = "direction"
 
     def to(self, *args) -> 'EffectDirectionBuilder':
         """Set direction to specific angle (degrees) or vector (x, y)"""
@@ -524,147 +306,11 @@ class EffectDirectionBuilder:
         self._last_op_type = "to"
         return self
 
-    def add(self, degrees: float) -> 'EffectDirectionBuilder':
-        """Rotate by degrees (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("add")
-        stack.add_operation(degrees)
-        self._last_op_type = "add"
-        return self
-
-    def by(self, degrees: float) -> 'EffectDirectionBuilder':
-        """Alias for add (rotate by degrees)"""
-        return self.add(degrees)
-
-    def sub(self, degrees: float) -> 'EffectDirectionBuilder':
-        """Rotate by negative degrees (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("sub")
-        stack.add_operation(-degrees)
-        self._last_op_type = "sub"
-        return self
-
-    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectDirectionBuilder':
-        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .on_repeat() to - call .to()/.add()/.sub() first")
-
-        key = f"{self.name}:direction:{self._last_op_type}"
-
-        if strategy == "stack":
-            max_count = args[0] if args else None
-            if key in self.rig_state._effect_stacks:
-                self.rig_state._effect_stacks[key].max_stack_count = max_count
-        elif strategy == "replace":
-            pass
-        elif strategy in ("extend", "queue", "ignore", "throttle"):
-            if key in self.rig_state._effect_lifecycles:
-                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
-                if strategy == "throttle" and args:
-                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
-        else:
-            raise ValueError(f"Unknown repeat strategy: {strategy}")
-
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectDirectionBuilder':
-        """Fade in over duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.in_duration_ms = duration_ms
-        effect.in_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def hold(self, duration_ms: float) -> 'EffectDirectionBuilder':
-        """Maintain for duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.hold_duration_ms = duration_ms
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectDirectionBuilder':
-        """Revert to original state"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-
-        # If no hold duration is set and we have fade-in, add instant hold
-        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
-            effect.hold_duration_ms = 0
-
-        effect.out_duration_ms = duration_ms
-        effect.out_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
 
 
-
-class EffectPosBuilder:
+class EffectPosBuilder(EffectBuilderBase['EffectPosBuilder']):
     """Builder for effect position operations (offsets)"""
-    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
-        self.rig_state = rig_state
-        self.name = name
-        self.strict_mode = strict_mode
-        self._last_op_type: Optional[str] = None
-        self._started = False
-
-    def __del__(self):
-        """Auto-start when builder goes out of scope if not already started"""
-        try:
-            if not self._started and self._last_op_type is not None:
-                self.rig_state.start()
-        except:
-            pass
-
-    def __call__(self, x: float, y: float) -> 'EffectPosBuilder':
-        """Shorthand for to operation
-
-        In strict mode (effects), this raises an error.
-        In loose mode (base rig, forces), equivalent to .to(x, y).
-        """
-        if self.strict_mode:
-            raise ValueError(
-                f"Strict syntax required for effects. "
-                f"Use .to({x}, {y}) for absolute value or .add({x}, {y}) for delta. "
-                f"Shorthand syntax like .pos({x}, {y}) is not allowed for effects."
-            )
-        return self.to(x, y)
-
-    def _get_or_create_stack(self, op_type: str) -> EffectStack:
-        """Get or create the effect stack for this operation type"""
-        key = f"{self.name}:pos:{op_type}"
-        if key not in self.rig_state._effect_stacks:
-            stack = EffectStack(
-                name=self.name,
-                property="pos",
-                operation_type=op_type
-            )
-            self.rig_state._effect_stacks[key] = stack
-            if key not in self.rig_state._effect_order:
-                self.rig_state._effect_order.append(key)
-        return self.rig_state._effect_stacks[key]
-
-    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
-        """Get or create the effect lifecycle wrapper"""
-        key = f"{self.name}:pos:{op_type}"
-        if key not in self.rig_state._effect_lifecycles:
-            stack = self._get_or_create_stack(op_type)
-            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
-        return self.rig_state._effect_lifecycles[key]
+    _property_name = "pos"
 
     def to(self, x: float, y: float) -> 'EffectPosBuilder':
         """Set offset to specific position"""
@@ -689,75 +335,6 @@ class EffectPosBuilder:
         stack = self._get_or_create_stack("sub")
         stack.add_operation(Vec2(-x, -y))
         self._last_op_type = "sub"
-        return self
-
-    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectPosBuilder':
-        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .on_repeat() to - call .to()/.add()/.sub() first")
-
-        key = f"{self.name}:pos:{self._last_op_type}"
-
-        if strategy == "stack":
-            max_count = args[0] if args else None
-            if key in self.rig_state._effect_stacks:
-                self.rig_state._effect_stacks[key].max_stack_count = max_count
-        elif strategy == "replace":
-            pass
-        elif strategy in ("extend", "queue", "ignore", "throttle"):
-            if key in self.rig_state._effect_lifecycles:
-                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
-                if strategy == "throttle" and args:
-                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
-        else:
-            raise ValueError(f"Unknown repeat strategy: {strategy}")
-
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectPosBuilder':
-        """Fade in over duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.in_duration_ms = duration_ms
-        effect.in_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def hold(self, duration_ms: float) -> 'EffectPosBuilder':
-        """Maintain for duration"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-        effect.hold_duration_ms = duration_ms
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
-        return self
-
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectPosBuilder':
-        """Revert to original state"""
-        if self._last_op_type is None:
-            raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
-
-        effect = self._get_or_create_effect(self._last_op_type)
-
-        # If no hold duration is set and we have fade-in, add instant hold
-        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
-            effect.hold_duration_ms = 0
-
-        effect.out_duration_ms = duration_ms
-        effect.out_easing = easing
-
-        if not self._started:
-            self.rig_state.start()
-            self._started = True
         return self
 
 

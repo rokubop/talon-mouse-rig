@@ -6,18 +6,19 @@ from typing import Optional, Callable, Literal, Union, Tuple
 from dataclasses import dataclass
 from talon import cron, settings, ctrl
 
+from . import core
 from .core import (
-    Vec2, SubpixelAdjuster, _mouse_move, lerp, clamp,
+    Vec2, SubpixelAdjuster, lerp, clamp,
     SpeedTransition, DirectionTransition, PositionTransition
 )
-from .effects import EffectStack, EffectLifecycle, Effect, DirectionEffect, Force
+from .effects import EffectStack, EffectLifecycle, Force
 from ..settings import mod
 from .builders.base import (
     PropertyEffectBuilder, DirectionBuilder, PositionController,
     SpeedController, AccelController, DirectionController, DirectionByBuilder
 )
 from .builders.effect import EffectBuilder
-from .builders.named import NamedModifierNamespace, NamedForceNamespace, NamedForceBuilder
+from .builders.named import NamedForceNamespace, NamedForceBuilder
 
 class RigState:
     """Core state for the mouse rig"""
@@ -33,12 +34,8 @@ class RigState:
         self._direction_transition: Optional[DirectionTransition] = None
         self._position_transitions: list[PositionTransition] = []
 
-        # Effects (temporary property modifications)
-        self._effects: list[Effect] = []
-        self._direction_effects: list[DirectionEffect] = []
-        self._named_modifiers: dict[str, Effect] = {}
-        self._named_direction_modifiers: dict[str, DirectionEffect] = {}
-        self._named_forces: dict[str, Force] = {}  # Force entities
+        # Named forces (for backward compatibility with force API)
+        self._named_forces: dict[str, Force] = {}
 
         # PRD 8: Effect stacks (operations with stacking control)
         self._effect_stacks: dict[str, EffectStack] = {}  # key: "entity_name:property:op_type"
@@ -47,18 +44,13 @@ class RigState:
         # PRD 8: Effect lifecycles (lifecycle-aware wrappers for effect stacks)
         self._effect_lifecycles: dict[str, EffectLifecycle] = {}  # key: same as _effect_stacks
 
-        # Acceleration effects tracking (separate from cruise speed)
-        # Maps effect instances to their accumulated velocity contribution
-        self._accel_velocities: dict[Effect, float] = {}
-
         # Controllers (fluent API)
         self.speed = SpeedController(self)
         self.accel = AccelController(self)
         self.direction = DirectionController(self)
         self.pos = PositionController(self)
 
-        # Named modifier/force namespaces
-        self._modifier_namespace = NamedModifierNamespace(self)
+        # Named force namespace
         self._force_namespace = NamedForceNamespace(self)
 
         # Sequence state
@@ -109,19 +101,6 @@ class RigState:
             rig.force("wind").stop(500)
         """
         return NamedForceBuilder(self, name)
-
-    @property
-    def modifier(self) -> NamedModifierNamespace:
-        """Access named modifiers (relative changes to base properties)
-
-        Modifiers use relative operations (.mul, .by, .div) and recalculate when base changes.
-
-        Examples:
-            rig.modifier("boost").speed.mul(2)
-            rig.modifier("boost").stop()
-            rig.modifier.stop_all()
-        """
-        return self._modifier_namespace
 
     @property
     def force_namespace(self) -> NamedForceNamespace:
@@ -193,8 +172,8 @@ class RigState:
             "accel_velocity": accel_velocity,  # Integrated velocity from accel effects
             "total_speed": total_speed,  # Total effective speed (cruise + accel velocity)
             "velocity": total_velocity.to_tuple(),  # Total velocity vector
-            "active_effects": len(self._effects),
-            "named_modifiers": list(self._named_modifiers.keys()),
+            "active_effect_stacks": len(self._effect_stacks),
+            "active_effect_lifecycles": len(self._effect_lifecycles),
             "has_speed_transition": self._speed_transition is not None,
             "has_direction_transition": self._direction_transition is not None,
             "active_glides": len(self._position_transitions),
@@ -232,11 +211,6 @@ class RigState:
     def _get_effective_speed(self) -> float:
         """Get speed with all effects applied"""
         base_speed = self._speed
-
-        # Apply old effect system (PRD 5 - for backward compatibility)
-        for effect in self._effects:
-            if effect.property_name == "speed":
-                base_speed = effect.update(base_speed)
 
         # Apply effect stacks (PRD 8)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
@@ -288,11 +262,6 @@ class RigState:
         """
         base_accel = self._accel
 
-        # Apply old effect system (PRD 5 - for backward compatibility)
-        for effect in self._effects:
-            if effect.property_name == "accel":
-                base_accel = effect.update(base_accel)
-
         # Apply effect stacks (PRD 8)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
 
@@ -336,10 +305,6 @@ class RigState:
     def _get_effective_direction(self) -> Vec2:
         """Get direction with all rotation effects and transforms applied"""
         base_direction = self._direction
-
-        # Apply old direction effects system (PRD 5 - for backward compatibility)
-        for dir_effect in self._direction_effects:
-            base_direction = dir_effect.update(base_direction)
 
         # Apply effect stacks (PRD 8) - direction rotations
         # Direction uses add/sub for rotation by degrees, and to() for absolute
@@ -421,16 +386,11 @@ class RigState:
 
     def _get_accel_velocity_contribution(self) -> float:
         """Get total velocity contribution from all acceleration effects
-
-        This is the sum of all integrated velocities from accel effects,
-        scaled by each effect's current multiplier (for fade-out support).
+        
+        PRD 8: Currently returns 0 - accel velocity tracking removed with old effect system.
+        Accel effects now directly modify the accel property through effect stacks.
         """
-        total = 0.0
-        for effect, velocity in self._accel_velocities.items():
-            # Scale velocity by effect's current multiplier
-            # This makes velocity fade out when effect fades out
-            total += velocity * effect.current_multiplier
-        return total
+        return 0.0
 
     def reverse(self) -> DirectionByBuilder:
         """Reverse direction (180 degree turn)
@@ -504,12 +464,7 @@ class RigState:
         self._last_position_offset = Vec2(0, 0)
 
         # Clear all effects and forces
-        self._effects.clear()
-        self._direction_effects.clear()
-        self._named_modifiers.clear()
-        self._named_direction_modifiers.clear()
         self._named_forces.clear()
-        self._accel_velocities.clear()
 
         # Clear effect system (PRD 8)
         self._effect_stacks.clear()
@@ -528,8 +483,10 @@ class RigState:
         self._position_transitions.clear()
 
         # Clear effects
-        self._effects.clear()
-        self._named_modifiers.clear()
+        self._named_forces.clear()
+        self._effect_stacks.clear()
+        self._effect_lifecycles.clear()
+        self._effect_order.clear()
 
         # Reset subpixel accumulator to prevent drift on restart
         self._subpixel_adjuster = SubpixelAdjuster()
@@ -699,14 +656,6 @@ class RigState:
         if self._direction_transition is not None:
             return False
 
-        # Check for active effects
-        if len(self._effects) > 0:
-            return False
-
-        # Check for active direction effects
-        if len(self._direction_effects) > 0:
-            return False
-
         # Check for active forces
         if len(self._named_forces) > 0:
             return False
@@ -747,21 +696,6 @@ class RigState:
             if self._direction_transition.complete:
                 self._direction_transition = None
 
-        # Update direction effects (temporary rotations)
-        for dir_effect in self._direction_effects[:]:
-            # Start effect if not started
-            if dir_effect.phase == "not_started":
-                dir_effect.start(self._direction)
-
-            # Direction effects don't update here - they're applied when getting effective direction
-
-            # Remove completed effects
-            if dir_effect.complete:
-                self._direction_effects.remove(dir_effect)
-                # Remove from named modifiers if it has a name
-                if dir_effect.name and dir_effect.name in self._named_direction_modifiers:
-                    del self._named_direction_modifiers[dir_effect.name]
-
         # Update effect lifecycles (lifecycle wrappers for effect stacks)
         for key, effect_lifecycle in list(self._effect_lifecycles.items()):
             # Start effect if not started
@@ -779,35 +713,6 @@ class RigState:
                     del self._effect_stacks[key]
                 if key in self._effect_order:
                     self._effect_order.remove(key)
-
-        # Update effects (temporary property modifications)
-        for effect in self._effects[:]:
-            # Start effect if not started
-            if effect.phase == "not_started":
-                if effect.property_name == "speed":
-                    effect.start(self._speed)
-                elif effect.property_name == "accel":
-                    effect.start(self._accel)
-                    # Initialize velocity tracking for accel effects
-                    self._accel_velocities[effect] = 0.0
-
-            # Update effect lifecycle for accel effects (they integrate velocity separately)
-            if effect.property_name == "accel":
-                # Accel effects: get the current acceleration value but don't modify cruise speed
-                current_accel = effect.update(self._accel)
-                # Integrate the acceleration into this effect's velocity contribution
-                if effect in self._accel_velocities:
-                    self._accel_velocities[effect] += current_accel * dt
-
-            # Remove completed effects
-            if effect.complete:
-                self._effects.remove(effect)
-                # Remove from named modifiers if it has a name
-                if effect.name and effect.name in self._named_modifiers:
-                    del self._named_modifiers[effect.name]
-                # Remove velocity tracking for accel effects
-                if effect.property_name == "accel" and effect in self._accel_velocities:
-                    del self._accel_velocities[effect]
 
         # Handle base acceleration (permanent accel changes)
         # Base accel DOES modify cruise speed permanently
@@ -880,7 +785,7 @@ class RigState:
 
         # Move the cursor if position changed (either from velocity or offset)
         if new_x != current_x or new_y != current_y:
-            _mouse_move(new_x, new_y)
+            core._mouse_move(new_x, new_y)
 
         # Auto-stop if completely idle
         if self._is_idle():
@@ -986,16 +891,3 @@ class BaseAccessor:
     def pos(self) -> Tuple[int, int]:
         """Get current mouse position"""
         return ctrl.mouse_pos()
-
-
-# ============================================================================
-# RIG STATE (main state container)
-# ============================================================================
-
-def get_rig() -> RigState:
-    """Get or create the global rig instance"""
-    global _rig_instance
-    if _rig_instance is None:
-        _rig_instance = RigState()
-        # Don't auto-start - will start on first command
-    return _rig_instance
