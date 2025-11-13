@@ -1,7 +1,7 @@
 """Abstract base classes and protocols for builder contracts"""
 
 from abc import ABC, abstractmethod
-from typing import Union, TYPE_CHECKING, TypeVar, Generic
+from typing import Union, Optional, TYPE_CHECKING, TypeVar, Generic
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -66,15 +66,30 @@ class TimingMethodsContract(ABC, Generic[T]):
     Contract for classes that support timing methods.
 
     All builders with animations/transitions must implement:
-    - .over(duration_ms, easing) - transition/fade in over duration
-    - .hold(duration_ms) - sustain/hold for duration
-    - .revert(duration_ms, easing) - fade out/restore over duration
-    - .stop() - stop/cancel (optional depending on entity type)
+    - .over() - transition/fade in over duration or at rate
+    - .hold() - sustain/hold for duration
+    - .revert() - fade out/restore over duration or at rate
     """
 
     @abstractmethod
-    def over(self, duration_ms: float, easing: str = "linear") -> T:
-        """Transition/fade in over duration"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Transition/fade in over duration or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function name
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
         pass
 
     @abstractmethod
@@ -83,11 +98,57 @@ class TimingMethodsContract(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> T:
-        """Fade out/restore over duration"""
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Fade out/restore over duration or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function name
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
         pass
 
 
+class StoppableContract(ABC):
+    """
+    Contract for entities that can be stopped.
+
+    Applies to:
+    - Rig (stop all motion)
+    - Effect namespaces (stop specific/all effects)
+    - Force namespaces (stop specific/all forces)
+    """
+
+    @abstractmethod
+    def stop(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> None:
+        """Stop/cancel the entity
+
+        Args:
+            duration_ms: Optional fade-out duration. None = immediate stop
+            easing: Easing function for gradual stop
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        pass
 class BasePropertyContract(ABC, Generic[T]):
     """
     Contract for base properties (speed, accel, direction, pos).

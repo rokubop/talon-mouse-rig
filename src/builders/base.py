@@ -7,7 +7,6 @@ the codebase to be organized into focused, smaller modules.
 # Base properties (speed, accel, direction, position)
 from .base_properties import (
     PropertyEffectBuilder,
-    PropertyRateNamespace,
     SpeedBuilder,
     SpeedController,
     AccelController,
@@ -19,19 +18,13 @@ from .base_properties import (
 )
 
 __all__ = [
-    # Shared
     "PropertyEffectBuilder",
-    "PropertyRateNamespace",
-    # Speed
     "SpeedBuilder",
     "SpeedController",
-    # Accel
     "AccelController",
-    # Direction
     "DirectionBuilder",
     "DirectionByBuilder",
     "DirectionController",
-    # Position
     "PositionController",
     "PositionBuilder",
 ]

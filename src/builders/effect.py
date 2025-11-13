@@ -148,10 +148,47 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
 
         return self
 
-    def over(self, duration_ms: float, easing: str = "linear") -> T:
-        """Fade in over duration"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Fade in over duration or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based, only for speed property)
+            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
+        """
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Validate rate matches property type
+        if rate_speed is not None and self._property_name != "speed":
+            raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
+        if rate_accel is not None and self._property_name != "accel":
+            raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
+
+        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None or rate_accel is not None:
+            rate_value = rate_speed if rate_speed is not None else rate_accel
+            # For effects, calculate based on the operation value
+            effect = self._get_or_create_effect(self._last_op_type)
+            # This is simplified - proper implementation would calculate based on actual delta
+            delta = abs(effect.value) if hasattr(effect, 'value') else 10
+            if delta < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = delta / rate_value
+                duration_ms = duration_sec * 1000
 
         effect = self._get_or_create_effect(self._last_op_type)
         effect.in_duration_ms = duration_ms
@@ -175,10 +212,40 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             self._started = True
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> T:
-        """Revert to original state"""
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Revert to original state
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based, only for speed property)
+            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
+        """
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Validate rate matches property type
+        if rate_speed is not None and self._property_name != "speed":
+            raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
+        if rate_accel is not None and self._property_name != "accel":
+            raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
+
+        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # For revert with rate, use default duration for now
+        if rate_speed is not None or rate_accel is not None:
+            duration_ms = 500  # TODO: Calculate based on current effect strength
+        elif duration_ms is None:
+            duration_ms = 0
 
         effect = self._get_or_create_effect(self._last_op_type)
 

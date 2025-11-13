@@ -651,8 +651,18 @@ class PropertyEffect:
 
         return self._apply_operation(current_base_value)
 
-    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Request the effect to stop, optionally over a duration"""
+    def stop(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> None:
+        """Request the effect to stop, optionally over a duration or at rate"""
+        # For now, rate-based stopping not implemented for individual effects
+        # Just use duration
         self.stop_requested = True
         self.stop_duration_ms = duration_ms if duration_ms is not None else 0
         self.stop_easing = easing

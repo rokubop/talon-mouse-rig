@@ -2,20 +2,21 @@
 
 import time
 import math
-from typing import Optional, Callable, Literal, Union, Tuple
-from dataclasses import dataclass
+from typing import Optional, Callable, Tuple
 from talon import cron, settings, ctrl
 
 from . import core
 from .core import (
-    Vec2, SubpixelAdjuster, lerp, clamp,
+    Vec2, SubpixelAdjuster,
     SpeedTransition, DirectionTransition, PositionTransition
 )
 from .effects import EffectStack, EffectLifecycle, Force, PropertyEffect, DirectionEffect
-from ..settings import mod
 from .builders.base import (
-    PropertyEffectBuilder, DirectionBuilder, PositionController,
-    SpeedController, AccelController, DirectionController, DirectionByBuilder
+    AccelController,
+    DirectionController,
+    DirectionByBuilder,
+    PositionController,
+    SpeedController
 )
 from .builders.effect import EffectBuilder
 from .builders.force import NamedForceNamespace, NamedForceBuilder
@@ -522,18 +523,40 @@ class RigState:
                 pass  # Ignore errors if job already completed
         self._pending_wait_jobs.clear()
 
-    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+    def stop(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> None:
         """Stop everything: bake state, clear effects/forces, decelerate to 0
 
         Args:
             duration_ms: Optional duration to decelerate over. If None, stops immediately.
             easing: Easing function name for gradual deceleration
+            rate_speed: Speed deceleration rate in units/second (rate-based)
 
         Examples:
             rig.stop()                  # Instant: bake, clear, speed=0
             rig.stop(500)               # Bake, clear, then decelerate over 500ms
             rig.stop(1000, "ease_out")  # Bake, clear, decelerate with easing
+            rig.stop(rate_speed=50)     # Decelerate at 50 units/s
         """
+        if duration_ms is not None and rate_speed is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_speed")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None:
+            current_speed = self._speed
+            if current_speed < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = current_speed / rate_speed
+                duration_ms = duration_sec * 1000
+
         # 1. Bake current state (flatten effects/forces into base)
         self.bake()
 

@@ -2,8 +2,6 @@
 
 import math
 from typing import Optional, Callable, TYPE_CHECKING
-from talon import ctrl, cron
-
 from ...core import (
     Vec2, clamp, DirectionTransition,
     _error_unknown_builder_attribute
@@ -24,8 +22,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
         self._should_execute_instant = instant
         self._then_callback: Optional[Callable] = None
         self._duration_ms: Optional[float] = None
-        self._use_rate: bool = False
-        self._rate_degrees_per_second: Optional[float] = None
+        self._rate_rotation: Optional[float] = None
 
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
@@ -36,10 +33,10 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
 
     def _execute(self):
         """Execute the configured operation"""
-        if self._duration_ms is not None or self._use_rate:
+        if self._duration_ms is not None or self._rate_rotation is not None:
             # Calculate duration from rate if needed
             duration_ms = self._duration_ms
-            if self._use_rate and self._rate_degrees_per_second is not None:
+            if self._rate_rotation is not None:
                 current_dir = self.rig_state._direction
                 dot = current_dir.dot(self.target_direction)
                 dot = clamp(dot, -1.0, 1.0)
@@ -49,7 +46,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
                 if angle_deg < 0.1:
                     duration_ms = 1  # Minimal duration for near-zero turns
                 else:
-                    duration_sec = angle_deg / self._rate_degrees_per_second
+                    duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
             # Create transition with all configured options
@@ -75,31 +72,53 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
             if self._then_callback:
                 self._then_callback()
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionBuilder':
-        """Rotate to target direction over time
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'DirectionBuilder':
+        """Rotate to target direction over time or at rate
 
         Args:
-            duration_ms: Duration in milliseconds
+            duration_ms: Duration in milliseconds (time-based)
             easing: Easing function ('linear', 'ease_in', 'ease_out', 'ease_in_out', 'smoothstep')
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+
+        Examples:
+            rig.direction(0, 1).over(500)  # Rotate over 500ms
+            rig.direction(0, 1).over(500, "ease_out")  # With easing
+            rig.direction(0, 1).over(rate_rotation=90)  # At 90°/s
         """
+        if duration_ms is not None and rate_rotation is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+        if duration_ms is None and rate_rotation is None:
+            raise ValueError("Must specify either duration_ms or rate_rotation")
+
         self._should_execute_instant = False
         self._duration_ms = duration_ms
+        self._rate_rotation = rate_rotation
         self._easing = easing
         return self
 
-    def rate(self, degrees_per_second: float) -> 'DirectionBuilder':
-        """Rotate to target direction at specified rate (degrees/second)
+    def hold(self, duration_ms: float) -> 'DirectionBuilder':
+        """Not applicable for DirectionBuilder - raises error"""
+        raise NotImplementedError("DirectionBuilder does not support .hold() - only for temporary effects")
 
-        Duration is calculated based on angular distance: duration = angle / rate
-
-        Examples:
-            rig.direction((0, 1)).rate(90)   # Turn at 90°/s
-            rig.direction((-1, 0)).rate(180) # Turn at 180°/s (half revolution per second)
-        """
-        self._should_execute_instant = False
-        self._use_rate = True
-        self._rate_degrees_per_second = degrees_per_second
-        return self
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'DirectionBuilder':
+        """Not applicable for DirectionBuilder - raises error"""
+        raise NotImplementedError("DirectionBuilder does not support .revert() - only for temporary effects")
 
     def then(self, callback: Callable) -> 'DirectionBuilder':
         """Execute callback after direction change completes"""
@@ -149,7 +168,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
             )
 
         # Unknown attribute
-        raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, rate, then'))
+        raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, then'))
 
 
 class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
@@ -161,13 +180,13 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
         self._should_execute_instant = instant
         self._then_callback: Optional[Callable] = None
         self._duration_ms: Optional[float] = None
-        self._use_rate: bool = False
-        self._rate_degrees_per_second: Optional[float] = None
+        self._rate_rotation: Optional[float] = None
 
         # Temporary effect support
         self._hold_duration_ms: Optional[float] = None
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
+        self._out_rate_rotation: Optional[float] = None
 
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
@@ -214,15 +233,15 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
 
         target_direction = Vec2(new_x, new_y).normalized()
 
-        if self._duration_ms is not None or self._use_rate:
+        if self._duration_ms is not None or self._rate_rotation is not None:
             # Calculate duration from rate if needed
             duration_ms = self._duration_ms
-            if self._use_rate and self._rate_degrees_per_second is not None:
+            if self._rate_rotation is not None:
                 angle_deg = abs(self.degrees)
                 if angle_deg < 0.1:
                     duration_ms = 1  # Minimal duration for near-zero turns
                 else:
-                    duration_sec = angle_deg / self._rate_degrees_per_second
+                    duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
             # Create transition
@@ -248,18 +267,29 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
             if self._then_callback:
                 self._then_callback()
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionByBuilder':
-        """Rotate by degrees over time"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'DirectionByBuilder':
+        """Rotate by degrees over time or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        if duration_ms is not None and rate_rotation is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+
         self._should_execute_instant = False
         self._duration_ms = duration_ms
+        self._rate_rotation = rate_rotation
         self._easing = easing
-        return self
-
-    def rate(self, degrees_per_second: float) -> 'DirectionByBuilder':
-        """Rotate by degrees at specified rate"""
-        self._should_execute_instant = False
-        self._use_rate = True
-        self._rate_degrees_per_second = degrees_per_second
         return self
 
     def hold(self, duration_ms: float) -> 'DirectionByBuilder':
@@ -267,9 +297,27 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
         self._hold_duration_ms = duration_ms
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'DirectionByBuilder':
-        """Revert to original direction - instant if duration=0, gradual otherwise"""
-        self._out_duration_ms = duration_ms if duration_ms > 0 else 0
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'DirectionByBuilder':
+        """Revert to original direction - instant if duration=0, gradual otherwise
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        if duration_ms is not None and rate_rotation is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+
+        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
+        self._out_rate_rotation = rate_rotation
         self._out_easing = easing
         return self
 
@@ -285,14 +333,14 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
             # Check if any timing has been configured
             has_timing = (
                 self._duration_ms is not None or
-                self._use_rate or
+                self._rate_rotation is not None or
                 self._hold_duration_ms is not None or
                 self._out_duration_ms is not None
             )
 
             if has_timing:
                 raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .rate, .hold, .revert).\n\n"
+                    f"Cannot chain .{name} after using timing methods (.over, .hold, .revert).\n\n"
                     "Use separate statements:\n"
                     f"  rig.direction.by(...).over(...)\n"
                     f"  rig.{name}(...)"
@@ -320,7 +368,7 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
                 "Instead, use separate statements."
             )
 
-        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, rate, hold, revert, then'))
+        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, hold, revert, then'))
 
 
 class DirectionController:

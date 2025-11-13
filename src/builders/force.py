@@ -1,7 +1,6 @@
 """Force builders for PRD 8 - independent velocity sources"""
 
-import time
-from typing import Optional, Callable, TYPE_CHECKING, TypeVar, Generic
+from typing import Optional, TYPE_CHECKING, TypeVar
 from ..core import Vec2
 from ..effects import Force
 from .contracts import PropertyOperationsContract, TimingMethodsContract
@@ -90,8 +89,44 @@ class ForcePropertyController(PropertyOperationsContract[T]):
         """Subtract from current property value"""
         return self.by(-delta)
 
-    def over(self, duration_ms: float, easing: str = "linear") -> T:
-        """Fade in the force over duration"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Fade in the force over duration or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based, only for speed property)
+            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
+        """
+        # Validate rate matches property type
+        if rate_speed is not None and self._property_name != "speed":
+            raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
+        if rate_accel is not None and self._property_name != "accel":
+            raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
+
+        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None or rate_accel is not None:
+            rate_value = rate_speed if rate_speed is not None else rate_accel
+            current = self._get_current_value()
+            # For forces, we're fading in from 0 to current value
+            delta = abs(current)
+            if delta < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = delta / rate_value
+                duration_ms = duration_sec * 1000
+
         force = self._get_force()
         force.in_duration_ms = duration_ms
         force.in_easing = easing
@@ -103,8 +138,45 @@ class ForcePropertyController(PropertyOperationsContract[T]):
         force.hold_duration_ms = duration_ms
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> T:
-        """Fade out the force over duration"""
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> T:
+        """Fade out the force over duration or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based, only for speed property)
+            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
+        """
+        # Validate rate matches property type
+        if rate_speed is not None and self._property_name != "speed":
+            raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
+        if rate_accel is not None and self._property_name != "accel":
+            raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
+
+        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None or rate_accel is not None:
+            rate_value = rate_speed if rate_speed is not None else rate_accel
+            current = self._get_current_value()
+            delta = abs(current)
+            if delta < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = delta / rate_value
+                duration_ms = duration_sec * 1000
+        elif duration_ms is None:
+            duration_ms = 0
+
         force = self._get_force()
         force.out_duration_ms = duration_ms
         force.out_easing = easing
@@ -142,8 +214,16 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         """Set direction for this named force"""
         return NamedForceDirectionBuilder(self.rig_state, self.name, x, y)
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceBuilder':
-        """Fade in the force over duration"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'NamedForceBuilder':
+        """Fade in the force over duration (applies to all properties)"""
         force = self._get_force()
         force.in_duration_ms = duration_ms
         force.in_easing = easing
@@ -155,24 +235,66 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         force.hold_duration_ms = duration_ms
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceBuilder':
-        """Fade out the force over duration"""
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'NamedForceBuilder':
+        """Fade out the force over duration (applies to all properties)"""
+        if duration_ms is None:
+            duration_ms = 0
         force = self._get_force()
         force.out_duration_ms = duration_ms
         force.out_easing = easing
         return self
 
-    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+    def stop(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> None:
         """Stop the named force
 
         Args:
             duration_ms: Optional duration to fade out. If None, stops immediately.
             easing: Easing function for gradual stop
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
 
         Examples:
             rig.force("wind").stop()  # Immediate stop
             rig.force("wind").stop(500, "ease_out")  # Fade out over 500ms
+            rig.force("wind").stop(rate_speed=30)  # Decelerate at 30 units/s
         """
+        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None or rate_accel is not None:
+            # Get the force to calculate current values
+            if self.name in self.rig_state._named_forces:
+                force = self.rig_state._named_forces[self.name]
+                if rate_speed is not None:
+                    delta = abs(force._speed)
+                    rate_value = rate_speed
+                elif rate_accel is not None:
+                    delta = abs(force._accel)
+                    rate_value = rate_accel
+
+                if delta < 0.01:
+                    duration_ms = 1
+                else:
+                    duration_sec = delta / rate_value
+                    duration_ms = duration_sec * 1000
+
         if self.name in self.rig_state._named_forces:
             force = self.rig_state._named_forces[self.name]
             force.request_stop(duration_ms, easing)
@@ -233,7 +355,15 @@ class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuild
 
         return NamedForceAccelController(self.rig_state, self.name)
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'NamedForceDirectionBuilder':
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'NamedForceDirectionBuilder':
         """Fade in the force over duration"""
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
@@ -252,8 +382,18 @@ class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuild
         force.hold_duration_ms = duration_ms
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'NamedForceDirectionBuilder':
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'NamedForceDirectionBuilder':
         """Fade out the force over duration"""
+        if duration_ms is None:
+            duration_ms = 0
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
         force = self.rig_state._named_forces[self.name]
@@ -272,8 +412,25 @@ class NamedForceNamespace:
         """Create or access a named force"""
         return NamedForceBuilder(self.rig_state, name)
 
-    def stop_all(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Stop all named forces"""
+    def stop_all(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> None:
+        """Stop all named forces
+
+        Args:
+            duration_ms: Optional duration to fade out. If None, stops immediately.
+            easing: Easing function for gradual stop
+            rate_speed: Speed deceleration rate in units/second (rate-based)
+            rate_accel: Acceleration deceleration rate in units/second² (rate-based)
+        """
+        # Note: For stop_all, rate-based stopping applies per-force
+        # Each force will calculate its own duration based on its current values
         for force in list(self.rig_state._named_forces.values()):
             force.request_stop(duration_ms, easing)
 

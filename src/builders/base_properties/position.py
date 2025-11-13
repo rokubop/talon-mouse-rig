@@ -1,6 +1,5 @@
 """Position builders for base rig - position and glide control"""
 
-import time
 from typing import Optional, Callable, TYPE_CHECKING, Literal
 from talon import ctrl, cron
 
@@ -63,8 +62,40 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
         self._after_revert_callback: Optional[Callable] = None
         self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def over(self, duration_ms: float, easing: str = None) -> 'PositionBuilder':
-        """Glide to position over time"""
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = None,
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'PositionBuilder':
+        """Glide to position over time or at rate
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function
+            rate_speed: Movement rate in units/second (rate-based)
+        """
+        if duration_ms is not None and rate_speed is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_speed")
+
+        # Calculate duration from rate if provided
+        if rate_speed is not None:
+            current_pos = self.rig_state._position
+            if self.mode == "absolute":
+                target_pos = Vec2(self.x_or_dx, self.y_or_dy)
+            else:  # relative
+                target_pos = current_pos + Vec2(self.x_or_dx, self.y_or_dy)
+
+            distance = (target_pos - current_pos).magnitude()
+            if distance < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = distance / rate_speed
+                duration_ms = duration_sec * 1000
+
         # Disable instant execution since we're doing a transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
@@ -84,9 +115,31 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
         self._current_stage = "after_hold"
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PositionBuilder':
-        """Move back to original position after hold (or immediately if no hold)"""
-        self._revert_duration_ms = duration_ms
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'PositionBuilder':
+        """Move back to original position after hold (or immediately if no hold)
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_speed: Movement rate in units/second (rate-based)
+        """
+        if duration_ms is not None and rate_speed is not None:
+            raise ValueError("Cannot specify both duration_ms and rate_speed")
+
+        # For revert with rate, we'd need to calculate distance back to origin
+        # For now, just use provided duration or default
+        if duration_ms is None and rate_speed is None:
+            duration_ms = 0
+
+        self._revert_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
         self._revert_easing = easing
         self._current_stage = "after_revert"
         return self

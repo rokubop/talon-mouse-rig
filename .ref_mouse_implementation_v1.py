@@ -10,7 +10,6 @@ from dataclasses import dataclass
 import platform
 import math
 import time
-from talon.screen import Screen
 
 mod = Module()
 mod.setting("mouse_move_api", default="talon", type=str, desc="Mouse API to use for mouse movement - talon or windows")

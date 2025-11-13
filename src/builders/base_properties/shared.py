@@ -1,6 +1,5 @@
 """Shared builders for base properties - common classes for speed and acceleration"""
 
-import time
 from typing import Optional, Callable, Union, TYPE_CHECKING
 from ..contracts import TimingMethodsContract
 
@@ -139,10 +138,54 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
             return current
         return current
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
-        """Apply change over duration - can be permanent or temporary based on .revert()/.hold()"""
-        # Check if this is a temporary effect (has hold or revert)
-        # We'll set _in_duration_ms which will be checked in _execute
+    def over(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'PropertyEffectBuilder':
+        """Apply change over duration or at rate - can be permanent or temporary based on .revert()/.hold()
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based)
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
+        """
+        # Validate inputs
+        rate_provided = rate_speed is not None or rate_accel is not None
+        if duration_ms is not None and rate_provided:
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Calculate duration from rate if provided
+        if rate_provided:
+            rate_value = rate_speed if rate_speed is not None else rate_accel
+            rate_property = "speed" if rate_speed is not None else "accel"
+
+            if rate_property != self.property_name:
+                raise ValueError(f"Rate parameter mismatch: trying to use rate_{rate_property} on {self.property_name} property")
+
+            # Get current and target values
+            current = getattr(self.rig_state, f"_{self.property_name}")
+            value = self.value
+            if callable(value):
+                if not hasattr(self.rig_state, '_state_accessor'):
+                    from ...state import StateAccessor
+                    self.rig_state._state_accessor = StateAccessor(self.rig_state)
+                value = value(self.rig_state._state_accessor)
+
+            target = self._calculate_target_value(current, value)
+            delta = abs(target - current)
+
+            if delta < 0.01:
+                duration_ms = 1
+            else:
+                duration_sec = delta / rate_value
+                duration_ms = duration_sec * 1000
+
         self._in_duration_ms = duration_ms
         self._in_easing = easing
         return self
@@ -152,48 +195,35 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
         self._hold_duration_ms = duration_ms
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PropertyEffectBuilder':
-        """Revert to original value - instant if duration=0, gradual otherwise"""
-        self._out_duration_ms = duration_ms if duration_ms > 0 else 0
-        self._out_easing = easing
-        return self
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'PropertyEffectBuilder':
+        """Revert to original value - instant if duration=0, gradual otherwise
 
-    def rate(self, value: float = None) -> Union['PropertyEffectBuilder', 'PropertyRateNamespace']:
-        """Change at specified rate or access rate namespace
-
-        If value provided: context-aware rate (speed->speed/sec, accel->accel/sec²)
-        If no value: returns namespace for .rate.speed(), .rate.accel()
-
-        Examples:
-            rig.speed.to(50).rate(10)         # Increase speed at 10/sec
-            rig.speed.to(50).rate.accel(10)   # Accelerate at 10/sec² until reaching 50
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
         """
-        if value is None:
-            # Return namespace for .rate.speed(), .rate.accel()
-            return PropertyRateNamespace(self)
+        # For revert, rate-based doesn't make as much sense since we're going back to original
+        # But we'll support it for consistency
+        rate_provided = rate_speed is not None or rate_accel is not None
+        if duration_ms is not None and rate_provided:
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
 
-        # Context-aware rate
-        current = None
-        target = None
+        if rate_provided:
+            # Just use a default duration for now - proper implementation would calculate based on current delta
+            duration_ms = 500  # TODO: Calculate based on current value vs original
 
-        if self.property_name == "speed":
-            current = self.rig_state._speed
-            target = self._calculate_target_value(current, self.value)
-        elif self.property_name == "accel":
-            current = self.rig_state._accel
-            target = self._calculate_target_value(current, self.value)
-        else:
-            raise ValueError(f".rate() not valid for {self.property_name}")
-
-        delta = abs(target - current)
-        if delta < 0.01:
-            duration_ms = 1
-        else:
-            duration_sec = delta / value
-            duration_ms = duration_sec * 1000
-
-        self._in_duration_ms = duration_ms
-        self._in_easing = "linear"  # Rate-based uses linear
+        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
+        self._out_easing = easing
         return self
 
     def then(self, callback: Callable) -> 'PropertyEffectBuilder':
@@ -250,64 +280,5 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
         raise AttributeError(_error_unknown_builder_attribute(
             f'{self.property_name.capitalize()}EffectBuilder',
             name,
-            'over, hold, revert, rate'
+            'over, hold, revert, then'
         ))
-
-
-class PropertyRateNamespace:
-    """Namespace for rate-based timing on properties"""
-    def __init__(self, builder: 'PropertyEffectBuilder'):
-        self._builder = builder
-
-    def speed(self, value: float) -> 'PropertyEffectBuilder':
-        """Change at specified speed rate (units/sec)
-
-        Only valid for position changes.
-        """
-        if self._builder.property_name == "position":
-            # Calculate duration based on distance / speed
-            # TODO: Implement position rate logic
-            pass
-        else:
-            raise ValueError(f".rate.speed() only valid for position, not {self._builder.property_name}")
-        return self._builder
-
-    def accel(self, value: float) -> 'PropertyEffectBuilder':
-        """Change via acceleration rate (units/sec²)
-
-        For speed: accelerate/decelerate at specified rate until reaching target
-        For accel: change acceleration at specified rate (jerk)
-        """
-        if self._builder.property_name == "speed":
-            # v = at, so t = v/a
-            current = self._builder.rig_state._speed
-            target = self._builder._calculate_target_value(current, self._builder.value)
-            delta = abs(target - current)
-
-            if delta < 0.01:
-                duration_ms = 1  # Minimal duration
-            else:
-                duration_sec = delta / value
-                duration_ms = duration_sec * 1000
-
-            self._builder._in_duration_ms = duration_ms
-            self._builder._in_easing = "linear"  # Rate-based uses linear
-
-        elif self._builder.property_name == "accel":
-            # Jerk (rate of acceleration change)
-            current = self._builder.rig_state._accel
-            target = self._builder._calculate_target_value(current, self._builder.value)
-            delta = abs(target - current)
-
-            if delta < 0.01:
-                duration_ms = 1
-            else:
-                duration_sec = delta / value
-                duration_ms = duration_sec * 1000
-
-            self._builder._in_duration_ms = duration_ms
-            self._builder._in_easing = "linear"
-        else:
-            raise ValueError(f".rate.accel() not valid for {self._builder.property_name}")
-
-        return self._builder
