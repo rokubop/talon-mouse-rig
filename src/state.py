@@ -11,7 +11,7 @@ from .core import (
     Vec2, SubpixelAdjuster, lerp, clamp,
     SpeedTransition, DirectionTransition, PositionTransition
 )
-from .effects import EffectStack, EffectLifecycle, Force
+from .effects import EffectStack, EffectLifecycle, Force, PropertyEffect, DirectionEffect
 from ..settings import mod
 from .builders.base import (
     PropertyEffectBuilder, DirectionBuilder, PositionController,
@@ -33,6 +33,10 @@ class RigState:
         self._speed_transition: Optional[SpeedTransition] = None
         self._direction_transition: Optional[DirectionTransition] = None
         self._position_transitions: list[PositionTransition] = []
+
+        # Temporary effects on base rig properties
+        self._property_effects: list[PropertyEffect] = []  # speed/accel temporary effects
+        self._direction_effects: list[DirectionEffect] = []  # direction temporary effects
 
         # Named forces (for backward compatibility with force API)
         self._named_forces: dict[str, Force] = {}
@@ -212,7 +216,12 @@ class RigState:
         """Get speed with all effects applied"""
         base_speed = self._speed
 
-        # Apply effect stacks (PRD 8)
+        # Apply temporary property effects first (base rig temporary modifications)
+        for effect in self._property_effects:
+            if effect.property_name == "speed":
+                base_speed = effect.update(base_speed)
+
+        # Apply effect stacks (PRD 8 - named effects)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
         # This ensures multiplicative operations apply before additive
 
@@ -262,7 +271,12 @@ class RigState:
         """
         base_accel = self._accel
 
-        # Apply effect stacks (PRD 8)
+        # Apply temporary property effects first (base rig temporary modifications)
+        for effect in self._property_effects:
+            if effect.property_name == "accel":
+                base_accel = effect.update(base_accel)
+
+        # Apply effect stacks (PRD 8 - named effects)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
 
         # Group by entity name to track first occurrence order
@@ -306,7 +320,11 @@ class RigState:
         """Get direction with all rotation effects and transforms applied"""
         base_direction = self._direction
 
-        # Apply effect stacks (PRD 8) - direction rotations
+        # Apply temporary direction effects first (base rig temporary rotations)
+        for effect in self._direction_effects:
+            base_direction = effect.update(base_direction)
+
+        # Apply effect stacks (PRD 8 - named effects) - direction rotations
         # Direction uses add/sub for rotation by degrees, and to() for absolute
         # Group by entity name to track first occurrence order
         entity_order = []
@@ -386,7 +404,7 @@ class RigState:
 
     def _get_accel_velocity_contribution(self) -> float:
         """Get total velocity contribution from all acceleration effects
-        
+
         PRD 8: Currently returns 0 - accel velocity tracking removed with old effect system.
         Accel effects now directly modify the accel property through effect stacks.
         """
@@ -696,7 +714,30 @@ class RigState:
             if self._direction_transition.complete:
                 self._direction_transition = None
 
-        # Update effect lifecycles (lifecycle wrappers for effect stacks)
+        # Update and cleanup temporary property effects (speed/accel)
+        self._property_effects = [
+            effect for effect in self._property_effects
+            if not effect.complete and effect.phase != "not_started"
+        ]
+
+        # Start any property effects that haven't been started yet
+        for effect in self._property_effects:
+            if effect.phase == "not_started":
+                current_value = self._speed if effect.property_name == "speed" else self._accel
+                effect.start(current_value)
+
+        # Update and cleanup temporary direction effects
+        self._direction_effects = [
+            effect for effect in self._direction_effects
+            if not effect.complete and effect.phase != "not_started"
+        ]
+
+        # Start any direction effects that haven't been started yet
+        for effect in self._direction_effects:
+            if effect.phase == "not_started":
+                effect.start(self._direction)
+
+        # Update effect lifecycles (lifecycle wrappers for effect stacks - named effects)
         for key, effect_lifecycle in list(self._effect_lifecycles.items()):
             # Start effect if not started
             if effect_lifecycle.phase == "not_started":

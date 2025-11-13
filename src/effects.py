@@ -463,6 +463,201 @@ class Effect:
         self.stop_easing = easing
 
 
+# ============================================================================
+# PROPERTY EFFECT (temporary modifications to scalar properties like speed/accel)
+# ============================================================================
+
+class PropertyEffect:
+    """
+    Temporary effect for scalar properties (speed, accel) with lifecycle support.
+
+    Supports operations: to, by, mul, div
+    Similar to DirectionEffect but for scalar values.
+    """
+    def __init__(self, property_name: str, operation: str, value: float, name: Optional[str] = None):
+        self.property_name = property_name  # "speed" or "accel"
+        self.operation = operation  # "to", "by", "mul", "div"
+        self.value = value
+        self.name = name  # Optional name for stopping early
+
+        # Lifecycle configuration
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+
+        # Runtime state
+        self.phase: str = "not_started"  # "in", "hold", "out", "complete"
+        self.phase_start_time: Optional[float] = None
+        self.base_value: Optional[float] = None  # Property value before effect was applied
+        self.current_multiplier: float = 0.0  # 0 to 1, how much of the effect is active
+        self.complete = False
+
+        # For stopping
+        self.stop_requested = False
+        self.stop_duration_ms: Optional[float] = None
+        self.stop_easing: str = "linear"
+        self.stop_start_time: Optional[float] = None
+
+    def start(self, current_value: float) -> None:
+        """Start the effect lifecycle"""
+        self.base_value = current_value
+
+        if self.in_duration_ms is not None:
+            self.phase = "in"
+            self.phase_start_time = time.perf_counter()
+        elif self.hold_duration_ms is not None:
+            self.phase = "hold"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        elif self.out_duration_ms is not None:
+            # Start at full strength if only out phase
+            self.phase = "out"
+            self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 1.0
+        else:
+            # No lifecycle specified
+            if self.name:
+                # Named effects without lifecycle persist indefinitely at full strength
+                self.phase = "hold"
+                self.current_multiplier = 1.0
+            else:
+                # Unnamed effects without lifecycle complete immediately
+                self.phase = "complete"
+                self.complete = True
+
+    def update(self, current_base_value: float) -> float:
+        """
+        Update effect and return the modified value.
+
+        Args:
+            current_base_value: The current base value (without this effect)
+
+        Returns:
+            The modified value with this effect applied
+        """
+        if self.complete:
+            return current_base_value
+
+        # Handle stop request
+        if self.stop_requested:
+            return self._update_stop(current_base_value)
+
+        # Normal lifecycle progression
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
+
+        if self.phase == "in":
+            if elapsed_ms >= self.in_duration_ms:
+                # Move to next phase
+                self.current_multiplier = 1.0
+                if self.hold_duration_ms is not None:
+                    self.phase = "hold"
+                    self.phase_start_time = current_time
+                elif self.out_duration_ms is not None:
+                    self.phase = "out"
+                    self.phase_start_time = current_time
+                else:
+                    # No hold or revert specified - persist at full strength
+                    self.phase = "hold"
+                    self.hold_duration_ms = None  # Persist indefinitely
+            else:
+                # Update multiplier with easing
+                t = elapsed_ms / self.in_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                self.current_multiplier = easing_fn(t)
+
+        elif self.phase == "hold":
+            # Check if we have a duration specified
+            if self.hold_duration_ms is not None:
+                if elapsed_ms >= self.hold_duration_ms:
+                    # Move to next phase
+                    if self.out_duration_ms is not None:
+                        self.phase = "out"
+                        self.phase_start_time = current_time
+                    else:
+                        self.phase = "complete"
+                        self.complete = True
+                        return current_base_value
+            # else: persist indefinitely at full strength
+            # Multiplier stays at 1.0 during hold
+
+        elif self.phase == "out":
+            if elapsed_ms >= self.out_duration_ms:
+                self.phase = "complete"
+                self.complete = True
+                return current_base_value
+            else:
+                # Fade out
+                t = elapsed_ms / self.out_duration_ms
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                self.current_multiplier = 1.0 - easing_fn(t)
+
+        # Apply operation based on current multiplier
+        return self._apply_operation(current_base_value)
+
+    def _apply_operation(self, base_value: float) -> float:
+        """Apply the operation to the base value based on multiplier"""
+        if self.current_multiplier == 0.0:
+            return base_value
+
+        if self.operation == "to":
+            # Interpolate from base to target
+            return lerp(base_value, self.value, self.current_multiplier)
+        elif self.operation == "by":
+            # Add scaled delta
+            return base_value + (self.value * self.current_multiplier)
+        elif self.operation == "mul":
+            # Multiply: base * (1 + (multiplier - 1) * current_multiplier)
+            # At multiplier=0: base * 1 = base
+            # At multiplier=1: base * value
+            return base_value * (1.0 + (self.value - 1.0) * self.current_multiplier)
+        elif self.operation == "div":
+            # Divide: similar to multiply
+            if abs(self.value) < 1e-6:
+                return base_value
+            divisor = 1.0 + (self.value - 1.0) * self.current_multiplier
+            if abs(divisor) < 1e-6:
+                return base_value
+            return base_value / divisor
+        return base_value
+
+    def _update_stop(self, current_base_value: float) -> float:
+        """Handle stop request by fading out"""
+        current_time = time.perf_counter()
+
+        if self.stop_start_time is None:
+            self.stop_start_time = current_time
+
+        if self.stop_duration_ms == 0:
+            # Instant stop
+            self.complete = True
+            return current_base_value
+
+        elapsed_ms = (current_time - self.stop_start_time) * 1000
+
+        if elapsed_ms >= self.stop_duration_ms:
+            self.complete = True
+            return current_base_value
+
+        # Fade out from current multiplier to 0
+        t = elapsed_ms / self.stop_duration_ms
+        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
+        # Store the multiplier we had when stop was requested
+        if not hasattr(self, '_stop_start_multiplier'):
+            self._stop_start_multiplier = self.current_multiplier
+        self.current_multiplier = self._stop_start_multiplier * (1.0 - easing_fn(t))
+
+        return self._apply_operation(current_base_value)
+
+    def stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop, optionally over a duration"""
+        self.stop_requested = True
+        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
+        self.stop_easing = easing
+
+
 class DirectionEffect:
     """
     Represents a temporary direction rotation with lifecycle phases.

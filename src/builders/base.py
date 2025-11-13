@@ -36,6 +36,10 @@ class PropertyEffectBuilder:
         self._in_easing: str = "linear"
         self._out_easing: str = "linear"
 
+        # Callback support
+        self._wait_duration_ms: Optional[float] = None
+        self._then_callback: Optional[Callable] = None
+
         # Named modifier
         self._effect_name: Optional[str] = None
 
@@ -51,25 +55,21 @@ class PropertyEffectBuilder:
         if self._instant_done:
             return  # Already executed
 
-        # Determine if this is permanent or temporary
-        # Temporary = has .revert() or .hold() specified OR is a named modifier
-        is_temporary = (self._hold_duration_ms is not None or
-                       self._out_duration_ms is not None or
-                       self._effect_name is not None)
+        # Evaluate value if it's a callable (lambda)
+        value = self.value
+        if callable(value):
+            if not hasattr(self.rig_state, '_state_accessor'):
+                from .base import StateAccessor
+                self.rig_state._state_accessor = StateAccessor(self.rig_state)
+            value = value(self.rig_state._state_accessor)
 
-        if self._in_duration_ms is not None and not is_temporary:
-            # Permanent transition over time (just .over() without .hold()/.revert())
-            if self.property_name == "speed":
-                current = self.rig_state._speed
-                target = self._calculate_target_value(current)
-                transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
-                self.rig_state.start()
-                self.rig_state._speed_transition = transition
-            # TODO: Add accel transition if needed
+        # Determine if this is a temporary effect (has .hold() or .revert())
+        is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
-        elif is_temporary:
-            # Create and register temporary effect
-            effect = Effect(self.property_name, self.operation, self.value, self._effect_name)
+        if is_temporary:
+            # Create temporary property effect
+            from ..effects import PropertyEffect
+            effect = PropertyEffect(self.property_name, self.operation, value, self._effect_name)
             effect.in_duration_ms = self._in_duration_ms  # Can be None for instant application
             effect.in_easing = self._in_easing
             effect.hold_duration_ms = self._hold_duration_ms
@@ -82,41 +82,58 @@ class PropertyEffectBuilder:
             effect.out_easing = self._out_easing
 
             self.rig_state.start()
-            self.rig_state._effects.append(effect)
+            self.rig_state._property_effects.append(effect)
+            return
 
-            # Track named modifier
-            if self._effect_name:
-                # Remove any existing modifier with same name
-                if self._effect_name in self.rig_state._named_modifiers:
-                    old_effect = self.rig_state._named_modifiers[self._effect_name]
-                    if old_effect in self.rig_state._effects:
-                        self.rig_state._effects.remove(old_effect)
-                self.rig_state._named_modifiers[self._effect_name] = effect
-        else:
-            # Immediate execution (no timing specified)
+        # Permanent changes (no .hold() or .revert())
+        if self._in_duration_ms is not None:
+            # Transition over time
             if self.property_name == "speed":
                 current = self.rig_state._speed
-                target = self._calculate_target_value(current)
-                self.rig_state._speed = max(0.0, target)
-                self.rig_state.start()  # Ensure ticking is active
+                target = self._calculate_target_value(current, value)
+                transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
+
+                # Register callback with transition if set
+                if self._then_callback:
+                    transition.on_complete = self._then_callback
+
+                self.rig_state.start()
+                self.rig_state._speed_transition = transition
             elif self.property_name == "accel":
+                # TODO: Add accel transition support if needed
                 current = self.rig_state._accel
-                target = self._calculate_target_value(current)
+                target = self._calculate_target_value(current, value)
                 self.rig_state._accel = target
 
-    def _calculate_target_value(self, current: float) -> float:
-        """Calculate the target value based on operation
+                if self._then_callback:
+                    self._then_callback()
+        else:
+            # Immediate execution (no .over() timing specified)
+            if self.property_name == "speed":
+                current = self.rig_state._speed
+                target = self._calculate_target_value(current, value)
+                target = max(0.0, target)
 
-        Evaluates lambda functions at execution time with current state.
-        """
-        # Evaluate value if it's a callable (lambda)
-        value = self.value
-        if callable(value):
-            # Pass StateAccessor to lambda for dynamic calculations
-            if not hasattr(self.rig_state, '_state_accessor'):
-                self.rig_state._state_accessor = StateAccessor(self.rig_state)
-            value = value(self.rig_state._state_accessor)
+                # Apply speed limit if set
+                max_speed = self.rig_state.limits_max_speed
+                if max_speed is not None:
+                    target = min(target, max_speed)
 
+                self.rig_state._speed = target
+                self.rig_state.start()  # Ensure ticking is active
+
+                if self._then_callback:
+                    self._then_callback()
+            elif self.property_name == "accel":
+                current = self.rig_state._accel
+                target = self._calculate_target_value(current, value)
+                self.rig_state._accel = target
+
+                if self._then_callback:
+                    self._then_callback()
+
+    def _calculate_target_value(self, current: float, value: float) -> float:
+        """Calculate the target value based on operation (value already evaluated)"""
         if self.operation == "to":
             return value
         elif self.operation == "by":
