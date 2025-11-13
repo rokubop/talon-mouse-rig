@@ -1,13 +1,13 @@
 """
-Talon Mouse Rig - Continuous motion-based mouse control system (PRD 7)
+Talon Mouse Rig - Continuous motion-based mouse control system (PRD 8)
 
 A fluent, stateful mouse control API with:
-- Explicit transform/force separation with .transform() and .force()
-- Direct mathematical operations (.mul(), .add(), .sub(), .div()) on transforms
-- Independent force entities with velocity vectors
+- Named effects with strict syntax (.effect())
+- Independent force entities (.force())
+- Direct mathematical operations (.to(), .mul(), .add(), .sub(), .div())
 - Smooth transitions with easing
 - Temporary effects with lifecycle (.over()/.hold()/.revert())
-- Max constraints on transforms
+- On-repeat strategies for effect behavior
 - State management and baking
 
 Core Properties:
@@ -22,33 +22,37 @@ Basic Usage:
     rig.speed(10)                # Set base speed
     rig.speed.to(20).over(500)   # Ramp to 20 over 500ms
 
-Explicit Entity API (PRD 7):
-    rig.transform("name")  # Named transform (modifies base properties)
-    rig.force("name")      # Named force (independent entity)
+Explicit Entity API (PRD 8):
+    rig.effect("name")   # Named effect (modifies base properties) - STRICT syntax
+    rig.force("name")    # Named force (independent entity) - loose syntax
 
-Transforms (modify base properties with explicit operations):
+Effects (modify base properties with explicit operations - STRICT mode):
+    Absolute value:
+        rig.effect("boost").speed.to(10)            # Set speed to 10
+
     Multiplicative:
-        rig.transform("sprint").speed.mul(2)        # Multiply speed by 2
-        rig.transform("sprint").speed.div(2)        # Divide speed by 2
+        rig.effect("sprint").speed.mul(2)           # Multiply speed by 2
+        rig.effect("sprint").speed.div(2)           # Divide speed by 2
 
     Additive:
-        rig.transform("boost").speed.add(10)        # Add 10 to speed
-        rig.transform("boost").speed.sub(5)         # Subtract 5 from speed
+        rig.effect("boost").speed.add(10)           # Add 10 to speed
+        rig.effect("boost").speed.by(10)            # Alias for add
+        rig.effect("boost").speed.sub(5)            # Subtract 5 from speed
 
-    Stacking:
-        Operations stack by default:
-        rig.transform("boost").speed.add(10)        # +10
-        rig.transform("boost").speed.add(10)        # +20 total
-
-        Use .max() to limit stacking:
-        rig.transform("boost").speed.add(10).max(30)        # Cap at +30
-        rig.transform("boost").speed.add(10).max.stacks(3)  # Max 3 stacks
+    On-Repeat Strategies:
+        rig.effect("boost").speed.add(10).on_repeat("stack")          # Unlimited stacking
+        rig.effect("boost").speed.add(10).on_repeat("stack", 3)       # Max 3 stacks
+        rig.effect("boost").speed.add(10).on_repeat("replace")        # Default - replace existing
+        rig.effect("boost").speed.add(10).on_repeat("extend")         # Extend duration
+        rig.effect("boost").speed.add(10).on_repeat("queue")          # Queue effects
+        rig.effect("boost").speed.add(10).on_repeat("ignore")         # Ignore new calls
+        rig.effect("boost").speed.add(10).on_repeat("throttle", 500)  # Rate limit (ms)
 
     Stop:
-        rig.transform("sprint").stop()              # Immediate stop
-        rig.transform("sprint").stop(500)           # Fade out over 500ms
+        rig.effect("sprint").revert()               # Immediate revert
+        rig.effect("sprint").revert(500)            # Fade out over 500ms
 
-Forces (independent entities with their own state):
+Forces (independent entities with their own state - LOOSE mode):
     Direct setters (shorthand for .to()):
         rig.force("gravity").direction(0, 1)        # Set direction
         rig.force("gravity").accel(9.8)             # Set acceleration
@@ -67,7 +71,7 @@ Forces (independent entities with their own state):
         rig.force("wind").stop(500)                 # Fade out
 
 Composition Pipeline:
-    base → transforms (.mul then .add, in creation order) → forces (vector addition)
+    base → effects (.mul then .add, in creation order) → forces (vector addition)
 
 Direct Temporary Effects (anonymous, no naming needed):
     rig.speed.by(10).hold(1000).revert(500)     # Temporary speed boost
@@ -86,7 +90,7 @@ Lifecycle:
     .revert(duration?, easing?)    # Revert to original
 
 State Management:
-    rig.state.speed       # Computed speed (base + transforms + forces)
+    rig.state.speed       # Computed speed (base + effects + forces)
     rig.state.accel       # Computed acceleration
     rig.state.direction   # Current direction
     rig.state.pos         # Current position
@@ -97,7 +101,7 @@ State Management:
     rig.base.direction    # Base direction only
 
 Baking & Stopping:
-    rig.bake()                      # Flatten transforms into base, clear all
+    rig.bake()                      # Flatten effects into base, clear all
     rig.stop()                      # Bake, clear, speed=0 (instant)
     rig.stop(500, "ease_out")       # Bake, clear, decelerate over 500ms
 
@@ -117,11 +121,11 @@ Position:
 Complete Examples:
     # WASD with sprint
     rig.direction(1, 0).speed(10)                       # Move right
-    rig.transform("sprint").speed.mul(2)                # Hold shift to sprint
-    rig.transform("sprint").stop()                      # Release shift
+    rig.effect("sprint").speed.mul(2)                   # Hold shift to sprint
+    rig.effect("sprint").stop()                         # Release shift
 
     # Stacking boost pads
-    rig.transform("boost").speed.add(5).max.stacks(3)   # Hit pad (stacks up to 3)
+    rig.effect("boost").speed.add(5).max.stacks(3)      # Hit pad (stacks up to 3)
 
     # Gravity + wind
     rig.force("gravity").direction(0, 1).accel(9.8)     # Always pulls down
@@ -538,34 +542,36 @@ class PositionTransition(Transition):
 
 
 # ============================================================================
-# TRANSFORM STACK (PRD 6 - tracks .to() vs .by() stacking for transforms)
+# EFFECT STACK (PRD 8 - tracks operation stacking for effects)
 # ============================================================================
 
 @dataclass
-class TransformStack:
+class EffectStack:
     """
-    Tracks stacking behavior for transform operations.
+    Tracks stacking behavior for effect operations.
 
-    PRD 7: Default stack limit = 1 (replace semantics)
-    - .mul(value): Multiply (replaces by default, use .stack() to allow multiple)
+    PRD 8: Default on-repeat strategy = "replace" (1 stack, replace semantics)
+    - .to(value): Set absolute value
+    - .mul(value): Multiply (replaces by default, use .on_repeat("stack") to allow multiple)
     - .div(value): Divide (replaces by default)
     - .add(value): Add (replaces by default)
     - .sub(value): Subtract (replaces by default)
 
-    Stacking:
+    On-Repeat Strategies:
     - Default: max_stack_count = 1 (calling same operation replaces previous)
-    - .stack(): unlimited stacking (max_stack_count = None)
-    - .stack(n): limited stacking (max_stack_count = n)
+    - .on_repeat("stack"): max_stack_count = None (unlimited stacking)
+    - .on_repeat("stack", n): max_stack_count = n (max n stacks)
 
-    For transforms:
+    For effects:
     - Multiplicative ops (.mul/.div) are summed: base * (1.0 + sum of multipliers)
     - Additive ops (.add/.sub) are summed: base + sum of additions
+    - Absolute ops (.to) set value directly
 
     For vectors (direction, position), stores Vec2 objects.
     """
     name: str  # Entity name
     property: str  # "speed", "accel", "direction", "pos"
-    operation_type: str  # "mul", "div", "add", "sub"
+    operation_type: str  # "mul", "div", "add", "sub", "to"
 
     # Values (scalar or vector) - stacking controlled by max_stack_count
     values: list[Union[float, Vec2]] = None  # List of stacked values
@@ -626,7 +632,7 @@ class TransformStack:
         return 0.0
 
     def apply_to_base(self, base_value: Union[float, Vec2]) -> Union[float, Vec2]:
-        """Apply this transform to a base value"""
+        """Apply this effect to a base value"""
         total = self.get_total()
 
         if self.operation_type in ["mul", "div"]:
@@ -656,14 +662,14 @@ class TransformStack:
         return result
 
 
-class TransformEffect:
+class EffectLifecycle:
     """
-    Wrapper for TransformStack with lifecycle support.
+    Wrapper for EffectStack with lifecycle support.
 
-    Applies a multiplier (0.0 to 1.0) to the transform based on lifecycle phase.
-    This allows transforms to fade in/out just like Effects.
+    Applies a multiplier (0.0 to 1.0) to the effect based on lifecycle phase.
+    This allows effects to fade in/out smoothly.
     """
-    def __init__(self, stack: TransformStack):
+    def __init__(self, stack: EffectStack):
         self.stack = stack
 
         # Lifecycle configuration
@@ -676,7 +682,7 @@ class TransformEffect:
         # Runtime state
         self.phase: str = "not_started"
         self.phase_start_time: Optional[float] = None
-        self.current_multiplier: float = 1.0  # How much of the transform is active
+        self.current_multiplier: float = 1.0  # How much of the effect is active
         self.complete = False
 
         # For stopping
@@ -784,15 +790,15 @@ class TransformEffect:
         self.stop_easing = easing
 
     def apply_to_base(self, base_value: float) -> float:
-        """Apply transform with current multiplier"""
+        """Apply effect with current multiplier"""
         if self.current_multiplier == 0.0:
             return base_value
 
-        # Get the full transform value
-        full_transform = self.stack.apply_to_base(base_value)
+        # Get the full effect value
+        full_effect = self.stack.apply_to_base(base_value)
 
-        # Interpolate between base and full transform based on multiplier
-        return lerp(base_value, full_transform, self.current_multiplier)
+        # Interpolate between base and full effect based on multiplier
+        return lerp(base_value, full_effect, self.current_multiplier)
 
 
 # ============================================================================
@@ -1190,7 +1196,7 @@ class Force:
         # Integrated velocity from acceleration
         self._velocity = 0.0
 
-        # Lifecycle state (similar to TransformEffect)
+        # Lifecycle state (similar to EffectLifecycle)
         self.phase: Literal["not_started", "in", "hold", "out", "complete"] = "not_started"
         self.start_time: Optional[float] = None
         self.phase_start_time: Optional[float] = None
@@ -2995,85 +3001,92 @@ class PositionByBuilder:
 
 
 # ============================================================================
-# ENTITY BUILDER (PRD 6 - Unified API with Type Inference)
+# ENTITY BUILDER (PRD 8 - Named Effects)
 # ============================================================================
 
-class TransformBuilder:
+class EffectBuilder:
     """
-    PRD 7: Builder for named transform entities.
+    PRD 8: Builder for named effect entities.
 
-    Transforms modify base properties using direct operations:
+    Effects modify base properties using direct operations:
+    - .to(value): Set absolute value
+    - .add(value) / .by(value): Add delta (aliases)
+    - .sub(value): Subtract
     - .mul(value): Multiply
     - .div(value): Divide
-    - .add(value): Add
-    - .sub(value): Subtract
+
+    Effects use strict syntax - shorthand like speed(10) is not allowed.
+    Use explicit operations like speed.to(10) or speed.add(10).
 
     Examples:
-        rig.transform("sprint").speed.mul(2)       # Double speed
-        rig.transform("boost").speed.add(10)       # Add 10 to speed
-        rig.transform("drift").direction.add(15)   # Rotate 15 degrees
+        rig.effect("sprint").speed.mul(2)       # Double speed
+        rig.effect("boost").speed.add(10)       # Add 10 to speed
+        rig.effect("drift").direction.add(15)   # Rotate 15 degrees
     """
-    def __init__(self, rig_state: 'RigState', name: str):
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = True):
         self.rig_state = rig_state
         self.name = name
+        self.strict_mode = strict_mode
         self._speed_builder = None
         self._accel_builder = None
         self._direction_builder = None
         self._pos_builder = None
 
     @property
-    def speed(self) -> 'TransformSpeedBuilder':
-        """Access speed transform operations"""
+    def speed(self) -> 'EffectSpeedBuilder':
+        """Access speed effect operations"""
         if self._speed_builder is None:
-            self._speed_builder = TransformSpeedBuilder(self.rig_state, self.name)
+            self._speed_builder = EffectSpeedBuilder(self.rig_state, self.name, self.strict_mode)
         return self._speed_builder
 
     @property
-    def accel(self) -> 'TransformAccelBuilder':
-        """Access accel transform operations"""
+    def accel(self) -> 'EffectAccelBuilder':
+        """Access accel effect operations"""
         if self._accel_builder is None:
-            self._accel_builder = TransformAccelBuilder(self.rig_state, self.name)
+            self._accel_builder = EffectAccelBuilder(self.rig_state, self.name, self.strict_mode)
         return self._accel_builder
 
     @property
-    def direction(self) -> 'TransformDirectionBuilder':
-        """Access direction transform operations (rotation)"""
+    def direction(self) -> 'EffectDirectionBuilder':
+        """Access direction effect operations (rotation)"""
         if self._direction_builder is None:
-            self._direction_builder = TransformDirectionBuilder(self.rig_state, self.name)
+            self._direction_builder = EffectDirectionBuilder(self.rig_state, self.name, self.strict_mode)
         return self._direction_builder
 
     @property
-    def pos(self) -> 'TransformPosBuilder':
-        """Access position transform operations (offsets)"""
+    def pos(self) -> 'EffectPosBuilder':
+        """Access position effect operations (offsets)"""
         if self._pos_builder is None:
-            self._pos_builder = TransformPosBuilder(self.rig_state, self.name)
+            self._pos_builder = EffectPosBuilder(self.rig_state, self.name, self.strict_mode)
         return self._pos_builder
 
     def revert(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Revert this transform (removes all operations)"""
-        # Revert all transform stacks for this entity
-        keys_to_revert = [key for key in self.rig_state._transform_stacks
+        """Revert this effect (removes all operations)"""
+        # Revert all effect stacks for this entity
+        keys_to_revert = [key for key in self.rig_state._effect_stacks
                          if key.startswith(f"{self.name}:")]
 
         for key in keys_to_revert:
-            if key in self.rig_state._transform_effects:
-                effect = self.rig_state._transform_effects[key]
+            if key in self.rig_state._effect_lifecycles:
+                effect = self.rig_state._effect_lifecycles[key]
                 effect.request_stop(duration_ms, easing)
             else:
                 # Immediate removal if no lifecycle
-                del self.rig_state._transform_stacks[key]
-                if key in self.rig_state._transform_order:
-                    self.rig_state._transform_order.remove(key)
+                del self.rig_state._effect_stacks[key]
+                if key in self.rig_state._effect_order:
+                    self.rig_state._effect_order.remove(key)
 
         # Start the update loop to apply the revert (especially important when stopped)
         self.rig_state.start()
 
 
-class TransformSpeedBuilder:
-    """Builder for transform speed operations (mul/div/add/sub)"""
-    def __init__(self, rig_state: 'RigState', name: str):
+
+class EffectSpeedBuilder:
+    """Builder for effect speed operations (to/mul/div/add/sub)"""
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
         self.rig_state = rig_state
         self.name = name
+        self.strict_mode = strict_mode
         self._last_op_type: Optional[str] = None  # Track last operation for .stack()
         self._started = False  # Track if we've called start()
 
@@ -3085,47 +3098,64 @@ class TransformSpeedBuilder:
         except:
             pass  # Ignore errors during cleanup
 
-    def __call__(self, value: float) -> 'TransformSpeedBuilder':
+    def __call__(self, value: float) -> 'EffectSpeedBuilder':
         """Shorthand for add operation (delta from base)
 
-        Example:
-            rig.transform("boost").speed(10)  # Same as .add(10)
-        """
-        return self.add(value)
+        In strict mode (effects), this raises an error.
+        In loose mode (base rig, forces), equivalent to .to(value).
 
-    def _get_or_create_stack(self, op_type: str) -> TransformStack:
-        """Get or create the transform stack for this operation type"""
+        Example:
+            rig.force("boost").speed(10)      # Loose mode: Same as .to(10)
+            rig.effect("boost").speed(10)     # Strict mode: ERROR - use .to(10) or .add(10)
+        """
+        if self.strict_mode:
+            raise ValueError(
+                f"Strict syntax required for effects. "
+                f"Use .to({value}) for absolute value or .add({value}) for delta. "
+                f"Shorthand syntax like .speed({value}) is not allowed for effects."
+            )
+        return self.to(value)
+
+    def _get_or_create_stack(self, op_type: str) -> EffectStack:
+        """Get or create the effect stack for this operation type"""
         key = f"{self.name}:speed:{op_type}"
-        if key not in self.rig_state._transform_stacks:
-            stack = TransformStack(
+        if key not in self.rig_state._effect_stacks:
+            stack = EffectStack(
                 name=self.name,
                 property="speed",
                 operation_type=op_type
             )
-            self.rig_state._transform_stacks[key] = stack
+            self.rig_state._effect_stacks[key] = stack
             # Track creation order
-            if key not in self.rig_state._transform_order:
-                self.rig_state._transform_order.append(key)
-        return self.rig_state._transform_stacks[key]
+            if key not in self.rig_state._effect_order:
+                self.rig_state._effect_order.append(key)
+        return self.rig_state._effect_stacks[key]
 
-    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
-        """Get or create the transform effect wrapper"""
+    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
+        """Get or create the effect lifecycle wrapper"""
         key = f"{self.name}:speed:{op_type}"
-        if key not in self.rig_state._transform_effects:
+        if key not in self.rig_state._effect_lifecycles:
             stack = self._get_or_create_stack(op_type)
-            self.rig_state._transform_effects[key] = TransformEffect(stack)
-        return self.rig_state._transform_effects[key]
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+        return self.rig_state._effect_lifecycles[key]
 
-    def mul(self, value: float) -> 'TransformSpeedBuilder':
-        """Multiply speed (default: replaces, use .stack() for multiple)"""
+    def to(self, value: float) -> 'EffectSpeedBuilder':
+        """Set absolute speed value"""
+        stack = self._get_or_create_stack("to")
+        stack.add_operation(value)
+        self._last_op_type = "to"
+        return self
+
+    def mul(self, value: float) -> 'EffectSpeedBuilder':
+        """Multiply speed (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("mul")
         stack.add_operation(value)
         self._last_op_type = "mul"
         # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
-    def div(self, value: float) -> 'TransformSpeedBuilder':
-        """Divide speed (default: replaces, use .stack() for multiple)"""
+    def div(self, value: float) -> 'EffectSpeedBuilder':
+        """Divide speed (default: replaces, use .on_repeat("stack") for multiple)"""
         if abs(value) < 1e-6:
             raise ValueError("Cannot divide by zero or near-zero value")
         stack = self._get_or_create_stack("div")
@@ -3134,41 +3164,70 @@ class TransformSpeedBuilder:
         # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
-    def add(self, value: float) -> 'TransformSpeedBuilder':
-        """Add to speed (default: replaces, use .stack() for multiple)"""
+    def add(self, value: float) -> 'EffectSpeedBuilder':
+        """Add to speed (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(value)
         self._last_op_type = "add"
         # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
-    def sub(self, value: float) -> 'TransformSpeedBuilder':
-        """Subtract from speed (default: replaces, use .stack() for multiple)"""
+    def by(self, value: float) -> 'EffectSpeedBuilder':
+        """Alias for add() - add delta to speed"""
+        return self.add(value)
+
+    def sub(self, value: float) -> 'EffectSpeedBuilder':
+        """Subtract from speed (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-value)
         self._last_op_type = "sub"
         # Don't start yet - let lifecycle methods (.over/.hold/.revert) start, or __del__ will start
         return self
 
-    def stack(self, max_count: Optional[int] = None) -> 'TransformSpeedBuilder':
-        """Enable stacking for the last operation
+    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectSpeedBuilder':
+        """Configure behavior when effect is called multiple times
 
-        Args:
-            max_count: Maximum number of stacks (None = unlimited)
+        Strategies:
+            "replace" (default): New call replaces existing effect, resets duration
+            "stack" [max_count]: Stack effects (unlimited or with max count)
+            "extend": Extend duration from current phase, cancel pending revert
+            "queue": Queue effects to run sequentially
+            "ignore": Ignore new calls while effect is active
+            "throttle" [ms]: Rate limit calls (minimum time between calls)
 
         Examples:
-            .add(10).stack()      # Unlimited stacking
-            .add(10).stack(3)     # Max 3 stacks
+            .add(10).on_repeat("stack")          # Unlimited stacking
+            .add(10).on_repeat("stack", 3)       # Max 3 stacks
+            .add(10).on_repeat("replace")        # Default behavior
+            .add(10).on_repeat("extend")         # Extend duration
+            .add(10).on_repeat("throttle", 500)  # Max 1 call per 500ms
         """
         if self._last_op_type is None:
-            raise ValueError("No operation to stack - call .mul()/.div()/.add()/.sub() first")
+            raise ValueError("No operation to apply .on_repeat() to - call .to()/.mul()/.div()/.add()/.sub() first")
 
         key = f"{self.name}:speed:{self._last_op_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_stack_count = max_count
+
+        if strategy == "stack":
+            # Stack strategy: allow multiple instances to accumulate
+            max_count = args[0] if args else None
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = max_count
+        elif strategy == "replace":
+            # Replace is default behavior - no special handling needed
+            pass
+        elif strategy in ("extend", "queue", "ignore", "throttle"):
+            # These strategies need to be implemented in the effect lifecycle
+            # For now, store the strategy on the effect
+            if key in self.rig_state._effect_lifecycles:
+                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
+                if strategy == "throttle" and args:
+                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+        else:
+            raise ValueError(f"Unknown repeat strategy: {strategy}. Use: replace, stack, extend, queue, ignore, throttle")
+
         return self
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformSpeedBuilder':
+    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectSpeedBuilder':
         """Fade in over duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
@@ -3184,7 +3243,7 @@ class TransformSpeedBuilder:
             self._started = True
         return self
 
-    def hold(self, duration_ms: float) -> 'TransformSpeedBuilder':
+    def hold(self, duration_ms: float) -> 'EffectSpeedBuilder':
         """Maintain for duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
@@ -3199,7 +3258,7 @@ class TransformSpeedBuilder:
             self._started = True
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformSpeedBuilder':
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectSpeedBuilder':
         """Revert to original state"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
@@ -3228,11 +3287,12 @@ class TransformSpeedBuilder:
         return MaxBuilder(self.rig_state, self.name, "speed", None)
 
 
-class TransformAccelBuilder:
-    """Builder for transform accel operations (mul/div/add/sub)"""
-    def __init__(self, rig_state: 'RigState', name: str):
+class EffectAccelBuilder:
+    """Builder for effect accel operations (to/mul/div/add/sub)"""
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
         self.rig_state = rig_state
         self.name = name
+        self.strict_mode = strict_mode
         self._last_op_type: Optional[str] = None
         self._started = False
 
@@ -3244,41 +3304,58 @@ class TransformAccelBuilder:
         except:
             pass
 
-    def __call__(self, value: float) -> 'TransformAccelBuilder':
-        """Shorthand for add operation (delta from base)"""
-        return self.add(value)
+    def __call__(self, value: float) -> 'EffectAccelBuilder':
+        """Shorthand for to operation
 
-    def _get_or_create_stack(self, op_type: str) -> TransformStack:
-        """Get or create the transform stack for this operation type"""
+        In strict mode (effects), this raises an error.
+        In loose mode (base rig, forces), equivalent to .to(value).
+        """
+        if self.strict_mode:
+            raise ValueError(
+                f"Strict syntax required for effects. "
+                f"Use .to({value}) for absolute value or .add({value}) for delta. "
+                f"Shorthand syntax like .accel({value}) is not allowed for effects."
+            )
+        return self.to(value)
+
+    def _get_or_create_stack(self, op_type: str) -> EffectStack:
+        """Get or create the effect stack for this operation type"""
         key = f"{self.name}:accel:{op_type}"
-        if key not in self.rig_state._transform_stacks:
-            stack = TransformStack(
+        if key not in self.rig_state._effect_stacks:
+            stack = EffectStack(
                 name=self.name,
                 property="accel",
                 operation_type=op_type
             )
-            self.rig_state._transform_stacks[key] = stack
-            if key not in self.rig_state._transform_order:
-                self.rig_state._transform_order.append(key)
-        return self.rig_state._transform_stacks[key]
+            self.rig_state._effect_stacks[key] = stack
+            if key not in self.rig_state._effect_order:
+                self.rig_state._effect_order.append(key)
+        return self.rig_state._effect_stacks[key]
 
-    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
-        """Get or create the transform effect wrapper"""
+    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
+        """Get or create the effect lifecycle wrapper"""
         key = f"{self.name}:accel:{op_type}"
-        if key not in self.rig_state._transform_effects:
+        if key not in self.rig_state._effect_lifecycles:
             stack = self._get_or_create_stack(op_type)
-            self.rig_state._transform_effects[key] = TransformEffect(stack)
-        return self.rig_state._transform_effects[key]
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+        return self.rig_state._effect_lifecycles[key]
 
-    def mul(self, value: float) -> 'TransformAccelBuilder':
-        """Multiply accel (default: replaces, use .stack() for multiple)"""
+    def to(self, value: float) -> 'EffectAccelBuilder':
+        """Set absolute accel value"""
+        stack = self._get_or_create_stack("to")
+        stack.add_operation(value)
+        self._last_op_type = "to"
+        return self
+
+    def mul(self, value: float) -> 'EffectAccelBuilder':
+        """Multiply accel (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("mul")
         stack.add_operation(value)
         self._last_op_type = "mul"
         return self
 
-    def div(self, value: float) -> 'TransformAccelBuilder':
-        """Divide accel (default: replaces, use .stack() for multiple)"""
+    def div(self, value: float) -> 'EffectAccelBuilder':
+        """Divide accel (default: replaces, use .on_repeat("stack") for multiple)"""
         if abs(value) < 1e-6:
             raise ValueError("Cannot divide by zero or near-zero value")
         stack = self._get_or_create_stack("div")
@@ -3286,31 +3363,48 @@ class TransformAccelBuilder:
         self._last_op_type = "div"
         return self
 
-    def add(self, value: float) -> 'TransformAccelBuilder':
-        """Add to accel (default: replaces, use .stack() for multiple)"""
+    def add(self, value: float) -> 'EffectAccelBuilder':
+        """Add to accel (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(value)
         self._last_op_type = "add"
         return self
 
-    def sub(self, value: float) -> 'TransformAccelBuilder':
-        """Subtract from accel (default: replaces, use .stack() for multiple)"""
+    def by(self, value: float) -> 'EffectAccelBuilder':
+        """Alias for add() - add delta to accel"""
+        return self.add(value)
+
+    def sub(self, value: float) -> 'EffectAccelBuilder':
+        """Subtract from accel (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-value)
         self._last_op_type = "sub"
         return self
 
-    def stack(self, max_count: Optional[int] = None) -> 'TransformAccelBuilder':
-        """Enable stacking for the last operation"""
+    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectAccelBuilder':
+        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
         if self._last_op_type is None:
-            raise ValueError("No operation to stack - call .mul()/.div()/.add()/.sub() first")
+            raise ValueError("No operation to apply .on_repeat() to - call .to()/.mul()/.div()/.add()/.sub() first")
 
         key = f"{self.name}:accel:{self._last_op_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_stack_count = max_count
+
+        if strategy == "stack":
+            max_count = args[0] if args else None
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = max_count
+        elif strategy == "replace":
+            pass
+        elif strategy in ("extend", "queue", "ignore", "throttle"):
+            if key in self.rig_state._effect_lifecycles:
+                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
+                if strategy == "throttle" and args:
+                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+        else:
+            raise ValueError(f"Unknown repeat strategy: {strategy}")
+
         return self
 
-    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformAccelBuilder':
+    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectAccelBuilder':
         """Fade in over duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
@@ -3324,7 +3418,7 @@ class TransformAccelBuilder:
             self._started = True
         return self
 
-    def hold(self, duration_ms: float) -> 'TransformAccelBuilder':
+    def hold(self, duration_ms: float) -> 'EffectAccelBuilder':
         """Maintain for duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
@@ -3337,7 +3431,7 @@ class TransformAccelBuilder:
             self._started = True
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformAccelBuilder':
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectAccelBuilder':
         """Revert to original state"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
@@ -3357,11 +3451,12 @@ class TransformAccelBuilder:
         return self
 
 
-class TransformDirectionBuilder:
-    """Builder for transform direction operations (rotation in degrees)"""
-    def __init__(self, rig_state: 'RigState', name: str):
+class EffectDirectionBuilder:
+    """Builder for effect direction operations (rotation in degrees)"""
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
         self.rig_state = rig_state
         self.name = name
+        self.strict_mode = strict_mode
         self._last_op_type: Optional[str] = None
         self._started = False
 
@@ -3373,69 +3468,98 @@ class TransformDirectionBuilder:
         except:
             pass
 
-    def __call__(self, degrees: float) -> 'TransformDirectionBuilder':
-        """Shorthand for add operation (rotate by degrees)"""
-        return self.add(degrees)
+    def __call__(self, *args) -> 'EffectDirectionBuilder':
+        """Shorthand for to operation
 
-    def _get_or_create_stack(self, op_type: str) -> TransformStack:
-        """Get or create the transform stack for this operation type"""
+        In strict mode (effects), this raises an error.
+        In loose mode (base rig, forces), equivalent to .to(degrees) or .to(x, y).
+        """
+        if self.strict_mode:
+            raise ValueError(
+                f"Strict syntax required for effects. "
+                f"Use .to(...) for absolute value or .add(...) for delta. "
+                f"Shorthand syntax like .direction(...) is not allowed for effects."
+            )
+        return self.to(*args)
+
+    def _get_or_create_stack(self, op_type: str) -> EffectStack:
+        """Get or create the effect stack for this operation type"""
         key = f"{self.name}:direction:{op_type}"
-        if key not in self.rig_state._transform_stacks:
-            stack = TransformStack(
+        if key not in self.rig_state._effect_stacks:
+            stack = EffectStack(
                 name=self.name,
                 property="direction",
                 operation_type=op_type
             )
-            self.rig_state._transform_stacks[key] = stack
-            if key not in self.rig_state._transform_order:
-                self.rig_state._transform_order.append(key)
-        return self.rig_state._transform_stacks[key]
+            self.rig_state._effect_stacks[key] = stack
+            if key not in self.rig_state._effect_order:
+                self.rig_state._effect_order.append(key)
+        return self.rig_state._effect_stacks[key]
 
-    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
-        """Get or create the transform effect wrapper"""
+    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
+        """Get or create the effect lifecycle wrapper"""
         key = f"{self.name}:direction:{op_type}"
-        if key not in self.rig_state._transform_effects:
+        if key not in self.rig_state._effect_lifecycles:
             stack = self._get_or_create_stack(op_type)
-            self.rig_state._transform_effects[key] = TransformEffect(stack)
-        return self.rig_state._transform_effects[key]
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+        return self.rig_state._effect_lifecycles[key]
 
-    def add(self, degrees: float) -> 'TransformDirectionBuilder':
-        """Rotate by degrees (default: replaces, use .stack() for multiple)"""
+    def to(self, *args) -> 'EffectDirectionBuilder':
+        """Set direction to specific angle (degrees) or vector (x, y)"""
+        stack = self._get_or_create_stack("to")
+        if len(args) == 1:
+            # Angle in degrees
+            stack.values = [args[0]]
+        elif len(args) == 2:
+            # Vector (x, y)
+            stack.values = [Vec2(args[0], args[1])]
+        else:
+            raise ValueError("direction.to() requires 1 arg (degrees) or 2 args (x, y)")
+        self._last_op_type = "to"
+        return self
+
+    def add(self, degrees: float) -> 'EffectDirectionBuilder':
+        """Rotate by degrees (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(degrees)
         self._last_op_type = "add"
         return self
 
-    def sub(self, degrees: float) -> 'TransformDirectionBuilder':
-        """Rotate by negative degrees (default: replaces, use .stack() for multiple)"""
+    def by(self, degrees: float) -> 'EffectDirectionBuilder':
+        """Alias for add (rotate by degrees)"""
+        return self.add(degrees)
+
+    def sub(self, degrees: float) -> 'EffectDirectionBuilder':
+        """Rotate by negative degrees (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("sub")
         stack.add_operation(-degrees)
         self._last_op_type = "sub"
         return self
 
-    def stack(self, max_count: Optional[int] = None) -> 'TransformDirectionBuilder':
-        """Enable stacking for the last operation"""
+    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectDirectionBuilder':
+        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
         if self._last_op_type is None:
-            raise ValueError("No operation to stack - call .add()/.sub() first")
+            raise ValueError("No operation to apply .on_repeat() to - call .to()/.add()/.sub() first")
 
         key = f"{self.name}:direction:{self._last_op_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_stack_count = max_count
+
+        if strategy == "stack":
+            max_count = args[0] if args else None
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = max_count
+        elif strategy == "replace":
+            pass
+        elif strategy in ("extend", "queue", "ignore", "throttle"):
+            if key in self.rig_state._effect_lifecycles:
+                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
+                if strategy == "throttle" and args:
+                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+        else:
+            raise ValueError(f"Unknown repeat strategy: {strategy}")
+
         return self
 
-    def by(self, degrees: float) -> 'TransformDirectionBuilder':
-        """Alias for add (rotate by degrees)"""
-        return self.add(degrees)
-
-    def to(self, degrees: float) -> 'TransformDirectionBuilder':
-        """Set rotation to specific angle"""
-        # Clear existing and set new
-        stack = self._get_or_create_stack("add")
-        stack.values = [degrees]
-        self.rig_state.start()
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformDirectionBuilder':
+    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectDirectionBuilder':
         """Fade in over duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
@@ -3449,7 +3573,7 @@ class TransformDirectionBuilder:
             self._started = True
         return self
 
-    def hold(self, duration_ms: float) -> 'TransformDirectionBuilder':
+    def hold(self, duration_ms: float) -> 'EffectDirectionBuilder':
         """Maintain for duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
@@ -3462,7 +3586,7 @@ class TransformDirectionBuilder:
             self._started = True
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformDirectionBuilder':
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectDirectionBuilder':
         """Revert to original state"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
@@ -3482,11 +3606,12 @@ class TransformDirectionBuilder:
         return self
 
 
-class TransformPosBuilder:
-    """Builder for transform position operations (offsets)"""
-    def __init__(self, rig_state: 'RigState', name: str):
+class EffectPosBuilder:
+    """Builder for effect position operations (offsets)"""
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = False):
         self.rig_state = rig_state
         self.name = name
+        self.strict_mode = strict_mode
         self._last_op_type: Optional[str] = None
         self._started = False
 
@@ -3498,68 +3623,91 @@ class TransformPosBuilder:
         except:
             pass
 
-    def __call__(self, x: float, y: float) -> 'TransformPosBuilder':
-        """Shorthand for add operation (position offset)"""
-        return self.add(x, y)
+    def __call__(self, x: float, y: float) -> 'EffectPosBuilder':
+        """Shorthand for to operation
 
-    def _get_or_create_stack(self, op_type: str) -> TransformStack:
-        """Get or create the transform stack for this operation type"""
+        In strict mode (effects), this raises an error.
+        In loose mode (base rig, forces), equivalent to .to(x, y).
+        """
+        if self.strict_mode:
+            raise ValueError(
+                f"Strict syntax required for effects. "
+                f"Use .to({x}, {y}) for absolute value or .add({x}, {y}) for delta. "
+                f"Shorthand syntax like .pos({x}, {y}) is not allowed for effects."
+            )
+        return self.to(x, y)
+
+    def _get_or_create_stack(self, op_type: str) -> EffectStack:
+        """Get or create the effect stack for this operation type"""
         key = f"{self.name}:pos:{op_type}"
-        if key not in self.rig_state._transform_stacks:
-            stack = TransformStack(
+        if key not in self.rig_state._effect_stacks:
+            stack = EffectStack(
                 name=self.name,
                 property="pos",
                 operation_type=op_type
             )
-            self.rig_state._transform_stacks[key] = stack
-            if key not in self.rig_state._transform_order:
-                self.rig_state._transform_order.append(key)
-        return self.rig_state._transform_stacks[key]
+            self.rig_state._effect_stacks[key] = stack
+            if key not in self.rig_state._effect_order:
+                self.rig_state._effect_order.append(key)
+        return self.rig_state._effect_stacks[key]
 
-    def _get_or_create_effect(self, op_type: str) -> TransformEffect:
-        """Get or create the transform effect wrapper"""
+    def _get_or_create_effect(self, op_type: str) -> EffectLifecycle:
+        """Get or create the effect lifecycle wrapper"""
         key = f"{self.name}:pos:{op_type}"
-        if key not in self.rig_state._transform_effects:
+        if key not in self.rig_state._effect_lifecycles:
             stack = self._get_or_create_stack(op_type)
-            self.rig_state._transform_effects[key] = TransformEffect(stack)
-        return self.rig_state._transform_effects[key]
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+        return self.rig_state._effect_lifecycles[key]
 
-    def add(self, x: float, y: float) -> 'TransformPosBuilder':
-        """Add position offset (default: replaces, use .stack() for multiple)"""
+    def to(self, x: float, y: float) -> 'EffectPosBuilder':
+        """Set offset to specific position"""
+        stack = self._get_or_create_stack("to")
+        stack.values = [Vec2(x, y)]
+        self._last_op_type = "to"
+        return self
+
+    def add(self, x: float, y: float) -> 'EffectPosBuilder':
+        """Add position offset (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("add")
         stack.add_operation(Vec2(x, y))
         self._last_op_type = "add"
         return self
 
-    def sub(self, x: float, y: float) -> 'TransformPosBuilder':
-        """Subtract position offset (default: replaces, use .stack() for multiple)"""
+    def by(self, x: float, y: float) -> 'EffectPosBuilder':
+        """Alias for add (offset by vector)"""
+        return self.add(x, y)
+
+    def sub(self, x: float, y: float) -> 'EffectPosBuilder':
+        """Subtract position offset (default: replaces, use .on_repeat("stack") for multiple)"""
         stack = self._get_or_create_stack("sub")
         stack.add_operation(Vec2(-x, -y))
         self._last_op_type = "sub"
         return self
 
-    def stack(self, max_count: Optional[int] = None) -> 'TransformPosBuilder':
-        """Enable stacking for the last operation"""
+    def on_repeat(self, strategy: str = "replace", *args) -> 'EffectPosBuilder':
+        """Configure behavior when effect is called multiple times (see EffectSpeedBuilder.on_repeat for details)"""
         if self._last_op_type is None:
-            raise ValueError("No operation to stack - call .add()/.sub() first")
+            raise ValueError("No operation to apply .on_repeat() to - call .to()/.add()/.sub() first")
 
         key = f"{self.name}:pos:{self._last_op_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_stack_count = max_count
+
+        if strategy == "stack":
+            max_count = args[0] if args else None
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = max_count
+        elif strategy == "replace":
+            pass
+        elif strategy in ("extend", "queue", "ignore", "throttle"):
+            if key in self.rig_state._effect_lifecycles:
+                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
+                if strategy == "throttle" and args:
+                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+        else:
+            raise ValueError(f"Unknown repeat strategy: {strategy}")
+
         return self
 
-    def by(self, x: float, y: float) -> 'TransformPosBuilder':
-        """Alias for add (offset by vector)"""
-        return self.add(x, y)
-
-    def to(self, x: float, y: float) -> 'TransformPosBuilder':
-        """Set offset to specific position"""
-        stack = self._get_or_create_stack("add")
-        stack.values = [Vec2(x, y)]
-        self.rig_state.start()
-        return self
-
-    def over(self, duration_ms: float, easing: str = "linear") -> 'TransformPosBuilder':
+    def over(self, duration_ms: float, easing: str = "linear") -> 'EffectPosBuilder':
         """Fade in over duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .add()/.sub() first")
@@ -3573,7 +3721,7 @@ class TransformPosBuilder:
             self._started = True
         return self
 
-    def hold(self, duration_ms: float) -> 'TransformPosBuilder':
+    def hold(self, duration_ms: float) -> 'EffectPosBuilder':
         """Maintain for duration"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .add()/.sub() first")
@@ -3586,7 +3734,7 @@ class TransformPosBuilder:
             self._started = True
         return self
 
-    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'TransformPosBuilder':
+    def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'EffectPosBuilder':
         """Revert to original state"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .add()/.sub() first")
@@ -3607,7 +3755,7 @@ class TransformPosBuilder:
 
 
 class MaxBuilder:
-    """Builder for max constraints on transform operations"""
+    """Builder for max constraints on effect operations"""
     def __init__(self, rig_state: 'RigState', name: str, property: str, operation_type: str):
         self.rig_state = rig_state
         self.name = name
@@ -3635,15 +3783,15 @@ class MaxBuilder:
     def speed(self, value: float) -> 'MaxBuilder':
         """Set maximum speed constraint"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_value = value
+        if key in self.rig_state._effect_stacks:
+            self.rig_state._effect_stacks[key].max_value = value
         return self
 
     def accel(self, value: float) -> 'MaxBuilder':
         """Set maximum accel constraint"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_value = value
+        if key in self.rig_state._effect_stacks:
+            self.rig_state._effect_stacks[key].max_value = value
         return self
 
     def direction(self, value: float) -> 'MaxBuilder':
@@ -3653,8 +3801,8 @@ class MaxBuilder:
             rig("drift").shift.direction.by(45).max.direction(90)  # Cap at 90° total
         """
         key = f"{self.name}:{self.property}:{self.operation_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_value = value
+        if key in self.rig_state._effect_stacks:
+            self.rig_state._effect_stacks[key].max_value = value
         return self
 
     def pos(self, value: float) -> 'MaxBuilder':
@@ -3664,15 +3812,15 @@ class MaxBuilder:
             rig("shake").shift.pos.by(10, 10).max.pos(50)  # Cap total offset magnitude
         """
         key = f"{self.name}:{self.property}:{self.operation_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_value = value
+        if key in self.rig_state._effect_stacks:
+            self.rig_state._effect_stacks[key].max_value = value
         return self
 
     def stack(self, count: int) -> 'MaxBuilder':
         """Set maximum stack count"""
         key = f"{self.name}:{self.property}:{self.operation_type}"
-        if key in self.rig_state._transform_stacks:
-            self.rig_state._transform_stacks[key].max_stack_count = count
+        if key in self.rig_state._effect_stacks:
+            self.rig_state._effect_stacks[key].max_stack_count = count
         return self
 
 
@@ -4244,7 +4392,7 @@ class StateAccessor:
         # Get transformed direction
         effective_direction = self._rig._get_effective_direction()
 
-        # Base velocity (after transforms)
+        # Base velocity (after effects)
         velocity_vec = effective_direction * total_speed
 
         # Add force contributions (independent velocity vectors)
@@ -4309,12 +4457,14 @@ class RigState:
         self._named_direction_modifiers: dict[str, DirectionEffect] = {}
         self._named_forces: dict[str, Force] = {}  # Force entities
 
-        # PRD 6: Transform stacks (scale/shift with .to/.by tracking)
-        self._transform_stacks: dict[str, TransformStack] = {}  # key: "entity_name:property:op_type"
-        self._transform_order: list[str] = []  # Track creation order for composition
+        # PRD 8: Effect stacks (operations with stacking control)
+        self._effect_stacks: dict[str, EffectStack] = {}  # key: "entity_name:property:op_type"
+        self._effect_order: list[str] = []  # Track creation order for composition
 
-        # PRD 6: Transform effects (lifecycle-aware wrappers for transform stacks)
-        self._transform_effects: dict[str, TransformEffect] = {}  # key: same as _transform_stacks        # Acceleration effects tracking (separate from cruise speed)
+        # PRD 8: Effect lifecycles (lifecycle-aware wrappers for effect stacks)
+        self._effect_lifecycles: dict[str, EffectLifecycle] = {}  # key: same as _effect_stacks
+
+        # Acceleration effects tracking (separate from cruise speed)
         # Maps effect instances to their accumulated velocity contribution
         self._accel_velocities: dict[Effect, float] = {}
 
@@ -4342,27 +4492,30 @@ class RigState:
         # Subpixel accuracy
         self._subpixel_adjuster = SubpixelAdjuster()
 
-        # Position offset tracking (for transforms)
+        # Position offset tracking (for effects)
         self._last_position_offset = Vec2(0, 0)
 
-    def transform(self, name: str) -> 'TransformBuilder':
-        """Create or access a named transform entity (PRD 7)
+    def effect(self, name: str) -> EffectBuilder:
+        """Create or access a named effect entity (PRD 8)
 
-        Transforms modify base properties using explicit operations:
+        Effects modify base properties using explicit operations:
+        - .to(value): Set absolute value
+        - .add(value) / .by(value): Add delta (aliases)
+        - .sub(value): Subtract
         - .mul(value): Multiply
         - .div(value): Divide
-        - .add(value): Add
-        - .sub(value): Subtract
+
+        Effects use strict syntax - explicit operations are required.
 
         Examples:
-            rig.transform("sprint").speed.mul(2)       # Double speed
-            rig.transform("boost").speed.add(10)       # Add 10 to speed
-            rig.transform("drift").direction.add(15)   # Rotate 15 degrees
+            rig.effect("sprint").speed.mul(2)       # Double speed
+            rig.effect("boost").speed.add(10)       # Add 10 to speed
+            rig.effect("drift").direction.add(15)   # Rotate 15 degrees
         """
-        return TransformBuilder(self, name)
+        return EffectBuilder(self, name, strict_mode=True)
 
     def force(self, name: str) -> 'NamedForceBuilder':
-        """Create or access a named force entity (PRD 7)
+        """Create or access a named force entity (PRD 8)
 
         Forces are independent entities with their own speed, direction, and acceleration.
         They combine with the base rig via vector addition.
@@ -4502,28 +4655,28 @@ class RigState:
             if effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
 
-        # Apply new transform stacks (PRD 7)
-        # Pipeline: base → all mul/div transforms → all add/sub transforms (in entity creation order)
+        # Apply effect stacks (PRD 8)
+        # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
         # This ensures multiplicative operations apply before additive
 
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
-        for key in self._transform_order:
-            stack = self._transform_stacks[key]
+        for key in self._effect_order:
+            stack = self._effect_stacks[key]
             if stack.property == "speed" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
 
-        # Apply mul/div transforms first (in entity creation order)
+        # Apply mul/div effects first (in entity creation order)
         for entity_name in entity_order:
             for op_type in ["mul", "div"]:
-                transform_key = f"{entity_name}:speed:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:speed:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         base_speed = effect.apply_to_base(base_speed)
                     else:
                         base_speed = stack.apply_to_base(base_speed)
@@ -4531,12 +4684,12 @@ class RigState:
         # Then apply add/sub transforms (in entity creation order)
         for entity_name in entity_order:
             for op_type in ["add", "sub"]:
-                transform_key = f"{entity_name}:speed:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:speed:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         base_speed = effect.apply_to_base(base_speed)
                     else:
                         base_speed = stack.apply_to_base(base_speed)
@@ -4557,27 +4710,27 @@ class RigState:
             if effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
 
-        # Apply new transform stacks (PRD 7)
-        # Pipeline: base → all mul/div transforms → all add/sub transforms (in entity creation order)
+        # Apply effect stacks (PRD 8)
+        # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
 
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
-        for key in self._transform_order:
-            stack = self._transform_stacks[key]
+        for key in self._effect_order:
+            stack = self._effect_stacks[key]
             if stack.property == "accel" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
 
-        # Apply mul/div transforms first (in entity creation order)
+        # Apply mul/div effects first (in entity creation order)
         for entity_name in entity_order:
             for op_type in ["mul", "div"]:
-                transform_key = f"{entity_name}:accel:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:accel:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         base_accel = effect.apply_to_base(base_accel)
                     else:
                         base_accel = stack.apply_to_base(base_accel)
@@ -4585,12 +4738,12 @@ class RigState:
         # Then apply add/sub transforms (in entity creation order)
         for entity_name in entity_order:
             for op_type in ["add", "sub"]:
-                transform_key = f"{entity_name}:accel:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:accel:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         base_accel = effect.apply_to_base(base_accel)
                     else:
                         base_accel = stack.apply_to_base(base_accel)
@@ -4605,31 +4758,31 @@ class RigState:
         for dir_effect in self._direction_effects:
             base_direction = dir_effect.update(base_direction)
 
-        # Apply new transform stacks (PRD 7) - direction rotations
-        # Direction uses add/sub for rotation by degrees
+        # Apply effect stacks (PRD 8) - direction rotations
+        # Direction uses add/sub for rotation by degrees, and to() for absolute
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
-        for key in self._transform_order:
-            if key not in self._transform_stacks:
+        for key in self._effect_order:
+            if key not in self._effect_stacks:
                 continue
-            stack = self._transform_stacks[key]
+            stack = self._effect_stacks[key]
             if stack.property == "direction" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
 
-        # Apply add/sub transforms (rotation in degrees, in entity creation order)
+        # Apply add/sub effects (rotation in degrees, in entity creation order)
         for entity_name in entity_order:
             for op_type in ["add", "sub"]:
-                transform_key = f"{entity_name}:direction:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:direction:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Get total rotation in degrees
                     total_degrees = stack.get_total()
 
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         multiplier = effect.current_multiplier
                         total_degrees = total_degrees * multiplier
 
@@ -4645,34 +4798,34 @@ class RigState:
         return base_direction
 
     def _get_position_offset(self) -> Vec2:
-        """Get total position offset from all position transforms"""
+        """Get total position offset from all position effects"""
         offset = Vec2(0, 0)
 
-        # Apply position transform stacks (PRD 7)
-        # Position uses add/sub for offsets
+        # Apply position effect stacks (PRD 8)
+        # Position uses add/sub for offsets, to() for absolute
         # Group by entity name to track first occurrence order
         entity_order = []
         entities_seen = set()
-        for key in self._transform_order:
-            if key not in self._transform_stacks:
+        for key in self._effect_order:
+            if key not in self._effect_stacks:
                 continue
-            stack = self._transform_stacks[key]
+            stack = self._effect_stacks[key]
             if stack.property == "pos" and stack.name not in entities_seen:
                 entity_order.append(stack.name)
                 entities_seen.add(stack.name)
 
-        # Apply add/sub transforms (position offsets, in entity creation order)
+        # Apply add/sub effects (position offsets, in entity creation order)
         for entity_name in entity_order:
             for op_type in ["add", "sub"]:
-                transform_key = f"{entity_name}:pos:{op_type}"
-                if transform_key in self._transform_stacks:
-                    stack = self._transform_stacks[transform_key]
+                effect_key = f"{entity_name}:pos:{op_type}"
+                if effect_key in self._effect_stacks:
+                    stack = self._effect_stacks[effect_key]
                     # Get total position offset vector
                     total_offset = stack.get_total()
 
                     # Check if there's a lifecycle effect wrapper
-                    if transform_key in self._transform_effects:
-                        effect = self._transform_effects[transform_key]
+                    if effect_key in self._effect_lifecycles:
+                        effect = self._effect_lifecycles[effect_key]
                         multiplier = effect.current_multiplier
                         # Lerp from zero to full offset based on multiplier
                         total_offset = total_offset * multiplier
@@ -4775,10 +4928,10 @@ class RigState:
         self._named_forces.clear()
         self._accel_velocities.clear()
 
-        # Clear transform system (PRD 7)
-        self._transform_stacks.clear()
-        self._transform_effects.clear()
-        self._transform_order.clear()
+        # Clear effect system (PRD 8)
+        self._effect_stacks.clear()
+        self._effect_lifecycles.clear()
+        self._effect_order.clear()
 
         # Note: We don't clear transitions as those are permanent changes in progress
 
@@ -4983,12 +5136,12 @@ class RigState:
         if len(self._pending_wait_jobs) > 0:
             return False
 
-        # Check for active transforms (PRD 7)
-        if len(self._transform_stacks) > 0:
+        # Check for active effects (PRD 8)
+        if len(self._effect_stacks) > 0:
             return False
 
-        # Check for active transform effects (lifecycle wrappers)
-        if len(self._transform_effects) > 0:
+        # Check for active effect lifecycles (lifecycle wrappers)
+        if len(self._effect_lifecycles) > 0:
             return False
 
         return True
@@ -5026,23 +5179,23 @@ class RigState:
                 if dir_effect.name and dir_effect.name in self._named_direction_modifiers:
                     del self._named_direction_modifiers[dir_effect.name]
 
-        # Update transform effects (lifecycle wrappers for transform stacks)
-        for key, transform_effect in list(self._transform_effects.items()):
+        # Update effect lifecycles (lifecycle wrappers for effect stacks)
+        for key, effect_lifecycle in list(self._effect_lifecycles.items()):
             # Start effect if not started
-            if transform_effect.phase == "not_started":
-                transform_effect.start()
+            if effect_lifecycle.phase == "not_started":
+                effect_lifecycle.start()
 
             # Update lifecycle state (uses perf_counter internally, no dt needed)
-            transform_effect.update()
+            effect_lifecycle.update()
 
             # Remove completed effects and their underlying stacks
-            if transform_effect.complete:
-                del self._transform_effects[key]
-                # Also remove the transform stack so it stops being applied
-                if key in self._transform_stacks:
-                    del self._transform_stacks[key]
-                if key in self._transform_order:
-                    self._transform_order.remove(key)
+            if effect_lifecycle.complete:
+                del self._effect_lifecycles[key]
+                # Also remove the effect stack so it stops being applied
+                if key in self._effect_stacks:
+                    del self._effect_stacks[key]
+                if key in self._effect_order:
+                    self._effect_order.remove(key)
 
         # Update effects (temporary property modifications)
         for effect in self._effects[:]:

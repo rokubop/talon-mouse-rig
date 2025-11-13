@@ -1,13 +1,13 @@
 """
-Mouse Rig Examples - Comprehensive Feature Showcase (PRD 7)
+Mouse Rig Examples - Comprehensive Feature Showcase (PRD 8)
 
 Demonstrates all core mouse rig features:
 - Basic movement (direction, speed, acceleration)
-- Transform system with stacking control:
-  * Shorthand: .speed(10) = delta from base (replaces by default)
-  * Explicit: .speed.add(10), .speed.mul(2), etc.
-  * Stacking: .stack() for unlimited, .stack(n) for max n stacks
-  * Default: 1 stack (replace semantics)
+- Effect system with strict syntax:
+  * Effects use strict syntax: .speed.to(10), .speed.add(10), etc.
+  * Shorthand like .speed(10) raises error for effects
+  * Base rig and forces still allow shorthand
+- On-repeat strategies: replace, stack, extend, queue, ignore, throttle
 - Force system (independent entities with vector addition)
 - Lifecycle effects (.over/.hold/.revert)
 - Named entities with stopping
@@ -121,100 +121,110 @@ class Actions:
         rig.speed.by(20).over(500, "ease_in_out").hold(1500).revert(500, "ease_out")
 
     # =========================================================================
-    # TRANSFORM SYSTEM - PRD 7 (Multiplicative - Replace Mode)
+    # EFFECT SYSTEM - PRD 8 (Multiplicative - Replace Mode)
     # =========================================================================
 
     def mouse_rig_sprint_on():
-        """Enable sprint mode (4x speed) - replaces on repeated calls"""
+        """Enable sprint mode (2x speed) - replaces on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.transform("sprint").speed.mul(2).over(1000).revert(1000)
+        rig.effect("sprint").speed.mul(2).over(1000).revert(1000)
 
     def mouse_rig_sprint_off():
         """Disable sprint mode"""
         rig = actions.user.mouse_rig()
-        rig.transform("sprint").revert(500)
+        rig.effect("sprint").revert(500)
 
     def mouse_rig_slow_mode_on():
         """Enable slow mode (half speed) - replaces on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.transform("slow").speed.div(2)
+        rig.effect("slow").speed.div(2)
 
     def mouse_rig_slow_mode_off():
         """Disable slow mode"""
         rig = actions.user.mouse_rig()
-        rig.transform("slow").revert(500)
+        rig.effect("slow").revert(500)
 
     # =========================================================================
-    # TRANSFORM SYSTEM - Shorthand Syntax (Delta from Base)
+    # EFFECT SYSTEM - Strict Syntax (REQUIRED for effects)
     # =========================================================================
 
-    def mouse_rig_boost_simple():
-        """Simple speed boost using shorthand syntax"""
+    def mouse_rig_boost_strict():
+        """Speed boost using strict syntax - REQUIRED for effects"""
         rig = actions.user.mouse_rig()
-        rig.transform("boost").speed(10)  # Same as .speed.add(10)
+        rig.effect("boost").speed.add(10)  # ✅ Explicit operation required
 
-    def mouse_rig_drift_simple():
-        """Simple drift using shorthand syntax"""
+    def mouse_rig_drift_strict():
+        """Drift using strict syntax"""
         rig = actions.user.mouse_rig()
-        rig.transform("drift").direction(15)  # Same as .direction.add(15)
+        rig.effect("drift").direction.add(15)  # ✅ Explicit operation
 
-    def mouse_rig_offset_simple():
-        """Simple position offset using shorthand syntax"""
+    def mouse_rig_offset_strict():
+        """Position offset using strict syntax"""
         rig = actions.user.mouse_rig()
-        rig.transform("wobble").pos(5, 5).stack()
+        rig.effect("wobble").pos.add(5, 5).on_repeat("stack")
 
     def mouse_rig_offset_reset():
         """Reset position offset"""
         rig = actions.user.mouse_rig()
-        rig.transform("wobble").revert()
+        rig.effect("wobble").revert()
 
     # =========================================================================
-    # TRANSFORM SYSTEM - PRD 7 (Stacking with .stack())
+    # EFFECT SYSTEM - PRD 8 (On-Repeat Strategies)
     # =========================================================================
 
     def mouse_rig_boost_pad():
         """Boost pad that stacks when hit multiple times (unlimited)"""
         rig = actions.user.mouse_rig()
-        rig.transform("boost_pad").speed.add(2).stack()
+        rig.effect("boost_pad").speed.add(2).on_repeat("stack")
 
     def mouse_rig_boost_pad_max():
         """Boost pad with max 3 stacks (max +30)"""
         rig = actions.user.mouse_rig()
-        rig.transform("boost_pad").speed.add(10).stack(3)
-
-    def mouse_rig_boost_pad_shorthand():
-        """Boost pad using shorthand with stacking"""
-        rig = actions.user.mouse_rig()
-        rig.transform("boost_pad").speed(10).stack(3)
+        rig.effect("boost_pad").speed.add(10).on_repeat("stack", 3)
 
     def mouse_rig_boost_pad_with_timeout():
         """Boost pad that fades in/out with unlimited stacks"""
         rig = actions.user.mouse_rig()
-        rig.transform("boost_pad").speed(10).stack().over(1000).revert(1000)
+        rig.effect("boost_pad").speed.add(10).on_repeat("stack").over(1000).revert(1000)
 
     def mouse_rig_rage_stacks():
-        """Rage buff - each stack adds 20% speed (max 5 stacks)"""
+        """Rage buff - each stack multiplies speed by 1.2 (max 5 stacks)"""
         rig = actions.user.mouse_rig()
-        rig.transform("rage").speed.mul(0.2).stack(5)
+        rig.effect("rage").speed.mul(1.2).on_repeat("stack", 5)
+
+    def mouse_rig_drift_extend():
+        """Drift that extends duration on repeated calls"""
+        rig = actions.user.mouse_rig()
+        rig.effect("drift").direction.add(15).hold(2000).on_repeat("extend")
+
+    def mouse_rig_invuln():
+        """Invulnerability - ignores new calls while active"""
+        rig = actions.user.mouse_rig()
+        rig.effect("invuln").speed.mul(0).hold(2000).on_repeat("ignore")
+
+    def mouse_rig_dash_throttle():
+        """Dash with rate limiting (max 1 per 500ms)"""
+        rig = actions.user.mouse_rig()
+        rig.effect("dash").speed.add(20).hold(200).on_repeat("throttle", 500)
 
     # =========================================================================
-    # TRANSFORM SYSTEM - DIRECTION (Rotation)
+    # EFFECT SYSTEM - DIRECTION (Rotation)
     # =========================================================================
 
     def mouse_rig_drift_on():
         """Drift right by 15 degrees"""
         rig = actions.user.mouse_rig()
-        rig.transform("drift").direction.add(15)
+        rig.effect("drift").direction.add(15)
 
     def mouse_rig_drift_off():
         """Stop drift"""
         rig = actions.user.mouse_rig()
-        rig.transform("drift").revert(500)
+        rig.effect("drift").revert(500)
 
     def mouse_rig_drift_smooth():
         """Smooth drift with lifecycle"""
         rig = actions.user.mouse_rig()
-        rig.transform("drift").direction.add(30).over(500).hold(2000).revert(500)
+        rig.effect("drift").direction.add(30).over(500).hold(2000).revert(500)
 
     # =========================================================================
     # FORCE SYSTEM (Independent Entities) - PRD 7
