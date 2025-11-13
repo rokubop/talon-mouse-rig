@@ -3,9 +3,12 @@
 import math
 import time
 import platform
-from typing import Tuple, Union, Optional, Callable
+from typing import Tuple, Union, Optional, Callable, TYPE_CHECKING
 from dataclasses import dataclass
 from talon import ctrl, app, settings
+
+if TYPE_CHECKING:
+    from .state import RigState
 
 # ============================================================================
 # MOUSE MOVEMENT API SETUP

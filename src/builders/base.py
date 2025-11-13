@@ -322,7 +322,6 @@ class DirectionBuilder:
         self._duration_ms: Optional[float] = None
         self._use_rate: bool = False
         self._rate_degrees_per_second: Optional[float] = None
-        self._wait_duration_ms: Optional[float] = None
 
     def __del__(self):
         """Execute the operation when builder goes out of scope"""
@@ -368,12 +367,8 @@ class DirectionBuilder:
             self.rig_state._direction_transition = None
             self.rig_state.start()  # Ensure ticking is active
 
-            # Execute callback immediately or after wait duration
-            if self._wait_duration_ms is not None and self._then_callback:
-                # Wait for duration, then execute callback
-                job = cron.after(f"{self._wait_duration_ms}ms", self._then_callback)
-                self.rig_state._pending_wait_jobs.append(job)
-            elif self._then_callback:
+            # Execute callback immediately
+            if self._then_callback:
                 self._then_callback()
 
     def over(self, duration_ms: float, easing: str = "linear") -> 'DirectionBuilder':
@@ -383,13 +378,6 @@ class DirectionBuilder:
             duration_ms: Duration in milliseconds
             easing: Easing function ('linear', 'ease_in', 'ease_out', 'ease_in_out', 'smoothstep')
         """
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .over() after .wait() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant direction change with delay: rig.direction(1, 0).wait(500).then(callback)\n"
-                "  - For smooth rotation over time: rig.direction(1, 0).over(500).then(callback)"
-            )
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
@@ -404,29 +392,9 @@ class DirectionBuilder:
             rig.direction((0, 1)).rate(90)   # Turn at 90°/s
             rig.direction((-1, 0)).rate(180) # Turn at 180°/s (half revolution per second)
         """
-        if self._wait_duration_ms is not None:
-            raise ValueError(
-                "Cannot use .rate() after .wait() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant direction change with delay: rig.direction(1, 0).wait(500).then(callback)\n"
-                "  - For smooth rotation at rate: rig.direction(1, 0).rate(180).then(callback)"
-            )
         self._should_execute_instant = False
         self._use_rate = True
         self._rate_degrees_per_second = degrees_per_second
-        return self
-
-    def wait(self, duration_ms: float) -> 'DirectionBuilder':
-        """Set direction immediately and wait for duration before executing .then() callback"""
-        if self._duration_ms is not None or self._use_rate:
-            raise ValueError(
-                "Cannot use .wait() after .over() or .rate() - these are mutually exclusive execution modes.\n"
-                "Choose one:\n"
-                "  - For instant direction change with delay: rig.direction(1, 0).wait(500).then(callback)\n"
-                "  - For smooth rotation over time: rig.direction(1, 0).over(500).then(callback)\n"
-                "  - For smooth rotation at rate: rig.direction(1, 0).rate(180).then(callback)"
-            )
-        self._wait_duration_ms = duration_ms
         return self
 
     def then(self, callback: Callable) -> 'DirectionBuilder':
@@ -441,13 +409,12 @@ class DirectionBuilder:
             # Check if any timing has been configured
             has_timing = (
                 self._duration_ms is not None or
-                self._use_rate or
-                self._wait_duration_ms is not None
+                self._use_rate
             )
 
             if has_timing:
                 raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .rate, .wait).\n\n"
+                    f"Cannot chain .{name} after using timing methods (.over, .rate).\n\n"
                     "Use separate statements:\n"
                     f"  rig.direction(...).over(...)\n"
                     f"  rig.{name}(...)"
