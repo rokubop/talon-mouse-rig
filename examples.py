@@ -113,7 +113,7 @@ class Actions:
     def mouse_rig_boost_fade():
         """Fade in boost over 300ms, hold 2s, fade out over 500ms"""
         rig = actions.user.mouse_rig()
-        rig.speed.by(10).over(300).hold(2000).revert(500, "ease_out")
+        rig.speed.by(10).over(300).hold(1000).revert(500)
 
     def mouse_rig_boost_smooth():
         """Smooth boost with easing"""

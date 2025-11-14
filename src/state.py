@@ -719,6 +719,14 @@ class RigState:
         if len(self._effect_lifecycles) > 0:
             return False
 
+        # Check for active property effects (speed/accel temporary effects)
+        if len(self._property_effects) > 0:
+            return False
+
+        # Check for active direction effects
+        if len(self._direction_effects) > 0:
+            return False
+
         return True
 
     def _update_frame(self) -> None:
@@ -739,28 +747,28 @@ class RigState:
             if self._direction_transition.complete:
                 self._direction_transition = None
 
-        # Update and cleanup temporary property effects (speed/accel)
-        self._property_effects = [
-            effect for effect in self._property_effects
-            if not effect.complete and effect.phase != "not_started"
-        ]
-
         # Start any property effects that haven't been started yet
         for effect in self._property_effects:
             if effect.phase == "not_started":
                 current_value = self._speed if effect.property_name == "speed" else self._accel
                 effect.start(current_value)
 
-        # Update and cleanup temporary direction effects
-        self._direction_effects = [
-            effect for effect in self._direction_effects
-            if not effect.complete and effect.phase != "not_started"
+        # Update and cleanup temporary property effects (speed/accel)
+        self._property_effects = [
+            effect for effect in self._property_effects
+            if not effect.complete
         ]
 
         # Start any direction effects that haven't been started yet
         for effect in self._direction_effects:
             if effect.phase == "not_started":
                 effect.start(self._direction)
+
+        # Update and cleanup temporary direction effects
+        self._direction_effects = [
+            effect for effect in self._direction_effects
+            if not effect.complete
+        ]
 
         # Update effect lifecycles (lifecycle wrappers for effect stacks - named effects)
         for key, effect_lifecycle in list(self._effect_lifecycles.items()):
