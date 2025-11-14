@@ -3,7 +3,7 @@
 from typing import Optional, Callable, TYPE_CHECKING
 from ...core import DEFAULT_EASING, SpeedTransition
 from .shared import PropertyEffectBuilder
-from ..contracts import PropertyOperationsContract
+from ..contracts import OperationsContract
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -77,7 +77,7 @@ class SpeedBuilder:
         return self
 
 
-class SpeedController(PropertyOperationsContract['PropertyEffectBuilder']):
+class SpeedController(OperationsContract['PropertyEffectBuilder']):
     """Controller for speed operations (accessed via rig.speed)"""
     def __init__(self, rig_state: 'RigState'):
         self.rig_state = rig_state

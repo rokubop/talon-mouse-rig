@@ -484,6 +484,8 @@ class RigState:
 
         # Clear all effects and forces
         self._named_forces.clear()
+        self._property_effects.clear()
+        self._direction_effects.clear()
 
         # Clear effect system (PRD 8)
         self._effect_stacks.clear()

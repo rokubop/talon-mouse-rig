@@ -136,15 +136,11 @@ Complete Examples:
 """
 
 from talon import Module, actions, settings
-from typing import Optional
 
 # Import from refactored modules using relative imports
 from .settings import mod
 from .src.state import RigState, get_rig
 from .src.core import _windows_raw_available
-
-# Singleton instance
-_rig_instance: Optional[RigState] = None
 
 
 @mod.action_class
@@ -182,10 +178,8 @@ class Actions:
 
     def mouse_rig_stop() -> None:
         """Stop the mouse rig frame loop"""
-        global _rig_instance
-        if _rig_instance:
-            _rig_instance.stop()
-            # Keep the rig instance alive to preserve state (direction, etc.)
+        rig = get_rig()
+        rig.stop()
 
     def mouse_rig_set_type_talon() -> None:
         """Set mouse movement type to Talon (default, works for most apps)"""

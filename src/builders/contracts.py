@@ -168,10 +168,10 @@ class BasePropertyContract(ABC, Generic[T]):
 
 class PropertyOperationsContract(OperationsContract[T], TimingMethodsContract[T], ABC):
     """
-    Combined contract for property builders that support both operations and timing.
+    Combined contract for property BUILDERS that support both operations and timing.
 
-    This is the full contract for property builders like:
-    - SpeedController, AccelController (base properties)
+    This is the full contract for builders like:
+    - PropertyEffectBuilder (returned from controllers)
     - EffectSpeedBuilder, EffectAccelBuilder (effects)
     - NamedForceSpeedController, NamedForceAccelController (forces)
     """

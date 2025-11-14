@@ -311,11 +311,6 @@ class Actions:
     # STOPPING & STATE
     # =========================================================================
 
-    def mouse_rig_stop():
-        """Immediate stop"""
-        rig = actions.user.mouse_rig()
-        rig.stop()
-
     def mouse_rig_stop_smooth():
         """Smooth deceleration to stop"""
         rig = actions.user.mouse_rig()
