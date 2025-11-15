@@ -171,7 +171,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
         """Execute the position change based on how the builder was configured"""
         try:
             if self._duration_ms is not None or self._revert_duration_ms is not None:
-                # Store original position for potential revert
+                # Store original position BEFORE any movement for potential revert
                 current_pos = Vec2(*ctrl.mouse_pos())
                 self._original_pos = current_pos
 
@@ -184,11 +184,11 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
                     # Relative: offset is direct
                     offset = Vec2(self.x_or_dx, self.y_or_dy)
 
-                if self._duration_ms is not None:
+                if self._duration_ms is not None and self._duration_ms > 0:
                     # Animate with offset
                     transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
                 else:
-                    # Instant move
+                    # Instant move (no duration or duration is 0)
                     if self.mode == "absolute":
                         ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
                     else:
@@ -221,6 +221,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
                                 )
                                 if after_revert_cb:
                                     revert_transition.on_complete = after_revert_cb
+                                rig_state.start()  # Ensure ticking is active
                                 rig_state._position_transitions.append(revert_transition)
                             else:
                                 ctrl.mouse_move(int(original_x), int(original_y))
@@ -239,6 +240,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
                                 )
                                 if after_revert_cb:
                                     revert_transition.on_complete = after_revert_cb
+                                rig_state.start()  # Ensure ticking is active
                                 rig_state._position_transitions.append(revert_transition)
                             else:
                                 ctrl.mouse_move(int(curr_pos.x - self.x_or_dx), int(curr_pos.y - self.y_or_dy))

@@ -300,11 +300,11 @@ class Actions:
     def mouse_rig_nudge_right():
         """Nudge position right"""
         rig = actions.user.mouse_rig()
-        rig.pos.by(50, 0).over(200)
+        rig.pos.by(50, 0).revert(500)
 
     def mouse_rig_nudge_down():
         """Nudge position down"""
-        rig = actions.user.mouse_rig()
+        rig = actions.user.mouse_rig(),
         rig.pos.by(0, 50).over(200)
 
     # =========================================================================
