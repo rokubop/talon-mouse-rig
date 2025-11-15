@@ -52,6 +52,9 @@ app.register("ready", _initialize_mouse_move)
 # VECTOR UTILITIES
 # ============================================================================
 
+# Small value for floating point comparisons (avoid division by zero, etc.)
+EPSILON = 1e-10
+
 @dataclass
 class Vec2:
     """2D vector"""
@@ -78,7 +81,7 @@ class Vec2:
 
     def normalized(self) -> 'Vec2':
         mag = self.magnitude()
-        if mag < 1e-10:
+        if mag < EPSILON:
             return Vec2(0, 0)
         return Vec2(self.x / mag, self.y / mag)
 
@@ -98,7 +101,7 @@ class Vec2:
 def normalize_vector(x: float, y: float) -> Tuple[float, float]:
     """Normalize a vector to unit length"""
     mag = math.sqrt(x ** 2 + y ** 2)
-    if mag < 1e-10:
+    if mag < EPSILON:
         return (0.0, 0.0)
     return (x / mag, y / mag)
 
@@ -331,7 +334,7 @@ class DirectionTransition(Transition):
     def update(self, rig_state: 'RigState') -> None:
         p = self.progress()
 
-        if self.angle < 1e-6:
+        if self.angle < EPSILON:
             # Already at target
             rig_state._direction = self.target_dir
             return
@@ -343,10 +346,9 @@ class DirectionTransition(Transition):
 
             # Normalize to keep it as a unit direction vector
             length = math.sqrt(x * x + y * y)
-            if length > 0:
+            if length > EPSILON:
                 rig_state._direction = Vec2(x / length, y / length)
-            else:
-                rig_state._direction = self.target_dir
+            # else: keep current direction unchanged (can happen at midpoint of 180° turn)
         else:
             # Slerp for smooth rotation (default)
             current_angle = self.angle * p * self.direction

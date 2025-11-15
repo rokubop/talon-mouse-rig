@@ -280,7 +280,7 @@ class Actions:
         the circular arc.
         """
         rig = actions.user.mouse_rig()
-        rig.direction.to(1, 0).over(500, "ease_in_out")  # interpolation="lerp" is default
+        rig.direction.by(90).over(1000, "ease_in_out")
 
     def mouse_rig_reverse():
         """Smooth linear reverse - backs up motion"""
