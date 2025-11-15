@@ -1,13 +1,13 @@
 """Shared builders for base properties - common classes for speed and acceleration"""
 
 from typing import Optional, Callable, Union, TYPE_CHECKING
-from ..contracts import TimingMethodsContract, TransitionBasedBuilder
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], TransitionBasedBuilder):
+class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """
     Universal builder for property effects supporting both permanent (.over())
     and temporary (.revert()/.hold()) modifications.
@@ -157,29 +157,16 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             return current
         return current
 
-    def over(
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _calculate_over_duration_from_rate(
         self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'PropertyEffectBuilder':
-        """Apply change over duration or at rate - can be permanent or temporary based on .revert()/.hold()
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based)
-            rate_accel: Acceleration rate in units/second² (rate-based)
-        """
-        # Validate inputs
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rate based on delta between current and target"""
         rate_provided = rate_speed is not None or rate_accel is not None
-        if duration_ms is not None and rate_provided:
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
-        # Calculate duration from rate if provided
         if rate_provided:
             rate_value = rate_speed if rate_speed is not None else rate_accel
             rate_property = "speed" if rate_speed is not None else "accel"
@@ -200,122 +187,33 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             delta = abs(target - current)
 
             if delta < 0.01:
-                duration_ms = 1
+                return 1.0
             else:
                 duration_sec = delta / rate_value
-                duration_ms = duration_sec * 1000
+                return duration_sec * 1000
+        return 500.0
 
-        self._in_duration_ms = duration_ms
-        self._in_easing = easing
-        self._current_stage = "after_forward"
-        return self
-
-    def hold(self, duration_ms: float) -> 'PropertyEffectBuilder':
-        """Hold effect at full strength for duration"""
-        self._hold_duration_ms = duration_ms
-        self._current_stage = "after_hold"
-        return self
-
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'PropertyEffectBuilder':
-        """Revert to original value - instant if duration=0, gradual otherwise
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based)
-            rate_accel: Acceleration rate in units/second² (rate-based)
-        """
-        # For revert, rate-based doesn't make as much sense since we're going back to original
-        # But we'll support it for consistency
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from rate parameters"""
         rate_provided = rate_speed is not None or rate_accel is not None
-        if duration_ms is not None and rate_provided:
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
         if rate_provided:
             # Just use a default duration for now - proper implementation would calculate based on current delta
-            duration_ms = 500  # TODO: Calculate based on current value vs original
+            return 500.0  # TODO: Calculate based on current value vs original
+        return None
 
-        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
-        self._out_easing = easing
-        self._current_stage = "after_revert"
-        return self
+    # ===== PropertyChainingContract hooks =====
 
-    def then(self, callback: Callable) -> 'PropertyEffectBuilder':
-        """Execute callback at current point in lifecycle chain
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured"""
+        return (
+            self._hold_duration_ms is not None or
+            self._out_duration_ms is not None or
+            self._in_duration_ms is not None or
+            self._in_easing != "linear"
+        )
 
-        Can be called multiple times at different stages:
-        - After .over(): fires when forward transition completes
-        - After .hold(): fires when hold period completes
-        - After .revert(): fires when revert completes
-
-        Examples:
-            rig.speed.by(5).over(400).then(cb1)
-            rig.speed.by(5).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
-        """
-        if self._current_stage == "after_forward":
-            self._after_forward_callback = callback
-        elif self._current_stage == "after_hold":
-            self._after_hold_callback = callback
-        elif self._current_stage == "after_revert":
-            self._after_revert_callback = callback
-        return self
-
-    def __getattr__(self, name: str):
-        """Enable property chaining or provide helpful error messages"""
-        from ...core import _error_unknown_builder_attribute
-
-        # Common rig properties that can be chained (if no timing configured)
-        if name in ['speed', 'accel', 'pos', 'direction']:
-            # Check if any timing has been configured
-            has_timing = (
-                self._hold_duration_ms is not None or
-                self._out_duration_ms is not None or
-                self._in_duration_ms is not None or
-                self._in_easing != "linear"
-            )
-
-            if has_timing:
-                raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .in_out, .hold, .revert).\n\n"
-                    "Use separate statements:\n"
-                    f"  rig.{self.property_name}(...).over(...)\n"
-                    f"  rig.{name}(...)"
-                )
-
-            # Execute current property change immediately
-            self._execute()
-
-            # Return the appropriate property controller for chaining
-            if name == 'speed':
-                from .speed import SpeedController
-                return SpeedController(self.rig_state)
-            elif name == 'accel':
-                from .accel import AccelController
-                return AccelController(self.rig_state)
-            elif name == 'pos':
-                from .position import PositionController
-                return PositionController(self.rig_state)
-            elif name == 'direction':
-                from .direction import DirectionController
-                return DirectionController(self.rig_state)
-
-        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
-            raise AttributeError(
-                f"Cannot chain '{name}' after {self.property_name} effect.\n\n"
-                "Instead, use separate statements."
-            )
-
-        # Unknown attribute
-        raise AttributeError(_error_unknown_builder_attribute(
-            f'{self.property_name.capitalize()}EffectBuilder',
-            name,
-            'over, hold, revert, then'
-        ))
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
+        self._execute()

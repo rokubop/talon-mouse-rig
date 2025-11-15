@@ -28,6 +28,17 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         self._last_op_type: Optional[str] = None
         self._started = False
 
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[callable] = None
+        self._after_hold_callback: Optional[callable] = None
+        self._after_revert_callback: Optional[callable] = None
+        self._current_stage: str = "initial"
+
+        # Timing configuration
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
+
     def __del__(self):
         """Auto-start when builder goes out of scope if not already started"""
         try:
@@ -148,36 +159,33 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
 
         return self
 
-    def over(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> T:
-        """Fade in over duration or at rate
+    # ===== Hooks to customize base TimingMethodsContract behavior =====
 
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based, only for speed property)
-            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
-        """
+    def _before_over(
+        self,
+        duration_ms: Optional[float],
+        easing: str,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> None:
+        """Validate that an operation was called first"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
 
+    def _calculate_over_duration_from_rate(
+        self,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rate based on effect value"""
         # Validate rate matches property type
         if rate_speed is not None and self._property_name != "speed":
             raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
         if rate_accel is not None and self._property_name != "accel":
             raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
 
-        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
-        # Calculate duration from rate if provided
         if rate_speed is not None or rate_accel is not None:
             rate_value = rate_speed if rate_speed is not None else rate_accel
             # For effects, calculate based on the operation value
@@ -185,68 +193,61 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             # This is simplified - proper implementation would calculate based on actual delta
             delta = abs(effect.value) if hasattr(effect, 'value') else 10
             if delta < 0.01:
-                duration_ms = 1
+                return 1.0
             else:
                 duration_sec = delta / rate_value
-                duration_ms = duration_sec * 1000
+                return duration_sec * 1000
+        return 500.0
 
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store configuration on effect object"""
         effect = self._get_or_create_effect(self._last_op_type)
         effect.in_duration_ms = duration_ms
         effect.in_easing = easing
 
+    def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
+        """Start rig if not started"""
         if not self._started:
             self.rig_state.start()
             self._started = True
-        return self
 
-    def hold(self, duration_ms: float) -> T:
-        """Maintain for duration"""
+    def _before_hold(self, duration_ms: float) -> None:
+        """Validate that an operation was called first"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
 
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Apply hold to effect and start rig"""
         effect = self._get_or_create_effect(self._last_op_type)
         effect.hold_duration_ms = duration_ms
 
         if not self._started:
             self.rig_state.start()
             self._started = True
-        return self
 
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> T:
-        """Revert to original state
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based, only for speed property)
-            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
-        """
+    def _before_revert(self, duration_ms: Optional[float], easing: str,
+                      rate_speed: Optional[float], rate_accel: Optional[float],
+                      rate_rotation: Optional[float]) -> None:
+        """Validate that an operation was called first"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
 
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from rate parameters"""
         # Validate rate matches property type
         if rate_speed is not None and self._property_name != "speed":
             raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
         if rate_accel is not None and self._property_name != "accel":
             raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
 
-        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
-        # For revert with rate, use default duration for now
         if rate_speed is not None or rate_accel is not None:
-            duration_ms = 500  # TODO: Calculate based on current effect strength
-        elif duration_ms is None:
-            duration_ms = 0
+            return 500.0  # TODO: Calculate based on current effect strength
+        return None
 
+    def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
+        """Apply revert to effect and start rig"""
         effect = self._get_or_create_effect(self._last_op_type)
 
         # If no hold duration is set and we have fade-in, add instant hold
@@ -259,7 +260,6 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         if not self._started:
             self.rig_state.start()
             self._started = True
-        return self
 
 class EffectBuilder:
     """

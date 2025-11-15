@@ -82,7 +82,7 @@ class TimingMethodsContract(ABC, Generic[T]):
         rate_accel: Optional[float] = None,
         rate_rotation: Optional[float] = None
     ) -> T:
-        """Transition/fade in over duration or at rate
+        """Transition/fade in over duration or at rate - default implementation with hooks
 
         Args:
             duration_ms: Duration in milliseconds (time-based)
@@ -91,14 +91,43 @@ class TimingMethodsContract(ABC, Generic[T]):
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
         """
-        pass
+        # Hook for pre-validation
+        self._before_over(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
 
-    @abstractmethod
+        # Validate inputs - common validation for rate vs duration
+        rate_provided = rate_speed is not None or rate_accel is not None or rate_rotation is not None
+        if duration_ms is not None and rate_provided:
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Hook for calculating duration from rate (subclasses can override)
+        if rate_provided:
+            duration_ms = self._calculate_over_duration_from_rate(
+                rate_speed, rate_accel, rate_rotation
+            )
+
+        # Hook for storing the configuration (different builders use different field names)
+        self._store_over_config(duration_ms, easing)
+
+        self._current_stage = "after_forward"
+
+        # Hook for post-processing (start rig, create objects, disable instant mode, etc.)
+        self._after_over_configured(duration_ms, easing)
+
+        return self
+
     def hold(self, duration_ms: float) -> T:
-        """Sustain/hold for duration"""
-        pass
+        """Sustain/hold for duration - default implementation with hooks"""
+        # Hook for pre-validation (e.g., check if operation was called first)
+        self._before_hold(duration_ms)
 
-    @abstractmethod
+        self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
+
+        # Hook for post-processing (e.g., start rig ticking, create effects)
+        self._after_hold_configured(duration_ms)
+
+        return self
+
     def revert(
         self,
         duration_ms: Optional[float] = None,
@@ -108,7 +137,7 @@ class TimingMethodsContract(ABC, Generic[T]):
         rate_accel: Optional[float] = None,
         rate_rotation: Optional[float] = None
     ) -> T:
-        """Fade out/restore over duration or at rate
+        """Fade out/restore over duration or at rate - default implementation with hooks
 
         Args:
             duration_ms: Duration in milliseconds (time-based), 0 for instant
@@ -117,18 +146,122 @@ class TimingMethodsContract(ABC, Generic[T]):
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
         """
-        pass
+        # Hook for pre-validation
+        self._before_revert(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
 
-    @abstractmethod
+        # Validate inputs
+        rate_provided = rate_speed is not None or rate_accel is not None or rate_rotation is not None
+        if duration_ms is not None and rate_provided:
+            raise ValueError("Cannot specify both duration_ms and rate parameters")
+
+        # Hook for calculating duration from rate (subclasses can override)
+        if rate_provided:
+            duration_ms = self._calculate_revert_duration_from_rate(
+                rate_speed, rate_accel, rate_rotation
+            )
+
+        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
+        self._out_easing = easing
+        self._current_stage = "after_revert"
+
+        # Hook for post-processing
+        self._after_revert_configured(duration_ms, easing)
+
+        return self
+
     def then(self, callback: 'Callable') -> T:
-        """Execute callback at current point in lifecycle chain
-        
+        """Execute callback at current point in lifecycle chain - default implementation
+
         Can be called after .over(), .hold(), or .revert() to fire callback
         when that stage completes.
-        
+
         Args:
             callback: Function to call when current stage completes
         """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
+        return self
+
+    # ===== HOOKS - Override in subclasses for special behavior =====
+
+    def _before_over(
+        self,
+        duration_ms: Optional[float],
+        easing: str,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> None:
+        """Hook called before over() configuration. Override for validation (e.g., check operation called first)."""
+        pass
+
+    def _calculate_over_duration_from_rate(
+        self,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Hook for calculating over duration from rate. Override to calculate based on delta, distance, angle, etc."""
+        # Default: assume reasonable duration
+        if rate_speed is not None:
+            return 500.0  # Default for speed-based
+        elif rate_accel is not None:
+            return 500.0  # Default for accel-based
+        elif rate_rotation is not None:
+            return 500.0  # Default for rotation-based
+        return 500.0
+
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Hook for storing over configuration. Override to use different field names (_duration_ms vs _in_duration_ms)."""
+        # Default: store in _in_duration_ms and _in_easing (for lifecycle-based builders)
+        if not hasattr(self, '_in_duration_ms'):
+            self._in_duration_ms = duration_ms
+        else:
+            self._in_duration_ms = duration_ms
+
+        if not hasattr(self, '_in_easing'):
+            self._in_easing = easing
+        else:
+            self._in_easing = easing
+
+    def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
+        """Hook called after over() configuration. Override to start rig, disable instant mode, create objects, etc."""
+        pass
+
+    def _before_hold(self, duration_ms: float) -> None:
+        """Hook called before hold() configuration. Override for validation."""
+        pass
+
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Hook called after hold() configuration. Override to start rig, create effects, etc."""
+        pass
+
+    def _before_revert(
+        self,
+        duration_ms: Optional[float],
+        easing: str,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> None:
+        """Hook called before revert() configuration. Override for validation."""
+        pass
+
+    def _calculate_revert_duration_from_rate(
+        self,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Hook for calculating revert duration from rate. Override to calculate based on current value."""
+        return 500  # Default fallback
+
+    def _after_revert_configured(self, duration_ms: Optional[float], easing: str) -> None:
+        """Hook called after revert() configuration. Override to start rig, create effects, etc."""
         pass
 
 
@@ -209,6 +342,77 @@ class AutoExecuteBuilder(ABC):
     @abstractmethod
     def _execute(self):
         """Override this to define execution behavior"""
+        pass
+
+
+class PropertyChainingContract:
+    """
+    Unified property chaining via __getattr__ for all builders.
+
+    Enables fluent chaining like: rig.speed(100).accel(50).pos.to(0, 0)
+
+    Behavior:
+    - If timing configured (.over, .hold, .revert): raise error (can't chain)
+    - If no timing: execute immediately and return next controller
+    - Non-chainable properties: raise helpful error
+    - Unknown attributes: raise error with available methods
+
+    Subclasses must implement:
+    - _has_timing_configured() -> bool
+    - _execute_for_chaining() -> None (prepare and execute immediately)
+    - rig_state attribute
+    """
+
+    def __getattr__(self, name: str):
+        """Enable property chaining or provide helpful error messages"""
+        # Common rig properties that can be chained (if no timing configured)
+        if name in ['speed', 'accel', 'pos', 'direction']:
+            # Check if any timing has been configured
+            if self._has_timing_configured():
+                raise AttributeError(
+                    f"Cannot chain .{name} after using timing methods (.over, .hold, .revert).\n\n"
+                    "Use separate statements instead."
+                )
+
+            # Execute current operation immediately
+            self._execute_for_chaining()
+
+            # Return the appropriate property controller for chaining
+            if name == 'speed':
+                from .base_properties.speed import SpeedController
+                return SpeedController(self.rig_state)
+            elif name == 'accel':
+                from .base_properties.accel import AccelController
+                return AccelController(self.rig_state)
+            elif name == 'pos':
+                from .base_properties.position import PositionController
+                return PositionController(self.rig_state)
+            elif name == 'direction':
+                from .base_properties.direction import DirectionController
+                return DirectionController(self.rig_state)
+
+        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
+            raise AttributeError(
+                f"Cannot chain '{name}' after property operation.\n\n"
+                "Use separate statements instead."
+            )
+
+        # Unknown attribute
+        from ..core import _error_unknown_builder_attribute
+        raise AttributeError(_error_unknown_builder_attribute(
+            self.__class__.__name__,
+            name,
+            'over, hold, revert, then'
+        ))
+
+    @abstractmethod
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured (over/hold/revert)"""
+        pass
+
+    @abstractmethod
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
         pass
 
 

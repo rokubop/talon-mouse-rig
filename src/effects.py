@@ -557,11 +557,11 @@ class PropertyEffect:
             if elapsed_ms >= self.in_duration_ms:
                 # Move to next phase
                 self.current_multiplier = 1.0
-                
+
                 # Fire after-forward callback
                 if self.after_forward_callback:
                     self.after_forward_callback()
-                
+
                 if self.hold_duration_ms is not None:
                     self.phase = "hold"
                     self.phase_start_time = current_time
@@ -585,7 +585,7 @@ class PropertyEffect:
                     # Fire after-hold callback
                     if self.after_hold_callback:
                         self.after_hold_callback()
-                    
+
                     # Move to next phase
                     if self.out_duration_ms is not None:
                         self.phase = "out"
@@ -602,7 +602,7 @@ class PropertyEffect:
                 # Fire after-revert callback
                 if self.after_revert_callback:
                     self.after_revert_callback()
-                
+
                 self.phase = "complete"
                 self.complete = True
                 return current_base_value
@@ -796,7 +796,7 @@ class DirectionEffect:
                     # Fire after-hold callback
                     if self.after_hold_callback:
                         self.after_hold_callback()
-                    
+
                     # Move to next phase
                     if self.out_duration_ms is not None:
                         self.phase = "out"
@@ -813,7 +813,7 @@ class DirectionEffect:
                 # Fire after-revert callback
                 if self.after_revert_callback:
                     self.after_revert_callback()
-                
+
                 self.phase = "complete"
                 self.complete = True
                 return current_base_direction

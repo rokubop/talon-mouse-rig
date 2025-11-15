@@ -7,7 +7,7 @@ from ...core import (
     Vec2, DEFAULT_EASING, PositionTransition,
     _error_unknown_builder_attribute
 )
-from ..contracts import TimingMethodsContract, TransitionBasedBuilder
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -27,7 +27,7 @@ class PositionController:
         return PositionBuilder(self.rig_state, dx, dy, mode="relative", instant=True)
 
 
-class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedBuilder):
+class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """
     Unified builder for position operations - handles both absolute (.to()) and relative (.by()).
 
@@ -62,26 +62,20 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         self._after_revert_callback: Optional[Callable] = None
         self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def over(
+    def ease(self, easing_type: str = DEFAULT_EASING) -> 'PositionBuilder':
+        """Set easing function (defaults to ease_out if not specified)"""
+        self._easing = easing_type
+        return self
+
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _calculate_over_duration_from_rate(
         self,
-        duration_ms: Optional[float] = None,
-        easing: str = None,
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'PositionBuilder':
-        """Glide to position over time or at rate
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function
-            rate_speed: Movement rate in units/second (rate-based)
-        """
-        if duration_ms is not None and rate_speed is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_speed")
-
-        # Calculate duration from rate if provided
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rate based on distance to target"""
         if rate_speed is not None:
             current_pos = self.rig_state._position
             if self.mode == "absolute":
@@ -91,81 +85,28 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
 
             distance = (target_pos - current_pos).magnitude()
             if distance < 0.01:
-                duration_ms = 1
+                return 1.0
             else:
                 duration_sec = distance / rate_speed
-                duration_ms = duration_sec * 1000
+                return duration_sec * 1000
+        return 500.0
 
-        # Disable instant execution since we're doing a transition
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store in _duration_ms and optionally override easing, disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         if easing is not None:
             self._easing = easing
-        self._current_stage = "after_forward"
-        return self
 
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'PositionBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
-
-    def hold(self, duration_ms: float) -> 'PositionBuilder':
-        """Hold at target position before reverting"""
-        self._hold_duration_ms = duration_ms
-        self._current_stage = "after_hold"
-        return self
-
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'PositionBuilder':
-        """Move back to original position after hold (or immediately if no hold)
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_speed: Movement rate in units/second (rate-based)
-        """
-        if duration_ms is not None and rate_speed is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_speed")
-
-        # For revert with rate, we'd need to calculate distance back to origin
-        # For now, just use provided duration or default
-        if duration_ms is None and rate_speed is None:
-            duration_ms = 0
-
-        self._revert_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
-        self._revert_easing = easing
-        self._current_stage = "after_revert"
-        return self
-
-    def then(self, callback: Callable) -> 'PositionBuilder':
-        """Execute callback at the current point in the chain
-
-        Can be called multiple times at different stages:
-        - After .over(): fires when forward movement completes
-        - After .hold(): fires when hold period completes
-        - After .revert(): fires when revert completes
-
-        Examples:
-            rig.pos.to(x, y).over(500).then(do_something)
-            rig.pos.to(x, y).over(500).then(start_drag).revert(500).then(end_drag)
-        """
-        if self._current_stage == "after_forward":
-            self._after_forward_callback = callback
-        elif self._current_stage == "after_hold":
-            self._after_hold_callback = callback
-        elif self._current_stage == "after_revert":
-            self._after_revert_callback = callback
-        else:
-            # Default: fire after forward movement
-            self._after_forward_callback = callback
-        return self
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from movement rate"""
+        if rate_speed is not None:
+            # For revert with rate, we'd need to calculate distance back to origin
+            # For now, just use default
+            return 500.0  # TODO: Calculate based on distance to original position
+        return None
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition"""
@@ -340,54 +281,17 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         if self._after_forward_callback:
             self._after_forward_callback()
 
-    def __getattr__(self, name: str):
-        """Enable property chaining or provide helpful error messages"""
-        # Common rig properties that can be chained (if no timing configured)
-        if name in ['speed', 'accel', 'pos', 'direction']:
-            # Check if any timing has been configured
-            has_timing = (
-                self._duration_ms is not None or
-                self._hold_duration_ms is not None or
-                self._revert_duration_ms is not None
-            )
+    # ===== PropertyChainingContract hooks =====
 
-            if has_timing:
-                raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .hold, .revert).\n\n"
-                    "Use separate statements:\n"
-                    f"  rig.pos.to(...).over(...)\n"
-                    f"  rig.{name}(...)"
-                )
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured"""
+        return (
+            self._duration_ms is not None or
+            self._hold_duration_ms is not None or
+            self._revert_duration_ms is not None
+        )
 
-            # Execute current position change immediately
-            self._should_execute_instant = True
-
-            # Trigger execution
-            self._execute()
-
-            # Return the appropriate property controller for chaining
-            if name == 'speed':
-                from .speed import SpeedController
-                return SpeedController(self.rig_state)
-            elif name == 'accel':
-                from .accel import AccelController
-                return AccelController(self.rig_state)
-            elif name == 'pos':
-                return PositionController(self.rig_state)
-            elif name == 'direction':
-                from .direction import DirectionController
-                return DirectionController(self.rig_state)
-
-        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
-            raise AttributeError(
-                f"Cannot chain '{name}' after pos operation.\n\n"
-                "Instead, use separate statements."
-            )
-
-        # Unknown attribute
-        mode_name = ".to()" if self.mode == "absolute" else ".by()"
-        raise AttributeError(_error_unknown_builder_attribute(
-            f'Position{mode_name}',
-            name,
-            'over, hold, revert, then'
-        ))
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
+        self._should_execute_instant = True
+        self._execute()

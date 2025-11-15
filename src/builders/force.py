@@ -85,102 +85,70 @@ class ForcePropertyController(PropertyOperationsContract[T]):
         """Add delta to current property value (alias for .by())"""
         return self.by(delta)
 
-    def sub(self, delta: float) -> T:
-        """Subtract from current property value"""
-        return self.by(-delta)
+    # ===== Hooks for PropertyOperationsContract (includes TimingMethodsContract) =====
 
-    def over(
+    def _calculate_over_duration_from_rate(
         self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> T:
-        """Fade in the force over duration or at rate
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based, only for speed property)
-            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
-        """
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rate based on current force value (fading from 0)"""
         # Validate rate matches property type
         if rate_speed is not None and self._property_name != "speed":
             raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
         if rate_accel is not None and self._property_name != "accel":
             raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
 
-        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
-        # Calculate duration from rate if provided
         if rate_speed is not None or rate_accel is not None:
             rate_value = rate_speed if rate_speed is not None else rate_accel
             current = self._get_current_value()
             # For forces, we're fading in from 0 to current value
             delta = abs(current)
             if delta < 0.01:
-                duration_ms = 1
+                return 1.0
             else:
                 duration_sec = delta / rate_value
-                duration_ms = duration_sec * 1000
+                return duration_sec * 1000
+        return 500.0
 
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store configuration on Force object, not builder fields"""
         force = self._get_force()
         force.in_duration_ms = duration_ms
         force.in_easing = easing
-        return self
 
-    def hold(self, duration_ms: float) -> T:
-        """Hold the force at full strength for duration"""
-        force = self._get_force()
-        force.hold_duration_ms = duration_ms
-        return self
-
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> T:
-        """Fade out the force over duration or at rate
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_speed: Speed rate in units/second (rate-based, only for speed property)
-            rate_accel: Acceleration rate in units/second² (rate-based, only for accel property)
-        """
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from rate parameters"""
         # Validate rate matches property type
         if rate_speed is not None and self._property_name != "speed":
             raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
         if rate_accel is not None and self._property_name != "accel":
             raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
 
-        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
-
-        # Calculate duration from rate if provided
         if rate_speed is not None or rate_accel is not None:
             rate_value = rate_speed if rate_speed is not None else rate_accel
             current = self._get_current_value()
             delta = abs(current)
             if delta < 0.01:
-                duration_ms = 1
+                return 1.0
             else:
                 duration_sec = delta / rate_value
-                duration_ms = duration_sec * 1000
-        elif duration_ms is None:
-            duration_ms = 0
+                return duration_sec * 1000
+        return None
 
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Apply hold to force"""
+        force = self._get_force()
+        force.hold_duration_ms = duration_ms
+
+    def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
+        """Apply revert to force"""
         force = self._get_force()
         force.out_duration_ms = duration_ms
         force.out_easing = easing
-        return self
 
 
 class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
@@ -214,43 +182,24 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         """Set direction for this named force"""
         return NamedForceDirectionBuilder(self.rig_state, self.name, x, y)
 
-    def over(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'NamedForceBuilder':
-        """Fade in the force over duration (applies to all properties)"""
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store configuration on Force object"""
         force = self._get_force()
         force.in_duration_ms = duration_ms
         force.in_easing = easing
-        return self
 
-    def hold(self, duration_ms: float) -> 'NamedForceBuilder':
-        """Hold the force at full strength for duration"""
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Apply hold to force"""
         force = self._get_force()
         force.hold_duration_ms = duration_ms
-        return self
 
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'NamedForceBuilder':
-        """Fade out the force over duration (applies to all properties)"""
-        if duration_ms is None:
-            duration_ms = 0
+    def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
+        """Apply revert to force"""
         force = self._get_force()
         force.out_duration_ms = duration_ms
         force.out_easing = easing
-        return self
 
     def stop(
         self,
@@ -364,52 +313,33 @@ class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuild
 
         return NamedForceAccelController(self.rig_state, self.name)
 
-    def over(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'NamedForceDirectionBuilder':
-        """Fade in the force over duration"""
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store configuration on Force object and set direction"""
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
         force = self.rig_state._named_forces[self.name]
         force._direction = Vec2(self.x, self.y).normalized()
         force.in_duration_ms = duration_ms
         force.in_easing = easing
-        return self
 
-    def hold(self, duration_ms: float) -> 'NamedForceDirectionBuilder':
-        """Hold the force at full strength for duration"""
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Apply hold to force"""
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
         force = self.rig_state._named_forces[self.name]
         force._direction = Vec2(self.x, self.y).normalized()
         force.hold_duration_ms = duration_ms
-        return self
 
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'NamedForceDirectionBuilder':
-        """Fade out the force over duration"""
-        if duration_ms is None:
-            duration_ms = 0
+    def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
+        """Apply revert to force"""
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
         force = self.rig_state._named_forces[self.name]
         force._direction = Vec2(self.x, self.y).normalized()
         force.out_duration_ms = duration_ms
         force.out_easing = easing
-        return self
 
 
 class NamedForceNamespace:

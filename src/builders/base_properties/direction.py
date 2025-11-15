@@ -7,13 +7,13 @@ from ...core import (
     _error_unknown_builder_attribute
 )
 from ...effects import DirectionEffect
-from ..contracts import TimingMethodsContract, TransitionBasedBuilder
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBasedBuilder):
+class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """Builder for direction operations with .over() support"""
     def __init__(self, rig_state: 'RigState', target_direction: Vec2, instant: bool = False):
         self.rig_state = rig_state
@@ -22,12 +22,12 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         self._should_execute_instant = instant
         self._duration_ms: Optional[float] = None
         self._rate_rotation: Optional[float] = None
-        
+
         # Temporary effect support
         self._hold_duration_ms: Optional[float] = None
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
-        
+
         # Stage-specific callbacks
         self._after_forward_callback: Optional[Callable] = None
         self._after_hold_callback: Optional[Callable] = None
@@ -36,9 +36,9 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition or effect"""
-        return (self._duration_ms is not None or 
-                self._rate_rotation is not None or 
-                self._hold_duration_ms is not None or 
+        return (self._duration_ms is not None or
+                self._rate_rotation is not None or
+                self._hold_duration_ms is not None or
                 self._out_duration_ms is not None)
 
     def _has_instant(self) -> bool:
@@ -87,140 +87,63 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         if self._then_callback:
             self._then_callback()
 
-    def over(
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _before_over(
         self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'DirectionBuilder':
-        """Rotate to target direction over time or at rate
-
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function ('linear', 'ease_in', 'ease_out', 'ease_in_out', 'smoothstep')
-            rate_rotation: Rotation rate in degrees/second (rate-based)
-
-        Examples:
-            rig.direction(0, 1).over(500)  # Rotate over 500ms
-            rig.direction(0, 1).over(500, "ease_out")  # With easing
-            rig.direction(0, 1).over(rate_rotation=90)  # At 90°/s
-        """
-        if duration_ms is not None and rate_rotation is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+        duration_ms: Optional[float],
+        easing: str,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> None:
+        """Validate that either duration_ms or rate_rotation is provided"""
         if duration_ms is None and rate_rotation is None:
             raise ValueError("Must specify either duration_ms or rate_rotation")
 
+    def _calculate_over_duration_from_rate(
+        self,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rotation rate based on angle to target"""
+        if rate_rotation is not None:
+            # Store rate for later use in _execute_transition
+            self._rate_rotation = rate_rotation
+            # Return None to indicate we'll calculate later during execution
+            # This is a special case - we need current direction at execution time
+            return None  # Signal to not set duration yet
+        return 500.0
+
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store in _duration_ms (not _in_duration_ms) and disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms
-        self._rate_rotation = rate_rotation
         self._easing = easing
-        return self
 
-    def hold(self, duration_ms: float) -> 'DirectionBuilder':
-        """Hold at target direction for duration before reverting"""
-        self._hold_duration_ms = duration_ms
-        self._current_stage = "after_hold"
-        return self
+    # No custom behavior needed for hold/revert - using base implementation
 
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'DirectionBuilder':
-        """Revert to original direction after hold
-        
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_rotation: Rotation rate in degrees/second (rate-based)
-        """
-        rate_provided = rate_rotation is not None
-        if duration_ms is not None and rate_provided:
-            raise ValueError("Cannot specify both duration_ms and rate_rotation")
-        
-        if rate_provided:
-            # Calculate based on angle difference - for now use default
-            duration_ms = 500  # TODO: Calculate based on current angle vs original
-        
-        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
-        self._out_easing = easing
-        self._current_stage = "after_revert"
-        return self
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from rotation rate"""
+        if rate_rotation is not None:
+            return 500.0  # TODO: Calculate based on current angle vs original
+        return None
 
-    def then(self, callback: Callable) -> 'DirectionBuilder':
-        """Execute callback at current point in lifecycle chain
-        
-        Can be called multiple times at different stages:
-        - After .over(): fires when forward rotation completes
-        - After .hold(): fires when hold period completes
-        - After .revert(): fires when revert completes
-        
-        Examples:
-            rig.direction.to(0, 1).over(500).then(cb1)
-            rig.direction.to(0, 1).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
-        """
-        if self._current_stage == "after_forward":
-            self._after_forward_callback = callback
-        elif self._current_stage == "after_hold":
-            self._after_hold_callback = callback
-        elif self._current_stage == "after_revert":
-            self._after_revert_callback = callback
-        return self
+    # ===== PropertyChainingContract hooks =====
 
-    def __getattr__(self, name: str):
-        """Enable property chaining or provide helpful error messages"""
-        # Common rig properties that can be chained (if no timing configured)
-        if name in ['speed', 'accel', 'pos', 'direction']:
-            # Check if any timing has been configured
-            has_timing = (
-                self._duration_ms is not None or
-                self._use_rate
-            )
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured"""
+        return self._duration_ms is not None or self._use_rate
 
-            if has_timing:
-                raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .rate).\n\n"
-                    "Use separate statements:\n"
-                    f"  rig.direction(...).over(...)\n"
-                    f"  rig.{name}(...)"
-                )
-
-            # Execute current direction change immediately
-            self._execute()
-
-            # Return the appropriate property controller for chaining
-            if name == 'speed':
-                from .speed import SpeedController
-                return SpeedController(self.rig_state)
-            elif name == 'accel':
-                from .accel import AccelController
-                return AccelController(self.rig_state)
-            elif name == 'pos':
-                from .position import PositionController
-                return PositionController(self.rig_state)
-            elif name == 'direction':
-                return DirectionController(self.rig_state)
-
-        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
-            raise AttributeError(
-                f"Cannot chain '{name}' after 'direction'.\n\n"
-                "Instead, use separate statements:\n"
-                "    rig.direction(1, 0)\n"
-                "    rig.{name}(...)"
-            )
-
-        # Unknown attribute
-        raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, then'))
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
+        self._execute()
 
 
-class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], TransitionBasedBuilder):
+class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """Builder for direction.by(degrees) - relative rotation"""
     def __init__(self, rig_state: 'RigState', degrees: float, instant: bool = False):
         self.rig_state = rig_state
@@ -235,7 +158,7 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
         self._out_rate_rotation: Optional[float] = None
-        
+
         # Stage-specific callbacks
         self._after_forward_callback: Optional[Callable] = None
         self._after_hold_callback: Optional[Callable] = None
@@ -334,125 +257,50 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         if self._after_forward_callback:
             self._after_forward_callback()
 
-    def over(
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _calculate_over_duration_from_rate(
         self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'DirectionByBuilder':
-        """Rotate by degrees over time or at rate
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Calculate duration from rotation rate based on angle"""
+        if rate_rotation is not None:
+            # Store rate for later use
+            self._rate_rotation = rate_rotation
+            # Return None to calculate later during execution
+            return None
+        return 500.0
 
-        Args:
-            duration_ms: Duration in milliseconds (time-based)
-            easing: Easing function
-            rate_rotation: Rotation rate in degrees/second (rate-based)
-        """
-        if duration_ms is not None and rate_rotation is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_rotation")
-
+    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+        """Store in _duration_ms and disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms
-        self._rate_rotation = rate_rotation
         self._easing = easing
-        return self
 
-    def hold(self, duration_ms: float) -> 'DirectionByBuilder':
-        """Hold rotation at full strength for duration"""
-        self._hold_duration_ms = duration_ms
-        self._current_stage = "after_hold"
-        return self
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Calculate revert duration from rotation rate"""
+        if rate_rotation is not None:
+            return 500.0  # TODO: Calculate based on angle difference
+        return None
 
-    def revert(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> 'DirectionByBuilder':
-        """Revert to original direction - instant if duration=0, gradual otherwise
+    # ===== PropertyChainingContract hooks =====
 
-        Args:
-            duration_ms: Duration in milliseconds (time-based), 0 for instant
-            easing: Easing function
-            rate_rotation: Rotation rate in degrees/second (rate-based)
-        """
-        if duration_ms is not None and rate_rotation is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured"""
+        return (
+            self._duration_ms is not None or
+            self._rate_rotation is not None or
+            self._hold_duration_ms is not None or
+            self._out_duration_ms is not None
+        )
 
-        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
-        self._out_rate_rotation = rate_rotation
-        self._out_easing = easing
-        self._current_stage = "after_revert"
-        return self
-
-    def then(self, callback: Callable) -> 'DirectionByBuilder':
-        """Execute callback at current point in lifecycle chain
-        
-        Can be called multiple times at different stages:
-        - After .over(): fires when forward rotation completes
-        - After .hold(): fires when hold period completes
-        - After .revert(): fires when revert completes
-        
-        Examples:
-            rig.direction.by(90).over(500).then(cb1)
-            rig.direction.by(90).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
-        """
-        if self._current_stage == "after_forward":
-            self._after_forward_callback = callback
-        elif self._current_stage == "after_hold":
-            self._after_hold_callback = callback
-        elif self._current_stage == "after_revert":
-            self._after_revert_callback = callback
-        return self
-
-    def __getattr__(self, name: str):
-        """Enable property chaining or provide helpful error messages"""
-        # Common rig properties that can be chained (if no timing configured)
-        if name in ['speed', 'accel', 'pos', 'direction']:
-            # Check if any timing has been configured
-            has_timing = (
-                self._duration_ms is not None or
-                self._rate_rotation is not None or
-                self._hold_duration_ms is not None or
-                self._out_duration_ms is not None
-            )
-
-            if has_timing:
-                raise AttributeError(
-                    f"Cannot chain .{name} after using timing methods (.over, .hold, .revert).\n\n"
-                    "Use separate statements:\n"
-                    f"  rig.direction.by(...).over(...)\n"
-                    f"  rig.{name}(...)"
-                )
-
-            # Execute current direction change immediately
-            self._execute()
-
-            # Return the appropriate property controller for chaining
-            if name == 'speed':
-                from .speed import SpeedController
-                return SpeedController(self.rig_state)
-            elif name == 'accel':
-                from .accel import AccelController
-                return AccelController(self.rig_state)
-            elif name == 'pos':
-                from .position import PositionController
-                return PositionController(self.rig_state)
-            elif name == 'direction':
-                return DirectionController(self.rig_state)
-
-        elif name in ['stop', 'modifier', 'force', 'bake', 'state', 'base']:
-            raise AttributeError(
-                f"Cannot chain '{name}' after 'direction.by()'.\n\n"
-                "Instead, use separate statements."
-            )
-
-        raise AttributeError(_error_unknown_builder_attribute('DirectionByBuilder', name, 'over, hold, revert, then'))
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
+        self._execute()
 
 
 class DirectionController:
