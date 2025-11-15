@@ -53,8 +53,8 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         self._duration_ms = None
         self._should_execute_instant = instant
         self._hold_duration_ms: Optional[float] = None
-        self._revert_duration_ms: Optional[float] = None
-        self._revert_easing: str = "linear"
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
         self._original_pos: Optional[Vec2] = None
         # Stage-specific callbacks
         self._after_forward_callback: Optional[Callable] = None
@@ -110,7 +110,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition"""
-        return self._duration_ms is not None or self._revert_duration_ms is not None
+        return self._duration_ms is not None or self._out_duration_ms is not None
 
     def _has_instant(self) -> bool:
         """Check if this builder should execute instantly"""
@@ -122,7 +122,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
 
     def _execute(self):
         """Execute the position change based on how the builder was configured"""
-        if self._duration_ms is not None or self._revert_duration_ms is not None:
+        if self._duration_ms is not None or self._out_duration_ms is not None:
             self._execute_with_timing()
         elif self._should_execute_instant:
             self._execute_instant()
@@ -169,7 +169,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         hold_duration = self._hold_duration_ms or 0
 
         # Stage 3: Revert callback
-        revert_callback = self._create_revert_callback() if self._revert_duration_ms is not None else None
+        revert_callback = self._create_revert_callback() if self._out_duration_ms is not None else None
 
         # Stage 2: Hold callback (combines hold wait with revert scheduling)
         hold_callback = self._create_hold_callback(revert_callback)
@@ -179,8 +179,8 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
 
     def _create_revert_callback(self) -> Callable:
         """Create callback that handles reverting to original position"""
-        revert_duration = self._revert_duration_ms
-        revert_easing = self._revert_easing
+        revert_duration = self._out_duration_ms
+        revert_easing = self._out_easing
         after_revert_cb = self._after_revert_callback
         rig_state = self.rig_state
 
@@ -288,7 +288,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         return (
             self._duration_ms is not None or
             self._hold_duration_ms is not None or
-            self._revert_duration_ms is not None
+            self._out_duration_ms is not None
         )
 
     def _execute_for_chaining(self) -> None:

@@ -72,7 +72,6 @@ class TimingMethodsContract(ABC, Generic[T]):
     - .then() - callback at current stage in lifecycle
     """
 
-    @abstractmethod
     def over(
         self,
         duration_ms: Optional[float] = None,

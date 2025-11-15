@@ -7,7 +7,6 @@ from .position import PositionBuilder, PositionController
 from .shared import PropertyEffectBuilder
 
 __all__ = [
-
     "SpeedController",
     "AccelController",
     "DirectionBuilder",
