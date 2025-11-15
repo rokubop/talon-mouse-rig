@@ -2,7 +2,7 @@
 
 import math
 from typing import Optional, Callable, TYPE_CHECKING
-from ...core import Vec2, clamp, DirectionTransition
+from ...core import Vec2, clamp, DirectionTransition, ReverseTransition, EPSILON
 from ...effects import DirectionEffect
 from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
@@ -60,6 +60,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                     duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
+            # Use DirectionTransition (never ReverseTransition - 180° cases use DirectionReverseBuilder)
             transition = DirectionTransition(
                 self.rig_state._direction,
                 self.target_direction,
@@ -67,6 +68,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                 self._easing,
                 self._interpolation
             )
+            
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 
@@ -112,7 +114,9 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
-        self._interpolation = interpolation
+        # Only override interpolation if explicitly provided (not base default "lerp")
+        if interpolation != "lerp":
+            self._interpolation = interpolation
 
     # No custom behavior needed for hold/revert - using base implementation
 
@@ -170,6 +174,7 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
 
     def _execute_transition(self):
         """Execute with transition or effect"""
+        print(f"[DirectionByBuilder._execute_transition] degrees={self.degrees}, duration_ms={self._duration_ms}, interpolation={self._interpolation}")
         # Check if this is a temporary effect
         is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
@@ -215,24 +220,16 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
                     duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
-            # Check if this is a 180° reversal - use special ReverseTransition
-            if abs(abs(self.degrees) - 180) < 0.1:
-                from ...core import ReverseTransition
-                transition = ReverseTransition(
-                    self.rig_state._speed,
-                    duration_ms,
-                    self._easing
-                )
-            else:
-                # Normal direction transition
-                transition = DirectionTransition(
-                    self.rig_state._direction,
-                    target_direction,
-                    duration_ms,
-                    self._easing,
-                    self._interpolation
-                )
-            
+            # Always use DirectionTransition for .by() - normal rotation (slerp/lerp)
+            print(f"[DirectionByBuilder] Creating DirectionTransition: interpolation={self._interpolation}")
+            transition = DirectionTransition(
+                self.rig_state._direction,
+                target_direction,
+                duration_ms,
+                self._easing,
+                self._interpolation
+            )
+
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 
@@ -277,7 +274,9 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
-        self._interpolation = interpolation
+        # Only override interpolation if explicitly provided (not base default "lerp")
+        if interpolation != "lerp":
+            self._interpolation = interpolation
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],
@@ -345,3 +344,109 @@ class DirectionController:
             rig.direction.sub(45).over(500)   # Rotate 45° counter-clockwise over 500ms
         """
         return DirectionByBuilder(self.rig_state, -degrees, instant=True)
+
+
+class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], TransitionBasedBuilder, PropertyChainingContract):
+    """Builder for reverse() - 180° direction flip with speed fade semantics"""
+    def __init__(self, rig_state: 'RigState', instant: bool = False):
+        self.rig_state = rig_state
+        self._easing = "linear"
+        self._should_execute_instant = instant
+        self._duration_ms: Optional[float] = None
+
+        # Temporary effect support
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
+
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"
+
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition"""
+        return (self._hold_duration_ms is not None or self._out_duration_ms is not None or
+                self._duration_ms is not None)
+
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        return self._should_execute_instant
+
+    def _execute_transition(self):
+        """Execute with ReverseTransition or ReverseEffect"""
+        print(f"[DirectionReverseBuilder._execute_transition] duration_ms={self._duration_ms}, hold={self._hold_duration_ms}, out={self._out_duration_ms}")
+        
+        # Check if this is a temporary effect (has lifecycle)
+        is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
+
+        if is_temporary:
+            # TODO: Create ReverseEffect for lifecycle support
+            print("[DirectionReverseBuilder] Temporary reverse effect not yet implemented")
+            # For now, just do instant reverse
+            self._execute_instant()
+            return
+
+        # Permanent reverse with speed fade
+        if self._duration_ms is not None:
+            start_speed = self.rig_state._get_effective_speed()
+            print(f"[DirectionReverseBuilder] Creating ReverseTransition: start_speed={start_speed}, duration_ms={self._duration_ms}")
+            transition = ReverseTransition(
+                start_speed,
+                self._duration_ms,
+                self._easing
+            )
+
+            self.rig_state.start()
+            self.rig_state._direction_transition = transition
+
+            if self._after_forward_callback:
+                transition.on_complete = self._after_forward_callback
+
+    def _execute_instant(self):
+        """Execute instant 180° flip"""
+        print("[DirectionReverseBuilder] Instant reverse")
+        self.rig_state._direction = Vec2(-self.rig_state._direction.x, -self.rig_state._direction.y)
+        self.rig_state._direction_transition = None
+        self.rig_state.start()
+
+        if self._after_forward_callback:
+            self._after_forward_callback()
+
+    # ===== Hooks for TimingMethodsContract =====
+
+    def _calculate_over_duration_from_rate(
+        self,
+        rate_speed: Optional[float],
+        rate_accel: Optional[float],
+        rate_rotation: Optional[float]
+    ) -> float:
+        """Reverse doesn't support rate-based timing"""
+        return 500.0
+
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "lerp") -> None:
+        """Store timing config (interpolation ignored for reverse)"""
+        self._should_execute_instant = False
+        self._duration_ms = duration_ms
+        self._easing = easing
+
+    def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
+                                            rate_accel: Optional[float],
+                                            rate_rotation: Optional[float]) -> Optional[float]:
+        """Reverse doesn't support rate-based revert"""
+        return None
+
+    # ===== PropertyChainingContract hooks =====
+
+    def _has_timing_configured(self) -> bool:
+        """Check if any timing has been configured"""
+        return (
+            self._duration_ms is not None or
+            self._hold_duration_ms is not None or
+            self._out_duration_ms is not None
+        )
+
+    def _execute_for_chaining(self) -> None:
+        """Execute immediately for property chaining"""
+        self._execute()

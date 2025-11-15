@@ -333,6 +333,7 @@ class DirectionTransition(Transition):
 
     def update(self, rig_state: 'RigState') -> None:
         p = self.progress()
+        print(f"DirectionTransition: p={p:.3f}, interp={self.interpolation}, angle={math.degrees(self.angle):.1f}°")
 
         if self.angle < EPSILON:
             # Already at target
@@ -375,12 +376,11 @@ class ReverseTransition(Transition):
         if not self.direction_flipped:
             rig_state._direction = Vec2(-rig_state._direction.x, -rig_state._direction.y)
             self.direction_flipped = True
-        
+
         # Transition speed from -start_speed to +start_speed
         p = self.progress()
         new_speed = lerp(-self.start_speed, self.start_speed, p)
         rig_state._speed = new_speed
-        print(f"ReverseTransition: p={p:.3f}, speed={new_speed:.2f} (start_speed={self.start_speed:.2f})")
 
 
 class PositionTransition(Transition):

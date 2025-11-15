@@ -277,10 +277,12 @@ class Actions:
         Lerp interpolates the x,y components directly (cuts across),
         while slerp rotates along the arc. Lerp is the default and works
         well for most cases. Use slerp when you want smooth rotation along
-        the circular arc.
+        the circular arc.rr
         """
         rig = actions.user.mouse_rig()
-        rig.direction.by(180).over(1000, "ease_in_out")
+        # rig.direction.by(180).over(1000, "ease_in_out")
+        rig.reverse().over(1000).revert(1000)
+        # rig.direction.to(-1, 0).over(1000, "ease_in_out")
 
     def mouse_rig_reverse():
         """Smooth linear reverse - backs up motion"""

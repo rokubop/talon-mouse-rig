@@ -9,13 +9,14 @@ from talon import cron, settings, ctrl
 from . import core
 from .core import (
     Vec2, SubpixelAdjuster,
-    SpeedTransition, DirectionTransition, PositionTransition
+    SpeedTransition, DirectionTransition, PositionTransition, ReverseTransition
 )
 from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect
 from .builders.base import (
     AccelController,
     DirectionController,
     DirectionByBuilder,
+    DirectionReverseBuilder,
     PositionController,
     SpeedController
 )
@@ -266,7 +267,6 @@ class RigState:
                         base_speed = stack.apply_to_base(base_speed)
 
         # Allow negative speed during ReverseTransition
-        from .core import ReverseTransition
         if isinstance(self._direction_transition, ReverseTransition):
             return base_speed
         return max(0.0, base_speed)
@@ -419,15 +419,16 @@ class RigState:
         """
         return 0.0
 
-    def reverse(self) -> DirectionByBuilder:
-        """Reverse direction (180 degree turn)
+    def reverse(self) -> DirectionReverseBuilder:
+        """Reverse direction (180 degree turn with speed fade)
 
         Can be instant or smooth:
-            rig.reverse()              # Instant 180
-            rig.reverse().over(500)    # Smooth 180 over 500ms
-            rig.reverse().rate(180)    # Reverse at 180°/s
+            rig.reverse()                     # Instant 180° flip
+            rig.reverse().over(500)           # Fade to reverse over 500ms
+            rig.reverse().revert(1000)        # Instant flip, fade back over 1000ms
+            rig.reverse().over(500).revert(500)  # Fade both ways
         """
-        return DirectionByBuilder(self, 180, instant=True)
+        return DirectionReverseBuilder(self, instant=True)
 
     def _get_cardinal_direction(self, direction: Vec2) -> str:
         """Get cardinal/intercardinal direction name from direction vector
@@ -801,7 +802,6 @@ class RigState:
         if abs(effective_accel) > 1e-6:
             self._speed += effective_accel * dt
             # Allow negative speed only during ReverseTransition
-            from .core import ReverseTransition
             if not isinstance(self._direction_transition, ReverseTransition):
                 self._speed = max(0.0, self._speed)
             if self.limits_max_speed is not None:
@@ -815,7 +815,6 @@ class RigState:
         total_speed = effective_speed + accel_velocity_contribution
 
         # Clamp total speed (allow negative during ReverseTransition)
-        from .core import ReverseTransition
         if self.limits_max_speed is not None:
             total_speed = min(total_speed, self.limits_max_speed)
         if not isinstance(self._direction_transition, ReverseTransition):
