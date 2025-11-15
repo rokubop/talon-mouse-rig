@@ -196,7 +196,7 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             rate_speed, rate_accel, rate_rotation
         )
 
-    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "lerp") -> None:
         """UNIFIED: Store configuration using Effect.configure_lifecycle"""
         effect = self._get_or_create_effect(self._last_op_type)
         effect.configure_lifecycle(

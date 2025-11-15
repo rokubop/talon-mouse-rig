@@ -80,6 +80,8 @@ Direct Temporary Effects (anonymous, no naming needed):
 Timing:
     Time-based:
         .over(duration, easing?)  # Animate over fixed duration
+        .revert(duration?, easing?)  # Revert with options
+        .stop(duration?, easing?)  # Stop with options
 
     Rate-based (no easing, constant rate):
         .rate(value)              # Context-aware rate
@@ -109,7 +111,7 @@ Direction:
     rig.direction(1, 0)              # Right
     rig.direction(0, 1)              # Down
     rig.direction(-1, -1)            # Up-left diagonal
-    rig.direction(1, 0).over(500)    # Smooth rotation
+    rig.direction(1, 0).over(500)    # Smooth direction change
     rig.direction(1, 0).rate(90)     # Rotate at 90°/sec
     rig.reverse()                    # 180° turn
 

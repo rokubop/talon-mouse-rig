@@ -12,6 +12,7 @@ Demonstrates all core mouse rig features:
 - Lifecycle effects (.over/.hold/.revert)
 - Named entities with stopping
 - State access and baking
+- Interpolation modes for direction (slerp vs lerp)
 """
 
 from talon import Module, actions
@@ -270,8 +271,19 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction.by(-90).over(500, "ease_in_out")
 
+    def mouse_rig_turn_lerp():
+        """Turn using linear interpolation (default)
+
+        Lerp interpolates the x,y components directly (cuts across),
+        while slerp rotates along the arc. Lerp is the default and works
+        well for most cases. Use slerp when you want smooth rotation along
+        the circular arc.
+        """
+        rig = actions.user.mouse_rig()
+        rig.direction.to(1, 0).over(500, "ease_in_out")  # interpolation="lerp" is default
+
     def mouse_rig_reverse():
-        """180° turn"""
+        """Smooth linear reverse - backs up motion"""
         rig = actions.user.mouse_rig()
         rig.reverse().over(500)
 

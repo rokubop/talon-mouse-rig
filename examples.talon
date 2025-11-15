@@ -91,6 +91,7 @@ rig accel burst: user.mouse_rig_accel_burst()
 
 rig turn right: user.mouse_rig_turn_right()
 rig turn left: user.mouse_rig_turn_left()
+rig turn lerp: user.mouse_rig_turn_lerp()
 rig reverse: user.mouse_rig_reverse()
 
 # =============================================================================

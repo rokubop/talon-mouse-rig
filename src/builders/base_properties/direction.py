@@ -16,6 +16,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         self.rig_state = rig_state
         self.target_direction = target_direction.normalized()
         self._easing = "linear"
+        self._interpolation = "slerp"
         self._should_execute_instant = instant
         self._duration_ms: Optional[float] = None
         self._rate_rotation: Optional[float] = None
@@ -63,7 +64,8 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                 self.rig_state._direction,
                 self.target_direction,
                 duration_ms,
-                self._easing
+                self._easing,
+                self._interpolation
             )
             self.rig_state.start()
             self.rig_state._direction_transition = transition
@@ -105,11 +107,12 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
             return None
         return 500.0
 
-    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "slerp") -> None:
         """Store in _duration_ms (not _in_duration_ms) and disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
+        self._interpolation = interpolation
 
     # No custom behavior needed for hold/revert - using base implementation
 
@@ -138,6 +141,7 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         self.rig_state = rig_state
         self.degrees = degrees
         self._easing = "linear"
+        self._interpolation = "slerp"
         self._should_execute_instant = instant
         self._duration_ms: Optional[float] = None
         self._rate_rotation: Optional[float] = None
@@ -216,7 +220,8 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
                 self.rig_state._direction,
                 target_direction,
                 duration_ms,
-                self._easing
+                self._easing,
+                self._interpolation
             )
             self.rig_state.start()
             self.rig_state._direction_transition = transition
@@ -257,11 +262,12 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
             return None
         return 500.0
 
-    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "slerp") -> None:
         """Store in _duration_ms and disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
+        self._interpolation = interpolation
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],

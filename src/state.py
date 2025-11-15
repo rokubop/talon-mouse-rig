@@ -537,7 +537,8 @@ class RigState:
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> None:
         """Stop everything: bake state, clear effects/forces, decelerate to 0
 
@@ -545,6 +546,7 @@ class RigState:
             duration_ms: Optional duration to decelerate over. If None, stops immediately.
             easing: Easing function name for gradual deceleration
             rate_speed: Speed deceleration rate in units/second (rate-based)
+            interpolation: Interpolation method - "lerp" (linear, default) or "slerp" (rotation)
 
         Examples:
             rig.stop()                  # Instant: bake, clear, speed=0

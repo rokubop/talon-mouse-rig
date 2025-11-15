@@ -88,7 +88,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
                 return duration_sec * 1000
         return 500.0
 
-    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "lerp") -> None:
         """Store in _duration_ms and optionally override easing, disable instant execution"""
         self._should_execute_instant = False
         self._duration_ms = duration_ms

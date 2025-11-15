@@ -197,7 +197,8 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> 'ForcePropertyController':
         """Stop the named force
 
@@ -206,6 +207,7 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
             easing: Easing function for gradual stop
             rate_speed: Speed rate in units/second (rate-based)
             rate_accel: Acceleration rate in units/second² (rate-based)
+            interpolation: Interpolation method - "lerp" (linear, default) or "slerp" (rotation)
 
         Examples:
             rig.force("wind").stop()  # Immediate stop
@@ -340,7 +342,8 @@ class NamedForceNamespace:
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> None:
         """Stop all named forces
 
@@ -349,6 +352,7 @@ class NamedForceNamespace:
             easing: Easing function for gradual stop
             rate_speed: Speed deceleration rate in units/second (rate-based)
             rate_accel: Acceleration deceleration rate in units/second² (rate-based)
+            interpolation: Interpolation method - "lerp" (linear, default) or "slerp" (rotation)
         """
         # Note: For stop_all, rate-based stopping applies per-force
         # Each force will calculate its own duration based on its current values

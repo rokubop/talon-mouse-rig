@@ -80,7 +80,8 @@ class TimingMethodsContract(ABC, Generic[T]):
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> T:
         """Transition/fade in over duration or at rate - default implementation with hooks
 
@@ -90,6 +91,7 @@ class TimingMethodsContract(ABC, Generic[T]):
             rate_speed: Speed rate in units/second (rate-based)
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
+            interpolation: Interpolation method - "lerp" (linear, default) or "slerp" (rotation)
         """
         # Hook for pre-validation
         self._before_over(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
@@ -104,7 +106,7 @@ class TimingMethodsContract(ABC, Generic[T]):
             )
 
         # Hook for storing the configuration (different builders use different field names)
-        self._store_over_config(duration_ms, easing)
+        self._store_over_config(duration_ms, easing, interpolation)
 
         self._current_stage = "after_forward"
 
@@ -133,7 +135,8 @@ class TimingMethodsContract(ABC, Generic[T]):
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> T:
         """Fade out/restore over duration or at rate - default implementation with hooks
 
@@ -143,6 +146,7 @@ class TimingMethodsContract(ABC, Generic[T]):
             rate_speed: Speed rate in units/second (rate-based)
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
+            interpolation: Interpolation method - "lerp" (linear, default) or "slerp" (rotation)
         """
         # Hook for pre-validation
         self._before_revert(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
@@ -158,6 +162,7 @@ class TimingMethodsContract(ABC, Generic[T]):
 
         self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
         self._out_easing = easing
+        self._out_interpolation = interpolation
         self._current_stage = "after_revert"
 
         # Hook for post-processing
@@ -215,7 +220,7 @@ class TimingMethodsContract(ABC, Generic[T]):
             return 500.0  # Default for rotation-based
         return 500.0
 
-    def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
+    def _store_over_config(self, duration_ms: Optional[float], easing: str, interpolation: str = "lerp") -> None:
         """Hook for storing over configuration. Override to use different field names (_duration_ms vs _in_duration_ms)."""
         # Default: store in _in_duration_ms and _in_easing (for lifecycle-based builders)
         if not hasattr(self, '_in_duration_ms'):
@@ -287,7 +292,8 @@ class StoppableContract(ABC):
         *,
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
+        rate_rotation: Optional[float] = None,
+        interpolation: str = "slerp"
     ) -> T:
         """Stop/cancel the entity
 
@@ -297,6 +303,7 @@ class StoppableContract(ABC):
             rate_speed: Speed rate in units/second (rate-based)
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
+            interpolation: Interpolation method - \"slerp\" (rotation) or \"lerp\" (linear)
         """
         pass
 class BasePropertyContract(ABC, Generic[T]):

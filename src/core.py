@@ -312,18 +312,19 @@ class SpeedTransition(Transition):
 
 
 class DirectionTransition(Transition):
-    """Transition for direction changes over time (shortest arc)"""
-    def __init__(self, start_dir: Vec2, target_dir: Vec2, duration_ms: float, easing: str = "linear"):
+    """Transition for direction changes over time"""
+    def __init__(self, start_dir: Vec2, target_dir: Vec2, duration_ms: float, easing: str = "linear", interpolation: str = "slerp"):
         super().__init__(duration_ms, easing)
         self.start_dir = start_dir
         self.target_dir = target_dir
+        self.interpolation = interpolation
 
-        # Calculate angle for shortest arc interpolation
+        # Calculate angle for shortest arc interpolation (used by slerp)
         dot = start_dir.dot(target_dir)
         dot = clamp(dot, -1.0, 1.0)
         self.angle = math.acos(dot)
 
-        # Determine rotation direction using cross product
+        # Determine rotation direction using cross product (used by slerp)
         cross = start_dir.x * target_dir.y - start_dir.y * target_dir.x
         self.direction = 1 if cross >= 0 else -1
 
@@ -335,17 +336,29 @@ class DirectionTransition(Transition):
             rig_state._direction = self.target_dir
             return
 
-        # Slerp for smooth rotation
-        current_angle = self.angle * p * self.direction
+        if self.interpolation == "lerp":
+            # Linear interpolation of direction vectors
+            x = self.start_dir.x + (self.target_dir.x - self.start_dir.x) * p
+            y = self.start_dir.y + (self.target_dir.y - self.start_dir.y) * p
 
-        # Rotate start_dir by current_angle
-        cos_a = math.cos(current_angle)
-        sin_a = math.sin(current_angle)
+            # Normalize to keep it as a unit direction vector
+            length = math.sqrt(x * x + y * y)
+            if length > 0:
+                rig_state._direction = Vec2(x / length, y / length)
+            else:
+                rig_state._direction = self.target_dir
+        else:
+            # Slerp for smooth rotation (default)
+            current_angle = self.angle * p * self.direction
 
-        new_x = self.start_dir.x * cos_a - self.start_dir.y * sin_a
-        new_y = self.start_dir.x * sin_a + self.start_dir.y * cos_a
+            # Rotate start_dir by current_angle
+            cos_a = math.cos(current_angle)
+            sin_a = math.sin(current_angle)
 
-        rig_state._direction = Vec2(new_x, new_y).normalized()
+            new_x = self.start_dir.x * cos_a - self.start_dir.y * sin_a
+            new_y = self.start_dir.x * sin_a + self.start_dir.y * cos_a
+
+            rig_state._direction = Vec2(new_x, new_y).normalized()
 
 
 class PositionTransition(Transition):
