@@ -2,6 +2,7 @@
 
 from typing import Optional, Callable, Union, TYPE_CHECKING
 from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
+from ..rate_utils import calculate_over_duration_for_property, calculate_revert_duration_for_property
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -97,14 +98,12 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             target = self._calculate_target_value(current, value)
             transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
 
-            # Register callback with transition if set
             if self._after_forward_callback:
                 transition.on_complete = self._after_forward_callback
 
             self.rig_state.start()
             self.rig_state._speed_transition = transition
         elif self.property_name == "accel":
-            # TODO: Add accel transition support if needed
             current = self.rig_state._accel
             target = self._calculate_target_value(current, value)
             self.rig_state._accel = target
@@ -113,8 +112,6 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
                 self._after_forward_callback()
 
     def _execute_instant(self):
-        """Execute instantly without transition"""
-        # Evaluate value if it's a callable (lambda)
         value = self.value
         if callable(value):
             if not hasattr(self.rig_state, '_state_accessor'):
@@ -127,13 +124,12 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             target = self._calculate_target_value(current, value)
             target = max(0.0, target)
 
-            # Apply speed limit if set
             max_speed = self.rig_state.limits_max_speed
             if max_speed is not None:
                 target = min(target, max_speed)
 
             self.rig_state._speed = target
-            self.rig_state.start()  # Ensure ticking is active
+            self.rig_state.start()
 
             if self._after_forward_callback:
                 self._after_forward_callback()
@@ -146,7 +142,7 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
                 self._after_forward_callback()
 
     def _calculate_target_value(self, current: float, value: float) -> float:
-        """Calculate the target value based on operation (value already evaluated)"""
+        """Calculate the target value based on operation"""
         if self.operation == "to":
             return value
         elif self.operation == "by":
@@ -168,42 +164,30 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
         rate_rotation: Optional[float]
     ) -> float:
         """Calculate duration from rate based on delta between current and target"""
-        rate_provided = rate_speed is not None or rate_accel is not None
-        if rate_provided:
-            rate_value = rate_speed if rate_speed is not None else rate_accel
-            rate_property = "speed" if rate_speed is not None else "accel"
+        current = getattr(self.rig_state, f"_{self.property_name}")
+        value = self.value
+        if callable(value):
+            if not hasattr(self.rig_state, '_state_accessor'):
+                from ...state import StateAccessor
+                self.rig_state._state_accessor = StateAccessor(self.rig_state)
+            value = value(self.rig_state._state_accessor)
 
-            if rate_property != self.property_name:
-                raise ValueError(f"Rate parameter mismatch: trying to use rate_{rate_property} on {self.property_name} property")
+        target = self._calculate_target_value(current, value)
 
-            # Get current and target values
-            current = getattr(self.rig_state, f"_{self.property_name}")
-            value = self.value
-            if callable(value):
-                if not hasattr(self.rig_state, '_state_accessor'):
-                    from ...state import StateAccessor
-                    self.rig_state._state_accessor = StateAccessor(self.rig_state)
-                value = value(self.rig_state._state_accessor)
-
-            target = self._calculate_target_value(current, value)
-            delta = abs(target - current)
-
-            if delta < 0.01:
-                return 1.0
-            else:
-                duration_sec = delta / rate_value
-                return duration_sec * 1000
-        return 500.0
+        return calculate_over_duration_for_property(
+            self.property_name, current, target,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],
                                             rate_rotation: Optional[float]) -> Optional[float]:
         """Calculate revert duration from rate parameters"""
-        rate_provided = rate_speed is not None or rate_accel is not None
-        if rate_provided:
-            # Just use a default duration for now - proper implementation would calculate based on current delta
-            return 500.0  # TODO: Calculate based on current value vs original
-        return None
+        current = getattr(self.rig_state, f"_{self.property_name}")
+        return calculate_revert_duration_for_property(
+            self.property_name, current,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     # ===== PropertyChainingContract hooks =====
 

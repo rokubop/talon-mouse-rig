@@ -48,30 +48,6 @@ class Actions:
         rig.direction(0, 1)
         rig.speed(rig.state.speed or 3)
 
-    def mouse_rig_go_up_right():
-        """Move diagonally up-right"""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, -1)
-        rig.speed(rig.state.speed or 3)
-
-    def mouse_rig_go_up_left():
-        """Move diagonally up-left"""
-        rig = actions.user.mouse_rig()
-        rig.direction(-1, -1)
-        rig.speed(rig.state.speed or 3)
-
-    def mouse_rig_go_down_right():
-        """Move diagonally down-right"""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 1)
-        rig.speed(rig.state.speed or 3)
-
-    def mouse_rig_go_down_left():
-        """Move diagonally down-left"""
-        rig = actions.user.mouse_rig()
-        rig.direction(-1, 1)
-        rig.speed(rig.state.speed or 3)
-
     # =========================================================================
     # SPEED CONTROL
     # =========================================================================
@@ -79,7 +55,7 @@ class Actions:
     def mouse_rig_speed_slow():
         """Set speed to slow"""
         rig = actions.user.mouse_rig()
-        rig.speed(1)
+        rig.speed.div(2)
 
     def mouse_rig_speed_normal():
         """Set speed to normal"""
@@ -89,7 +65,7 @@ class Actions:
     def mouse_rig_speed_fast():
         """Set speed to fast"""
         rig = actions.user.mouse_rig()
-        rig.speed(7)
+        rig.speed.mul(2)
 
     def mouse_rig_speed_ramp_up():
         """Smoothly ramp speed up to 30 over 1 second"""
@@ -214,12 +190,12 @@ class Actions:
     def mouse_rig_drift_on():
         """Drift right by 15 degrees"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(15).on_repeat("stack", 3)
+        rig.effect("drift").direction.add(90).on_repeat("stack")
 
     def mouse_rig_drift_off():
         """Stop drift"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").revert(500)
+        rig.effect("drift").revert(1000)
 
     def mouse_rig_drift_smooth():
         """Smooth drift with lifecycle"""

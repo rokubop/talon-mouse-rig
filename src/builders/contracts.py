@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Union, Optional, TYPE_CHECKING, TypeVar, Generic, Callable
+from .rate_utils import validate_rate_params
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -94,9 +95,7 @@ class TimingMethodsContract(ABC, Generic[T]):
         self._before_over(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
 
         # Validate inputs - common validation for rate vs duration
-        rate_provided = rate_speed is not None or rate_accel is not None or rate_rotation is not None
-        if duration_ms is not None and rate_provided:
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
+        rate_provided = validate_rate_params(duration_ms, rate_speed, rate_accel, rate_rotation)
 
         # Hook for calculating duration from rate (subclasses can override)
         if rate_provided:
@@ -149,9 +148,7 @@ class TimingMethodsContract(ABC, Generic[T]):
         self._before_revert(duration_ms, easing, rate_speed, rate_accel, rate_rotation)
 
         # Validate inputs
-        rate_provided = rate_speed is not None or rate_accel is not None or rate_rotation is not None
-        if duration_ms is not None and rate_provided:
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
+        rate_provided = validate_rate_params(duration_ms, rate_speed, rate_accel, rate_rotation)
 
         # Hook for calculating duration from rate (subclasses can override)
         if rate_provided:
@@ -183,6 +180,10 @@ class TimingMethodsContract(ABC, Generic[T]):
             self._after_hold_callback = callback
         elif self._current_stage == "after_revert":
             self._after_revert_callback = callback
+
+        # Hook for updating underlying effect objects
+        self._after_then_configured(callback)
+
         return self
 
     # ===== HOOKS - Override in subclasses for special behavior =====
@@ -263,6 +264,10 @@ class TimingMethodsContract(ABC, Generic[T]):
         """Hook called after revert() configuration. Override to start rig, create effects, etc."""
         pass
 
+    def _after_then_configured(self, callback: 'Callable') -> None:
+        """Hook called after then() sets a callback. Override to update underlying effect objects."""
+        pass
+
 
 class StoppableContract(ABC):
     """
@@ -283,7 +288,7 @@ class StoppableContract(ABC):
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
         rate_rotation: Optional[float] = None
-    ) -> None:
+    ) -> T:
         """Stop/cancel the entity
 
         Args:
@@ -307,7 +312,6 @@ class BasePropertyContract(ABC, Generic[T]):
 
     @abstractmethod
     def __init__(self, rig_state: 'RigState'):
-        """Initialize with reference to rig state"""
         pass
 
 
@@ -332,7 +336,6 @@ class AutoExecuteBuilder(ABC):
     """
 
     def __del__(self):
-        """Execute when builder goes out of scope"""
         try:
             self._execute()
         except:
@@ -340,7 +343,6 @@ class AutoExecuteBuilder(ABC):
 
     @abstractmethod
     def _execute(self):
-        """Override this to define execution behavior"""
         pass
 
 

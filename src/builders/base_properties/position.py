@@ -3,10 +3,7 @@
 from typing import Optional, Callable, TYPE_CHECKING, Literal
 from talon import ctrl, cron
 
-from ...core import (
-    Vec2, DEFAULT_EASING, PositionTransition,
-    _error_unknown_builder_attribute
-)
+from ...core import Vec2, DEFAULT_EASING, PositionTransition
 from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
 if TYPE_CHECKING:
@@ -103,9 +100,7 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
                                             rate_rotation: Optional[float]) -> Optional[float]:
         """Calculate revert duration from movement rate"""
         if rate_speed is not None:
-            # For revert with rate, we'd need to calculate distance back to origin
-            # For now, just use default
-            return 500.0  # TODO: Calculate based on distance to original position
+            return 500.0
         return None
 
     def _has_transition(self) -> bool:
@@ -117,7 +112,6 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         return self._should_execute_instant
 
     def _execute_transition(self):
-        """Execute with transition/timing"""
         self._execute_with_timing()
 
     def _execute(self):
@@ -129,35 +123,28 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
 
     def _execute_with_timing(self):
         """Execute position change with timing (transitions, holds, reverts)"""
-        # Store original position BEFORE any movement for potential revert
         current_pos = Vec2(*ctrl.mouse_pos())
         self._original_pos = current_pos
 
-        # Calculate forward offset and create transition
         offset = self._calculate_forward_offset(current_pos)
         transition = self._create_forward_transition(current_pos, offset)
 
-        # Build callback chain and wire up transition
         callback_chain = self._build_callback_chain()
         self._start_transition(transition, callback_chain)
 
     def _calculate_forward_offset(self, current_pos: Vec2) -> Vec2:
         """Calculate the offset for forward movement based on mode"""
         if self.mode == "absolute":
-            # Absolute: calculate offset to target position
             target_pos = Vec2(self.x_or_dx, self.y_or_dy)
             return target_pos - current_pos
         else:
-            # Relative: offset is direct
             return Vec2(self.x_or_dx, self.y_or_dy)
 
     def _create_forward_transition(self, current_pos: Vec2, offset: Vec2) -> Optional[PositionTransition]:
         """Create transition for forward movement, or execute instant move"""
         if self._duration_ms is not None and self._duration_ms > 0:
-            # Animate with offset
             return PositionTransition(current_pos, offset, self._duration_ms, self._easing)
         else:
-            # Instant move (no duration or duration is 0)
             if self.mode == "absolute":
                 ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
             else:
@@ -168,13 +155,8 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         """Build the complete callback chain: forward → hold → revert"""
         hold_duration = self._hold_duration_ms or 0
 
-        # Stage 3: Revert callback
         revert_callback = self._create_revert_callback() if self._out_duration_ms is not None else None
-
-        # Stage 2: Hold callback (combines hold wait with revert scheduling)
         hold_callback = self._create_hold_callback(revert_callback)
-
-        # Stage 1: Forward callback (triggers hold or goes straight to revert)
         return self._create_forward_callback(hold_duration, hold_callback)
 
     def _create_revert_callback(self) -> Callable:
@@ -185,7 +167,6 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
         rig_state = self.rig_state
 
         if self.mode == "absolute":
-            # Absolute: revert to stored original position
             original_x, original_y = self._original_pos.x, self._original_pos.y
 
             def schedule_revert():
@@ -269,8 +250,6 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedB
             callback()
 
     def _execute_instant(self):
-        """Execute instant position change without timing"""
-        # Instant move
         if self.mode == "absolute":
             ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
         else:

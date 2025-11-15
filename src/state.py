@@ -3,6 +3,7 @@
 import time
 import math
 from typing import Optional, Callable, Tuple
+from .builders.rate_utils import calculate_revert_duration_for_property
 from talon import cron, settings, ctrl
 
 from . import core
@@ -551,17 +552,12 @@ class RigState:
             rig.stop(1000, "ease_out")  # Bake, clear, decelerate with easing
             rig.stop(rate_speed=50)     # Decelerate at 50 units/s
         """
-        if duration_ms is not None and rate_speed is not None:
-            raise ValueError("Cannot specify both duration_ms and rate_speed")
-
         # Calculate duration from rate if provided
         if rate_speed is not None:
-            current_speed = self._speed
-            if current_speed < 0.01:
-                duration_ms = 1
-            else:
-                duration_sec = current_speed / rate_speed
-                duration_ms = duration_sec * 1000
+            duration_ms = calculate_revert_duration_for_property(
+                "speed", self._speed,
+                rate_speed, rate_accel, rate_rotation
+            )
 
         # 1. Bake current state (flatten effects/forces into base)
         self.bake()

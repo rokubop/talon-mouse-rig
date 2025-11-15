@@ -1,9 +1,15 @@
 """Effect builders for PRD 8 named effects"""
 
-from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic
+from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic, Callable
 from ..core import Vec2
 from ..effects import EffectStack, EffectLifecycle
 from .contracts import PropertyOperationsContract
+from .rate_utils import (
+    validate_rate_params,
+    calculate_duration_from_rate,
+    calculate_over_duration_for_property,
+    calculate_revert_duration_for_property
+)
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -40,7 +46,6 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         self._out_easing: str = "linear"
 
     def __del__(self):
-        """Auto-start when builder goes out of scope if not already started"""
         try:
             if not self._started and self._last_op_type is not None:
                 self.rig_state.start()
@@ -180,24 +185,16 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         rate_rotation: Optional[float]
     ) -> float:
         """Calculate duration from rate based on effect value"""
-        # Validate rate matches property type
-        if rate_speed is not None and self._property_name != "speed":
-            raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
-        if rate_accel is not None and self._property_name != "accel":
-            raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
+        # For effects, calculate based on the operation value
+        effect = self._get_or_create_effect(self._last_op_type)
+        # This is simplified - proper implementation would calculate based on actual delta
+        value = abs(effect.value) if hasattr(effect, 'value') else 10
 
-        if rate_speed is not None or rate_accel is not None:
-            rate_value = rate_speed if rate_speed is not None else rate_accel
-            # For effects, calculate based on the operation value
-            effect = self._get_or_create_effect(self._last_op_type)
-            # This is simplified - proper implementation would calculate based on actual delta
-            delta = abs(effect.value) if hasattr(effect, 'value') else 10
-            if delta < 0.01:
-                return 1.0
-            else:
-                duration_sec = delta / rate_value
-                return duration_sec * 1000
-        return 500.0
+        # Use unified rate calculation (handles validation internally)
+        return calculate_over_duration_for_property(
+            self._property_name, 0.0, value,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
         """UNIFIED: Store configuration using Effect.configure_lifecycle"""
@@ -253,15 +250,12 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
                                             rate_accel: Optional[float],
                                             rate_rotation: Optional[float]) -> Optional[float]:
         """Calculate revert duration from rate parameters"""
-        # Validate rate matches property type
-        if rate_speed is not None and self._property_name != "speed":
-            raise ValueError(f"rate_speed only valid for speed effects, not {self._property_name}")
-        if rate_accel is not None and self._property_name != "accel":
-            raise ValueError(f"rate_accel only valid for accel effects, not {self._property_name}")
-
-        if rate_speed is not None or rate_accel is not None:
-            return 500.0  # TODO: Calculate based on current effect strength
-        return None
+        # For now, use a default value - proper implementation would calculate based on effect strength
+        # Using value of 10 as a placeholder for effect strength
+        return calculate_revert_duration_for_property(
+            self._property_name, 10.0,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
         """UNIFIED: Apply revert using Effect.configure_lifecycle"""
@@ -286,6 +280,23 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         if not self._started:
             self.rig_state.start()
             self._started = True
+
+    def _after_then_configured(self, callback: 'Callable') -> None:
+        """Update the effect lifecycle with the newly set callback"""
+        if self._last_op_type is None:
+            return  # No effect to update yet
+
+        effect = self._get_or_create_effect(self._last_op_type)
+        effect.configure_lifecycle(
+            in_duration_ms=effect.in_duration_ms,
+            in_easing=effect.in_easing,
+            hold_duration_ms=effect.hold_duration_ms,
+            out_duration_ms=effect.out_duration_ms,
+            out_easing=effect.out_easing,
+            after_forward_callback=self._after_forward_callback,
+            after_hold_callback=self._after_hold_callback,
+            after_revert_callback=self._after_revert_callback
+        )
 
 class EffectBuilder:
     """
@@ -343,24 +354,88 @@ class EffectBuilder:
             self._pos_builder = EffectPosBuilder(self.rig_state, self.name, self.strict_mode)
         return self._pos_builder
 
-    def revert(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Revert this effect (removes all operations)"""
+    def revert(
+        self,
+        duration_ms: Optional[float] = None,
+        easing: str = "linear",
+        *,
+        rate_speed: Optional[float] = None,
+        rate_accel: Optional[float] = None,
+        rate_rotation: Optional[float] = None
+    ) -> 'EffectBuilder':
+        """Revert this effect (removes all operations)
+
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function name
+            rate_speed: Speed rate in units/second (rate-based)
+            rate_accel: Acceleration rate in units/second² (rate-based)
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        # Validate and check if rate parameters are provided
+        rate_provided = validate_rate_params(duration_ms, rate_speed, rate_accel, rate_rotation)
+
+        # Calculate duration from rate if provided
+        if rate_provided:
+            # Get all effect stacks to calculate total effect strength
+            keys = [key for key in self.rig_state._effect_stacks
+                   if key.startswith(f"{self.name}:")]
+
+            if keys:
+                # Use the first stack to determine property type and calculate fade duration
+                key = keys[0]
+                stack = self.rig_state._effect_stacks[key]
+                total = abs(stack.get_total())
+
+                if rate_speed is not None and stack.property == "speed":
+                    duration_ms = calculate_duration_from_rate(total, rate_speed)
+                elif rate_accel is not None and stack.property == "accel":
+                    duration_ms = calculate_duration_from_rate(total, rate_accel)
+                elif rate_rotation is not None and stack.property == "direction":
+                    duration_ms = calculate_duration_from_rate(total, rate_rotation)
+                else:
+                    # Default fallback if rate doesn't match property
+                    duration_ms = 500.0
+            else:
+                # No stacks to revert
+                return self
+
         # Revert all effect stacks for this entity
         keys_to_revert = [key for key in self.rig_state._effect_stacks
                          if key.startswith(f"{self.name}:")]
 
         for key in keys_to_revert:
             if key in self.rig_state._effect_lifecycles:
+                # Effect has lifecycle - request stop
                 effect = self.rig_state._effect_lifecycles[key]
                 effect.request_stop(duration_ms, easing)
+            elif duration_ms is not None and duration_ms > 0:
+                # Effect has no lifecycle but user wants gradual revert - create lifecycle for fadeout
+                stack = self.rig_state._effect_stacks[key]
+                lifecycle = EffectLifecycle(stack)
+                # Configure to start at full strength and fade out
+                lifecycle.configure_lifecycle(
+                    in_duration_ms=None,  # No fade in
+                    hold_duration_ms=None,  # No hold
+                    out_duration_ms=duration_ms,
+                    out_easing=easing
+                )
+                # Start at full strength (already applied)
+                lifecycle.start()
+                # Immediately request stop so it fades out
+                lifecycle.request_stop(duration_ms, easing)
+                # Store the lifecycle so it gets updated
+                self.rig_state._effect_lifecycles[key] = lifecycle
             else:
-                # Immediate removal if no lifecycle
+                # Immediate removal if no lifecycle and no duration
                 del self.rig_state._effect_stacks[key]
                 if key in self.rig_state._effect_order:
                     self.rig_state._effect_order.remove(key)
 
         # Start the update loop to apply the revert (especially important when stopped)
         self.rig_state.start()
+
+        return self
 
 
 

@@ -744,63 +744,120 @@ class DirectionEffect:
     """
     Represents a temporary direction rotation with lifecycle phases.
 
-    Similar to Effect but handles direction (rotation in degrees) instead of scalar values.
+    Uses the unified Effect class for lifecycle management, with direction-specific
+    application logic for rotating Vec2 values.
     """
     def __init__(self, degrees: float, name: Optional[str] = None):
         self.degrees = degrees  # Rotation amount in degrees
         self.name = name  # Optional name for stopping early
 
-        # Lifecycle configuration
-        self.in_duration_ms: Optional[float] = None
-        self.in_easing: str = "linear"
-        self.hold_duration_ms: Optional[float] = None
-        self.out_duration_ms: Optional[float] = None
-        self.out_easing: str = "linear"
+        # Create unified Effect for lifecycle management (direction is just a scalar degree value)
+        self._effect = Effect(value=degrees, operation="add", name=name)
 
-        # Stage-specific callbacks
-        self.after_forward_callback: Optional[Callable] = None
-        self.after_hold_callback: Optional[Callable] = None
-        self.after_revert_callback: Optional[Callable] = None
+    # Delegate all lifecycle properties to unified Effect
+    @property
+    def in_duration_ms(self):
+        return self._effect.in_duration_ms
 
-        # Runtime state
-        self.phase: str = "not_started"  # "in", "hold", "out", "complete"
-        self.phase_start_time: Optional[float] = None
-        self.base_direction: Optional[Vec2] = None  # Direction before effect was applied
-        self.current_multiplier: float = 0.0  # 0 to 1, how much of the rotation is active
-        self.complete = False
+    @in_duration_ms.setter
+    def in_duration_ms(self, value):
+        self._effect.in_duration_ms = value
 
-        # For stopping
-        self.stop_requested = False
-        self.stop_duration_ms: Optional[float] = None
-        self.stop_easing: str = "linear"
-        self.stop_start_time: Optional[float] = None
+    @property
+    def in_easing(self):
+        return self._effect.in_easing
 
-    def start(self, current_direction: Vec2) -> None:
+    @in_easing.setter
+    def in_easing(self, value):
+        self._effect.in_easing = value
+
+    @property
+    def hold_duration_ms(self):
+        return self._effect.hold_duration_ms
+
+    @hold_duration_ms.setter
+    def hold_duration_ms(self, value):
+        self._effect.hold_duration_ms = value
+
+    @property
+    def out_duration_ms(self):
+        return self._effect.out_duration_ms
+
+    @out_duration_ms.setter
+    def out_duration_ms(self, value):
+        self._effect.out_duration_ms = value
+
+    @property
+    def out_easing(self):
+        return self._effect.out_easing
+
+    @out_easing.setter
+    def out_easing(self, value):
+        self._effect.out_easing = value
+
+    @property
+    def after_forward_callback(self):
+        return self._effect.after_forward_callback
+
+    @after_forward_callback.setter
+    def after_forward_callback(self, value):
+        self._effect.after_forward_callback = value
+
+    @property
+    def after_hold_callback(self):
+        return self._effect.after_hold_callback
+
+    @after_hold_callback.setter
+    def after_hold_callback(self, value):
+        self._effect.after_hold_callback = value
+
+    @property
+    def after_revert_callback(self):
+        return self._effect.after_revert_callback
+
+    @after_revert_callback.setter
+    def after_revert_callback(self, value):
+        self._effect.after_revert_callback = value
+
+    @property
+    def phase(self):
+        return self._effect.phase
+
+    @property
+    def complete(self):
+        return self._effect.complete
+
+    @property
+    def current_multiplier(self):
+        return self._effect.current_multiplier
+
+    def configure_lifecycle(
+        self,
+        in_duration_ms: Optional[float] = None,
+        in_easing: str = "linear",
+        hold_duration_ms: Optional[float] = None,
+        out_duration_ms: Optional[float] = None,
+        out_easing: str = "linear",
+        after_forward_callback: Optional[Callable] = None,
+        after_hold_callback: Optional[Callable] = None,
+        after_revert_callback: Optional[Callable] = None
+    ) -> None:
+        """Configure lifecycle - delegates to unified Effect"""
+        self._effect.configure_lifecycle(
+            in_duration_ms=in_duration_ms,
+            in_easing=in_easing,
+            hold_duration_ms=hold_duration_ms,
+            out_duration_ms=out_duration_ms,
+            out_easing=out_easing,
+            after_forward_callback=after_forward_callback,
+            after_hold_callback=after_hold_callback,
+            after_revert_callback=after_revert_callback
+        )
+
+    def start(self, current_direction: Vec2 = None) -> None:
         """Start the effect lifecycle"""
-        self.base_direction = current_direction
-
-        if self.in_duration_ms is not None:
-            self.phase = "in"
-            self.phase_start_time = time.perf_counter()
-        elif self.hold_duration_ms is not None:
-            self.phase = "hold"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        elif self.out_duration_ms is not None:
-            # Start at full strength if only out phase
-            self.phase = "out"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        else:
-            # No lifecycle specified
-            if self.name:
-                # Named modifiers without lifecycle persist indefinitely at full strength
-                self.phase = "hold"
-                self.current_multiplier = 1.0
-            else:
-                # Unnamed effects without lifecycle complete immediately
-                self.phase = "complete"
-                self.complete = True
+        # Direction effects don't need base value for lifecycle
+        self._effect.start()
 
     def update(self, current_base_direction: Vec2) -> Vec2:
         """
@@ -812,81 +869,22 @@ class DirectionEffect:
         Returns:
             The modified direction with this effect applied
         """
-        if self.complete:
+        # Update the unified effect lifecycle
+        self._effect.update()
+
+        if self._effect.complete:
             return current_base_direction
 
-        # Handle stop request
-        if self.stop_requested:
-            return self._update_stop(current_base_direction)
-
-        # Normal lifecycle progression
-        current_time = time.perf_counter()
-        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
-
-        if self.phase == "in":
-            if elapsed_ms >= self.in_duration_ms:
-                # Move to next phase
-                self.current_multiplier = 1.0
-                if self.hold_duration_ms is not None:
-                    self.phase = "hold"
-                    self.phase_start_time = current_time
-                elif self.out_duration_ms is not None:
-                    self.phase = "out"
-                    self.phase_start_time = current_time
-                else:
-                    # No hold or revert specified - persist at full strength
-                    self.phase = "hold"
-                    self.hold_duration_ms = None  # Persist indefinitely
-            else:
-                # Update multiplier with easing
-                t = elapsed_ms / self.in_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
-                self.current_multiplier = easing_fn(t)
-
-        elif self.phase == "hold":
-            # Check if we have a duration specified
-            if self.hold_duration_ms is not None:
-                if elapsed_ms >= self.hold_duration_ms:
-                    # Fire after-hold callback
-                    if self.after_hold_callback:
-                        self.after_hold_callback()
-
-                    # Move to next phase
-                    if self.out_duration_ms is not None:
-                        self.phase = "out"
-                        self.phase_start_time = current_time
-                    else:
-                        self.phase = "complete"
-                        self.complete = True
-                        return current_base_direction
-            # else: persist indefinitely at full strength (named modifiers without timing)
-            # Multiplier stays at 1.0 during hold
-
-        elif self.phase == "out":
-            if elapsed_ms >= self.out_duration_ms:
-                # Fire after-revert callback
-                if self.after_revert_callback:
-                    self.after_revert_callback()
-
-                self.phase = "complete"
-                self.complete = True
-                return current_base_direction
-            else:
-                # Fade out
-                t = elapsed_ms / self.out_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
-                self.current_multiplier = 1.0 - easing_fn(t)
-
-        # Apply rotation based on current multiplier
+        # Apply rotation based on current multiplier from unified effect
         return self._apply_rotation(current_base_direction)
 
     def _apply_rotation(self, base_direction: Vec2) -> Vec2:
         """Apply the rotation to the base direction based on multiplier"""
-        if self.current_multiplier == 0.0:
+        if self._effect.current_multiplier == 0.0:
             return base_direction
 
         # Calculate the rotation amount scaled by multiplier
-        angle_rad = math.radians(self.degrees * self.current_multiplier)
+        angle_rad = math.radians(self.degrees * self._effect.current_multiplier)
 
         cos_a = math.cos(angle_rad)
         sin_a = math.sin(angle_rad)
@@ -896,34 +894,9 @@ class DirectionEffect:
 
         return Vec2(new_x, new_y).normalized()
 
-    def _update_stop(self, current_base_direction: Vec2) -> Vec2:
-        """Handle graceful stop with optional duration"""
-        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
-            # Immediate stop
-            self.complete = True
-            return current_base_direction
-
-        # Graceful stop over duration
-        if self.stop_start_time is None:
-            self.stop_start_time = time.perf_counter()
-
-        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
-        if elapsed_ms >= self.stop_duration_ms:
-            self.complete = True
-            return current_base_direction
-
-        # Fade out the current multiplier (from 1.0 to 0.0)
-        t = elapsed_ms / self.stop_duration_ms
-        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
-        self.current_multiplier = 1.0 - easing_fn(t)
-
-        return self._apply_rotation(current_base_direction)
-
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Request the effect to stop, optionally over a duration"""
-        self.stop_requested = True
-        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
-        self.stop_easing = easing
+        """Request the effect to stop"""
+        self._effect.request_stop(duration_ms, easing)
 
 
 # ============================================================================

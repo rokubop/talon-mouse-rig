@@ -4,6 +4,12 @@ from typing import Optional, TYPE_CHECKING, TypeVar
 from ..core import Vec2
 from ..effects import Force
 from .contracts import PropertyOperationsContract, TimingMethodsContract, TransitionBasedBuilder
+from .rate_utils import (
+    validate_rate_params,
+    calculate_duration_from_rate,
+    calculate_over_duration_for_property,
+    calculate_revert_duration_for_property
+)
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -100,23 +106,12 @@ class ForcePropertyController(PropertyOperationsContract[T]):
         rate_rotation: Optional[float]
     ) -> float:
         """Calculate duration from rate based on current force value (fading from 0)"""
-        # Validate rate matches property type
-        if rate_speed is not None and self._property_name != "speed":
-            raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
-        if rate_accel is not None and self._property_name != "accel":
-            raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
-
-        if rate_speed is not None or rate_accel is not None:
-            rate_value = rate_speed if rate_speed is not None else rate_accel
-            current = self._get_current_value()
-            # For forces, we're fading in from 0 to current value
-            delta = abs(current)
-            if delta < 0.01:
-                return 1.0
-            else:
-                duration_sec = delta / rate_value
-                return duration_sec * 1000
-        return 500.0
+        current = self._get_current_value()
+        # For forces, we're fading in from 0 to current value
+        return calculate_over_duration_for_property(
+            self._property_name, 0.0, current,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
         """Store configuration on Force object, not builder fields"""
@@ -128,22 +123,11 @@ class ForcePropertyController(PropertyOperationsContract[T]):
                                             rate_accel: Optional[float],
                                             rate_rotation: Optional[float]) -> Optional[float]:
         """Calculate revert duration from rate parameters"""
-        # Validate rate matches property type
-        if rate_speed is not None and self._property_name != "speed":
-            raise ValueError(f"rate_speed only valid for speed property, not {self._property_name}")
-        if rate_accel is not None and self._property_name != "accel":
-            raise ValueError(f"rate_accel only valid for accel property, not {self._property_name}")
-
-        if rate_speed is not None or rate_accel is not None:
-            rate_value = rate_speed if rate_speed is not None else rate_accel
-            current = self._get_current_value()
-            delta = abs(current)
-            if delta < 0.01:
-                return 1.0
-            else:
-                duration_sec = delta / rate_value
-                return duration_sec * 1000
-        return None
+        current = self._get_current_value()
+        return calculate_revert_duration_for_property(
+            self._property_name, current,
+            rate_speed, rate_accel, rate_rotation
+        )
 
     def _after_hold_configured(self, duration_ms: float) -> None:
         """Apply hold to force"""
@@ -165,7 +149,6 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         self._ensure_force_exists()
 
     def _ensure_force_exists(self):
-        """Ensure a Force object exists for this name"""
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
 
@@ -215,7 +198,7 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
         rate_speed: Optional[float] = None,
         rate_accel: Optional[float] = None,
         rate_rotation: Optional[float] = None
-    ) -> None:
+    ) -> 'ForcePropertyController':
         """Stop the named force
 
         Args:
@@ -229,30 +212,25 @@ class NamedForceBuilder(TimingMethodsContract['NamedForceBuilder']):
             rig.force("wind").stop(500, "ease_out")  # Fade out over 500ms
             rig.force("wind").stop(rate_speed=30)  # Decelerate at 30 units/s
         """
-        if duration_ms is not None and (rate_speed is not None or rate_accel is not None):
-            raise ValueError("Cannot specify both duration_ms and rate parameters")
+        # Validate and check if rate parameters are provided
+        rate_provided = validate_rate_params(duration_ms, rate_speed, rate_accel, rate_rotation)
 
         # Calculate duration from rate if provided
-        if rate_speed is not None or rate_accel is not None:
+        if rate_provided:
             # Get the force to calculate current values
             if self.name in self.rig_state._named_forces:
                 force = self.rig_state._named_forces[self.name]
-                if rate_speed is not None:
-                    delta = abs(force._speed)
-                    rate_value = rate_speed
-                elif rate_accel is not None:
-                    delta = abs(force._accel)
-                    rate_value = rate_accel
-
-                if delta < 0.01:
-                    duration_ms = 1
-                else:
-                    duration_sec = delta / rate_value
-                    duration_ms = duration_sec * 1000
+                current = self._get_current_value()
+                duration_ms = calculate_revert_duration_for_property(
+                    self._property_name, current,
+                    rate_speed, rate_accel, rate_rotation
+                )
 
         if self.name in self.rig_state._named_forces:
             force = self.rig_state._named_forces[self.name]
             force.request_stop(duration_ms, easing)
+
+        return self
 
 
 
@@ -288,8 +266,6 @@ class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuild
         pass
 
     def _execute_instant(self):
-        """Execute when builder goes out of scope"""
-        # Set direction on the Force object
         if self.name not in self.rig_state._named_forces:
             self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
 
@@ -382,6 +358,3 @@ class NamedForceNamespace:
         # Clean up force metadata
         if hasattr(self.rig_state, '_named_forces'):
             self.rig_state._named_forces.clear()
-
-# STATE ACCESSORS
-# ============================================================================

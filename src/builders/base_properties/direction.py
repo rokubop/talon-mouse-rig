@@ -2,10 +2,7 @@
 
 import math
 from typing import Optional, Callable, TYPE_CHECKING
-from ...core import (
-    Vec2, clamp, DirectionTransition,
-    _error_unknown_builder_attribute
-)
+from ...core import Vec2, clamp, DirectionTransition
 from ...effects import DirectionEffect
 from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
@@ -46,7 +43,6 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         return self._should_execute_instant
 
     def _execute_transition(self):
-        """Execute with transition"""
         if self._duration_ms is not None or self._rate_rotation is not None:
             # Calculate duration from rate if needed
             duration_ms = self._duration_ms
@@ -58,32 +54,28 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                 angle_deg = math.degrees(angle_rad)
 
                 if angle_deg < 0.1:
-                    duration_ms = 1  # Minimal duration for near-zero turns
+                    duration_ms = 1
                 else:
                     duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
-            # Create transition with all configured options
             transition = DirectionTransition(
                 self.rig_state._direction,
                 self.target_direction,
                 duration_ms,
                 self._easing
             )
-            self.rig_state.start()  # Ensure ticking is active
+            self.rig_state.start()
             self.rig_state._direction_transition = transition
 
-            # Register callback with transition if set
             if self._then_callback:
                 transition.on_complete = self._then_callback
 
     def _execute_instant(self):
-        """Execute instantly without transition"""
         self.rig_state._direction = self.target_direction
         self.rig_state._direction_transition = None
-        self.rig_state.start()  # Ensure ticking is active
+        self.rig_state.start()
 
-        # Execute callback immediately
         if self._then_callback:
             self._then_callback()
 
@@ -109,11 +101,8 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
     ) -> float:
         """Calculate duration from rotation rate based on angle to target"""
         if rate_rotation is not None:
-            # Store rate for later use in _execute_transition
             self._rate_rotation = rate_rotation
-            # Return None to indicate we'll calculate later during execution
-            # This is a special case - we need current direction at execution time
-            return None  # Signal to not set duration yet
+            return None
         return 500.0
 
     def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
@@ -129,7 +118,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                                             rate_rotation: Optional[float]) -> Optional[float]:
         """Calculate revert duration from rotation rate"""
         if rate_rotation is not None:
-            return 500.0  # TODO: Calculate based on current angle vs original
+            return 500.0
         return None
 
     # ===== PropertyChainingContract hooks =====
@@ -181,23 +170,18 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
         if is_temporary:
-            # Create and register temporary direction effect
             dir_effect = DirectionEffect(self.degrees)
-            dir_effect.in_duration_ms = self._duration_ms  # Can be None for instant application
-            dir_effect.in_easing = self._easing
-            dir_effect.hold_duration_ms = self._hold_duration_ms
 
-            # PRD5: .hold() alone implies instant revert after hold period
-            if self._hold_duration_ms is not None and self._out_duration_ms is None:
-                dir_effect.out_duration_ms = 0
-            else:
-                dir_effect.out_duration_ms = self._out_duration_ms
-            dir_effect.out_easing = self._out_easing
-
-            # Attach stage-specific callbacks
-            dir_effect.after_forward_callback = self._after_forward_callback
-            dir_effect.after_hold_callback = self._after_hold_callback
-            dir_effect.after_revert_callback = self._after_revert_callback
+            dir_effect.configure_lifecycle(
+                in_duration_ms=self._duration_ms,
+                in_easing=self._easing,
+                hold_duration_ms=self._hold_duration_ms,
+                out_duration_ms=0 if (self._hold_duration_ms is not None and self._out_duration_ms is None) else self._out_duration_ms,
+                out_easing=self._out_easing,
+                after_forward_callback=self._after_forward_callback,
+                after_hold_callback=self._after_hold_callback,
+                after_revert_callback=self._after_revert_callback
+            )
 
             self.rig_state.start()
             self.rig_state._direction_effects.append(dir_effect)

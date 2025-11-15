@@ -39,7 +39,6 @@ def _make_windows_raw_mouse_move():
 _mouse_move = None
 
 def _initialize_mouse_move():
-    """Initialize the mouse move function based on settings"""
     global _mouse_move
     movement_type = settings.get("user.mouse_rig_movement_type", "talon")
     if movement_type == "windows_raw" and _windows_raw_available:
@@ -128,21 +127,13 @@ class SubpixelAdjuster:
         self.y_frac = 0.0
 
     def adjust(self, dx: float, dy: float) -> Tuple[int, int]:
-        """
-        Convert float deltas to integer pixels while tracking fractional error.
-
-        Returns:
-            (dx_int, dy_int): Integer pixel deltas to apply this frame
-        """
-        # Accumulate fractional movement
+        """Convert float deltas to integer pixels while tracking fractional error"""
         self.x_frac += dx
         self.y_frac += dy
 
-        # Extract integer part (floor towards zero)
         dx_int = int(self.x_frac)
         dy_int = int(self.y_frac)
 
-        # Keep the fractional remainder for next frame
         self.x_frac -= dx_int
         self.y_frac -= dy_int
 
