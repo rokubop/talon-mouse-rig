@@ -267,7 +267,12 @@ class Actions:
     def mouse_rig_accel_burst():
         """Temporary acceleration boost"""
         rig = actions.user.mouse_rig()
-        rig.accel.by(10).hold(2000).revert(500)
+        rig.accel.by(10).over(400)\
+            .then(lambda: print("over"))\
+            .hold(10000)\
+            .then(lambda: print("hold"))\
+            .revert(1000)\
+            .then(lambda: print("revert"))
 
     # =========================================================================
     # SMOOTH TURNS
@@ -302,7 +307,7 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.accel.by(10).over(400)\
             .then(lambda: print("over"))\
-            .hold(400)\
+            .hold(2000)\
             .then(lambda: print("hold"))\
             .revert(400)\
             .then(lambda: print("revert"))

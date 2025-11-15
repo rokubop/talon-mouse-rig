@@ -14,7 +14,7 @@ mod.setting(
 mod.setting(
     "mouse_rig_max_speed",
     type=float,
-    default=15.0,
+    default=20.0,
     desc="Default maximum speed limit (pixels per frame)"
 )
 mod.setting(

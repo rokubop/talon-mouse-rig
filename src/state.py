@@ -790,9 +790,10 @@ class RigState:
 
         # Handle base acceleration (permanent accel changes)
         # Base accel DOES modify cruise speed permanently
-        base_accel = self._accel
-        if abs(base_accel) > 1e-6:
-            self._speed += base_accel * dt
+        # Use effective accel to include temporary accel effects
+        effective_accel = self._get_effective_accel()
+        if abs(effective_accel) > 1e-6:
+            self._speed += effective_accel * dt
             self._speed = max(0.0, self._speed)
             if self.limits_max_speed is not None:
                 self._speed = min(self._speed, self.limits_max_speed)
