@@ -85,6 +85,12 @@ class ForcePropertyController(PropertyOperationsContract[T]):
         """Add delta to current property value (alias for .by())"""
         return self.by(delta)
 
+    def sub(self, delta: float) -> T:
+        """Subtract delta from current property value"""
+        current = self._get_current_value()
+        self._set_value(current - delta)
+        return self
+
     # ===== Hooks for PropertyOperationsContract (includes TimingMethodsContract) =====
 
     def _calculate_over_duration_from_rate(
