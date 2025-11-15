@@ -224,7 +224,13 @@ class Actions:
     def mouse_rig_drift_smooth():
         """Smooth drift with lifecycle"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(30).over(500).hold(2000).revert(500)
+        rig.effect("drift").direction.add(30)\
+            .over(500)\
+            .then(lambda: print("over"))\
+            .hold(2000)\
+            .then(lambda: print("hold"))\
+            .revert(500)\
+            .then(lambda: print("revert"))
 
     # =========================================================================
     # FORCE SYSTEM (Independent Entities) - PRD 7

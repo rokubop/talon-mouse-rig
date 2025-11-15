@@ -207,7 +207,10 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             in_easing=easing,
             hold_duration_ms=effect.hold_duration_ms,  # Preserve existing
             out_duration_ms=effect.out_duration_ms,    # Preserve existing
-            out_easing=effect.out_easing              # Preserve existing
+            out_easing=effect.out_easing,             # Preserve existing
+            after_forward_callback=self._after_forward_callback,
+            after_hold_callback=effect.after_hold_callback,  # Preserve existing
+            after_revert_callback=effect.after_revert_callback  # Preserve existing
         )
 
     def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
@@ -229,7 +232,10 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             in_easing=effect.in_easing,              # Preserve existing
             hold_duration_ms=duration_ms,
             out_duration_ms=effect.out_duration_ms,  # Preserve existing
-            out_easing=effect.out_easing             # Preserve existing
+            out_easing=effect.out_easing,            # Preserve existing
+            after_forward_callback=effect.after_forward_callback,  # Preserve existing
+            after_hold_callback=self._after_hold_callback,
+            after_revert_callback=effect.after_revert_callback  # Preserve existing
         )
 
         if not self._started:
@@ -271,7 +277,10 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             in_easing=effect.in_easing,              # Preserve existing
             hold_duration_ms=hold_ms,
             out_duration_ms=duration_ms,
-            out_easing=easing
+            out_easing=easing,
+            after_forward_callback=effect.after_forward_callback,  # Preserve existing
+            after_hold_callback=effect.after_hold_callback,  # Preserve existing
+            after_revert_callback=self._after_revert_callback
         )
 
         if not self._started:

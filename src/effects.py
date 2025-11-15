@@ -184,6 +184,45 @@ class EffectLifecycle:
     def complete(self):
         return self._effect.complete
 
+    @property
+    def current_multiplier(self):
+        return self._effect.current_multiplier
+
+    @property
+    def after_forward_callback(self):
+        return self._effect.after_forward_callback
+
+    @property
+    def after_hold_callback(self):
+        return self._effect.after_hold_callback
+
+    @property
+    def after_revert_callback(self):
+        return self._effect.after_revert_callback
+
+    def configure_lifecycle(
+        self,
+        in_duration_ms: Optional[float] = None,
+        in_easing: str = "linear",
+        hold_duration_ms: Optional[float] = None,
+        out_duration_ms: Optional[float] = None,
+        out_easing: str = "linear",
+        after_forward_callback: Optional[Callable] = None,
+        after_hold_callback: Optional[Callable] = None,
+        after_revert_callback: Optional[Callable] = None
+    ) -> None:
+        """Configure lifecycle - delegates to unified Effect"""
+        self._effect.configure_lifecycle(
+            in_duration_ms=in_duration_ms,
+            in_easing=in_easing,
+            hold_duration_ms=hold_duration_ms,
+            out_duration_ms=out_duration_ms,
+            out_easing=out_easing,
+            after_forward_callback=after_forward_callback,
+            after_hold_callback=after_hold_callback,
+            after_revert_callback=after_revert_callback
+        )
+
     def start(self) -> None:
         """Start the effect lifecycle"""
         self._effect.start()
@@ -198,15 +237,14 @@ class EffectLifecycle:
 
     def apply_to_base(self, base_value: float) -> float:
         """Apply effect with current multiplier"""
-        multiplier = self._effect.current_multiplier
-        if multiplier == 0.0:
+        if self._effect.current_multiplier == 0.0:
             return base_value
 
         # Get the full effect value
         full_effect = self.stack.apply_to_base(base_value)
 
         # Interpolate between base and full effect based on multiplier
-        return lerp(base_value, full_effect, self.current_multiplier)
+        return lerp(base_value, full_effect, self._effect.current_multiplier)
 
 
 # ============================================================================
