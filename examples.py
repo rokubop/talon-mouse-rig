@@ -267,7 +267,7 @@ class Actions:
     def mouse_rig_accel_burst():
         """Temporary acceleration boost"""
         rig = actions.user.mouse_rig()
-        rig.accel.by(10).over(400)\
+        rig.pos.by(10, 10).over(400)\
             .then(lambda: print("over"))\
             .hold(10000)\
             .then(lambda: print("hold"))\
@@ -305,7 +305,7 @@ class Actions:
     def mouse_rig_nudge_right():
         """Nudge position right"""
         rig = actions.user.mouse_rig()
-        rig.accel.by(10).over(400)\
+        rig.pos.by(10, 10).over(400)\
             .then(lambda: print("over"))\
             .hold(2000)\
             .then(lambda: print("hold"))\
@@ -314,7 +314,7 @@ class Actions:
 
     def mouse_rig_nudge_down():
         """Nudge position down"""
-        rig = actions.user.mouse_rig(),
+        rig = actions.user.mouse_rig()
         rig.pos.by(0, 50).over(200)
 
     # =========================================================================

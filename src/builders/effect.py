@@ -200,10 +200,15 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         return 500.0
 
     def _store_over_config(self, duration_ms: Optional[float], easing: str) -> None:
-        """Store configuration on effect object"""
+        """UNIFIED: Store configuration using Effect.configure_lifecycle"""
         effect = self._get_or_create_effect(self._last_op_type)
-        effect.in_duration_ms = duration_ms
-        effect.in_easing = easing
+        effect.configure_lifecycle(
+            in_duration_ms=duration_ms,
+            in_easing=easing,
+            hold_duration_ms=effect.hold_duration_ms,  # Preserve existing
+            out_duration_ms=effect.out_duration_ms,    # Preserve existing
+            out_easing=effect.out_easing              # Preserve existing
+        )
 
     def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
         """Start rig if not started"""
@@ -217,9 +222,15 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
 
     def _after_hold_configured(self, duration_ms: float) -> None:
-        """Apply hold to effect and start rig"""
+        """UNIFIED: Apply hold using Effect.configure_lifecycle"""
         effect = self._get_or_create_effect(self._last_op_type)
-        effect.hold_duration_ms = duration_ms
+        effect.configure_lifecycle(
+            in_duration_ms=effect.in_duration_ms,    # Preserve existing
+            in_easing=effect.in_easing,              # Preserve existing
+            hold_duration_ms=duration_ms,
+            out_duration_ms=effect.out_duration_ms,  # Preserve existing
+            out_easing=effect.out_easing             # Preserve existing
+        )
 
         if not self._started:
             self.rig_state.start()
@@ -247,15 +258,21 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         return None
 
     def _after_revert_configured(self, duration_ms: float, easing: str) -> None:
-        """Apply revert to effect and start rig"""
+        """UNIFIED: Apply revert using Effect.configure_lifecycle"""
         effect = self._get_or_create_effect(self._last_op_type)
 
         # If no hold duration is set and we have fade-in, add instant hold
-        if effect.in_duration_ms is not None and effect.hold_duration_ms is None:
-            effect.hold_duration_ms = 0
+        hold_ms = effect.hold_duration_ms
+        if effect.in_duration_ms is not None and hold_ms is None:
+            hold_ms = 0
 
-        effect.out_duration_ms = duration_ms
-        effect.out_easing = easing
+        effect.configure_lifecycle(
+            in_duration_ms=effect.in_duration_ms,    # Preserve existing
+            in_easing=effect.in_easing,              # Preserve existing
+            hold_duration_ms=hold_ms,
+            out_duration_ms=duration_ms,
+            out_easing=easing
+        )
 
         if not self._started:
             self.rig_state.start()

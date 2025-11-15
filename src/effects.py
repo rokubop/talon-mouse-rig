@@ -128,133 +128,78 @@ class EffectStack:
 class EffectLifecycle:
     """
     Wrapper for EffectStack with lifecycle support.
-
-    Applies a multiplier (0.0 to 1.0) to the effect based on lifecycle phase.
-    This allows effects to fade in/out smoothly.
+    Now uses the unified Effect class internally.
     """
     def __init__(self, stack: EffectStack):
         self.stack = stack
+        # Create unified Effect for stack-based lifecycle
+        self._effect = Effect(stack=stack)
 
-        # Lifecycle configuration
-        self.in_duration_ms: Optional[float] = None
-        self.in_easing: str = "linear"
-        self.hold_duration_ms: Optional[float] = None
-        self.out_duration_ms: Optional[float] = None
-        self.out_easing: str = "linear"
+    # Delegate lifecycle configuration to unified Effect
+    @property
+    def in_duration_ms(self):
+        return self._effect.in_duration_ms
 
-        # Runtime state
-        self.phase: str = "not_started"
-        self.phase_start_time: Optional[float] = None
-        self.current_multiplier: float = 1.0  # How much of the effect is active
-        self.complete = False
+    @in_duration_ms.setter
+    def in_duration_ms(self, value):
+        self._effect.in_duration_ms = value
 
-        # For stopping
-        self.stop_requested = False
-        self.stop_duration_ms: Optional[float] = None
-        self.stop_easing: str = "linear"
-        self.stop_start_time: Optional[float] = None
+    @property
+    def in_easing(self):
+        return self._effect.in_easing
+
+    @in_easing.setter
+    def in_easing(self, value):
+        self._effect.in_easing = value
+
+    @property
+    def hold_duration_ms(self):
+        return self._effect.hold_duration_ms
+
+    @hold_duration_ms.setter
+    def hold_duration_ms(self, value):
+        self._effect.hold_duration_ms = value
+
+    @property
+    def out_duration_ms(self):
+        return self._effect.out_duration_ms
+
+    @out_duration_ms.setter
+    def out_duration_ms(self, value):
+        self._effect.out_duration_ms = value
+
+    @property
+    def out_easing(self):
+        return self._effect.out_easing
+
+    @out_easing.setter
+    def out_easing(self, value):
+        self._effect.out_easing = value
+
+    @property
+    def phase(self):
+        return self._effect.phase
+
+    @property
+    def complete(self):
+        return self._effect.complete
 
     def start(self) -> None:
         """Start the effect lifecycle"""
-        if self.in_duration_ms is not None:
-            self.phase = "in"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 0.0
-        elif self.hold_duration_ms is not None:
-            self.phase = "hold"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        elif self.out_duration_ms is not None:
-            self.phase = "out"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        else:
-            # No lifecycle - persist at full strength
-            self.phase = "hold"
-            self.current_multiplier = 1.0
+        self._effect.start()
 
     def update(self) -> float:
         """Update lifecycle and return current multiplier"""
-        if self.complete:
-            return 0.0
-
-        if self.stop_requested:
-            return self._update_stop()
-
-        if self.phase == "not_started":
-            self.start()
-
-        current_time = time.perf_counter()
-        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
-
-        if self.phase == "in":
-            if elapsed_ms >= self.in_duration_ms:
-                self.current_multiplier = 1.0
-                if self.hold_duration_ms is not None:
-                    self.phase = "hold"
-                    self.phase_start_time = current_time
-                elif self.out_duration_ms is not None:
-                    self.phase = "out"
-                    self.phase_start_time = current_time
-                else:
-                    self.phase = "hold"
-            else:
-                t = elapsed_ms / self.in_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
-                self.current_multiplier = easing_fn(t)
-
-        elif self.phase == "hold":
-            if self.hold_duration_ms is not None:
-                if elapsed_ms >= self.hold_duration_ms:
-                    if self.out_duration_ms is not None:
-                        self.phase = "out"
-                        self.phase_start_time = current_time
-                    else:
-                        self.phase = "complete"
-                        self.complete = True
-                        return 0.0
-
-        elif self.phase == "out":
-            if elapsed_ms >= self.out_duration_ms:
-                self.phase = "complete"
-                self.complete = True
-                return 0.0
-            else:
-                t = elapsed_ms / self.out_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
-                self.current_multiplier = 1.0 - easing_fn(t)
-
-        return self.current_multiplier
-
-    def _update_stop(self) -> float:
-        """Handle graceful stop with optional duration"""
-        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
-            self.complete = True
-            return 0.0
-
-        if self.stop_start_time is None:
-            self.stop_start_time = time.perf_counter()
-
-        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
-        if elapsed_ms >= self.stop_duration_ms:
-            self.complete = True
-            return 0.0
-
-        t = elapsed_ms / self.stop_duration_ms
-        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
-        self.current_multiplier = 1.0 - easing_fn(t)
-
-        return self.current_multiplier
+        return self._effect.update()
 
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the effect to stop"""
-        self.stop_requested = True
-        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
-        self.stop_easing = easing
+        self._effect.request_stop(duration_ms, easing)
 
     def apply_to_base(self, base_value: float) -> float:
         """Apply effect with current multiplier"""
-        if self.current_multiplier == 0.0:
+        multiplier = self._effect.current_multiplier
+        if multiplier == 0.0:
             return base_value
 
         # Get the full effect value
@@ -464,20 +409,39 @@ class Effect:
 
 
 # ============================================================================
-# PROPERTY EFFECT (temporary modifications to scalar properties like speed/accel)
+# UNIFIED EFFECT SYSTEM
 # ============================================================================
 
-class PropertyEffect:
+class Effect:
     """
-    Temporary effect for scalar properties (speed, accel) with lifecycle support.
+    Unified effect system supporting both:
+    - Scalar property effects (speed, accel) with operations (to/by/mul/div)
+    - Effect stack lifecycle (for named effects with on-repeat strategies)
 
-    Supports operations: to, by, mul, div
-    Similar to DirectionEffect but for scalar values.
+    Provides lifecycle support: in → hold → out → complete
     """
-    def __init__(self, property_name: str, operation: str, value: float, name: Optional[str] = None):
-        self.property_name = property_name  # "speed" or "accel"
+    def __init__(
+        self,
+        property_name: Optional[str] = None,
+        operation: Optional[str] = None,
+        value: Optional[float] = None,
+        stack: Optional['EffectStack'] = None,
+        name: Optional[str] = None
+    ):
+        # Effect type determination
+        self.is_property_effect = property_name is not None
+        self.is_stack_effect = stack is not None
+
+        # Property effect fields
+        self.property_name = property_name  # "speed", "accel", etc.
         self.operation = operation  # "to", "by", "mul", "div"
         self.value = value
+        self.base_value: Optional[float] = None  # For property effects
+
+        # Stack effect fields
+        self.stack = stack  # For named effects with stacks
+
+        # Common
         self.name = name  # Optional name for stopping early
 
         # Lifecycle configuration
@@ -487,7 +451,7 @@ class PropertyEffect:
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
 
-        # Stage-specific callbacks
+        # Stage-specific callbacks (for property effects)
         self.after_forward_callback: Optional[Callable] = None
         self.after_hold_callback: Optional[Callable] = None
         self.after_revert_callback: Optional[Callable] = None
@@ -495,7 +459,6 @@ class PropertyEffect:
         # Runtime state
         self.phase: str = "not_started"  # "in", "hold", "out", "complete"
         self.phase_start_time: Optional[float] = None
-        self.base_value: Optional[float] = None  # Property value before effect was applied
         self.current_multiplier: float = 0.0  # 0 to 1, how much of the effect is active
         self.complete = False
 
@@ -505,13 +468,56 @@ class PropertyEffect:
         self.stop_easing: str = "linear"
         self.stop_start_time: Optional[float] = None
 
-    def start(self, current_value: float) -> None:
-        """Start the effect lifecycle"""
-        self.base_value = current_value
+    def configure_lifecycle(
+        self,
+        in_duration_ms: Optional[float] = None,
+        in_easing: str = "linear",
+        hold_duration_ms: Optional[float] = None,
+        out_duration_ms: Optional[float] = None,
+        out_easing: str = "linear",
+        after_forward_callback: Optional[Callable] = None,
+        after_hold_callback: Optional[Callable] = None,
+        after_revert_callback: Optional[Callable] = None
+    ) -> 'Effect':
+        """
+        UNIFIED configuration method for all Effect lifecycle settings.
+
+        Single source of truth for configuring Effect objects from both
+        PropertyEffectBuilder and EffectBuilderBase.
+
+        Returns self for chaining.
+        """
+        self.in_duration_ms = in_duration_ms
+        self.in_easing = in_easing
+        self.hold_duration_ms = hold_duration_ms
+
+        # PRD5: .hold() alone implies instant revert after hold period
+        if hold_duration_ms is not None and out_duration_ms is None:
+            self.out_duration_ms = 0
+        else:
+            self.out_duration_ms = out_duration_ms
+        self.out_easing = out_easing
+
+        # Callbacks (only for property effects, but harmless to set on stack effects)
+        self.after_forward_callback = after_forward_callback
+        self.after_hold_callback = after_hold_callback
+        self.after_revert_callback = after_revert_callback
+
+        return self
+
+    def start(self, current_value: Optional[float] = None) -> None:
+        """Start the effect lifecycle
+
+        Args:
+            current_value: Required for property effects, not used for stack effects
+        """
+        if self.is_property_effect:
+            self.base_value = current_value
 
         if self.in_duration_ms is not None:
             self.phase = "in"
             self.phase_start_time = time.perf_counter()
+            self.current_multiplier = 0.0 if self.is_property_effect else 0.0
         elif self.hold_duration_ms is not None:
             self.phase = "hold"
             self.phase_start_time = time.perf_counter()
@@ -523,31 +529,36 @@ class PropertyEffect:
             self.current_multiplier = 1.0
         else:
             # No lifecycle specified
-            if self.name:
-                # Named effects without lifecycle persist indefinitely at full strength
+            if self.name or self.is_stack_effect:
+                # Named effects or stack effects persist indefinitely at full strength
                 self.phase = "hold"
                 self.current_multiplier = 1.0
             else:
-                # Unnamed effects without lifecycle complete immediately
+                # Unnamed property effects without lifecycle complete immediately
                 self.phase = "complete"
                 self.complete = True
 
-    def update(self, current_base_value: float) -> float:
+    def update(self, current_base_value: Optional[float] = None) -> Union[float, None]:
         """
-        Update effect and return the modified value.
+        Update effect and return the modified value or multiplier.
 
         Args:
-            current_base_value: The current base value (without this effect)
+            current_base_value: Required for property effects, not used for stack effects
 
         Returns:
-            The modified value with this effect applied
+            For property effects: modified value
+            For stack effects: current multiplier (0.0 to 1.0)
         """
         if self.complete:
-            return current_base_value
+            return current_base_value if self.is_property_effect else 0.0
 
         # Handle stop request
         if self.stop_requested:
             return self._update_stop(current_base_value)
+
+        # Auto-start for stack effects
+        if self.phase == "not_started" and self.is_stack_effect:
+            self.start()
 
         # Normal lifecycle progression
         current_time = time.perf_counter()
@@ -558,7 +569,7 @@ class PropertyEffect:
                 # Move to next phase
                 self.current_multiplier = 1.0
 
-                # Fire after-forward callback
+                # Fire after-forward callback (property effects only)
                 if self.after_forward_callback:
                     self.after_forward_callback()
 
@@ -571,7 +582,8 @@ class PropertyEffect:
                 else:
                     # No hold or revert specified - persist at full strength
                     self.phase = "hold"
-                    self.hold_duration_ms = None  # Persist indefinitely
+                    if self.is_property_effect:
+                        self.hold_duration_ms = None  # Persist indefinitely
             else:
                 # Update multiplier with easing
                 t = elapsed_ms / self.in_duration_ms
@@ -582,7 +594,7 @@ class PropertyEffect:
             # Check if we have a duration specified
             if self.hold_duration_ms is not None:
                 if elapsed_ms >= self.hold_duration_ms:
-                    # Fire after-hold callback
+                    # Fire after-hold callback (property effects only)
                     if self.after_hold_callback:
                         self.after_hold_callback()
 
@@ -593,27 +605,30 @@ class PropertyEffect:
                     else:
                         self.phase = "complete"
                         self.complete = True
-                        return current_base_value
+                        return current_base_value if self.is_property_effect else 0.0
             # else: persist indefinitely at full strength
             # Multiplier stays at 1.0 during hold
 
         elif self.phase == "out":
             if elapsed_ms >= self.out_duration_ms:
-                # Fire after-revert callback
+                # Fire after-revert callback (property effects only)
                 if self.after_revert_callback:
                     self.after_revert_callback()
 
                 self.phase = "complete"
                 self.complete = True
-                return current_base_value
+                return current_base_value if self.is_property_effect else 0.0
             else:
                 # Fade out
                 t = elapsed_ms / self.out_duration_ms
                 easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
                 self.current_multiplier = 1.0 - easing_fn(t)
 
-        # Apply operation based on current multiplier
-        return self._apply_operation(current_base_value)
+        # Return based on effect type
+        if self.is_property_effect:
+            return self._apply_operation(current_base_value)
+        else:
+            return self.current_multiplier
 
     def _apply_operation(self, base_value: float) -> float:
         """Apply the operation to the base value based on multiplier"""
@@ -667,24 +682,25 @@ class PropertyEffect:
             self._stop_start_multiplier = self.current_multiplier
         self.current_multiplier = self._stop_start_multiplier * (1.0 - easing_fn(t))
 
-        return self._apply_operation(current_base_value)
+        if self.is_property_effect:
+            return self._apply_operation(current_base_value)
+        else:
+            return self.current_multiplier
 
-    def stop(
-        self,
-        duration_ms: Optional[float] = None,
-        easing: str = "linear",
-        *,
-        rate_speed: Optional[float] = None,
-        rate_accel: Optional[float] = None,
-        rate_rotation: Optional[float] = None
-    ) -> None:
-        """Request the effect to stop, optionally over a duration or at rate"""
-        # For now, rate-based stopping not implemented for individual effects
-        # Just use duration
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop"""
         self.stop_requested = True
         self.stop_duration_ms = duration_ms if duration_ms is not None else 0
         self.stop_easing = easing
 
+
+# Backwards compatibility aliases
+PropertyEffect = Effect  # For property effects
+
+
+# ============================================================================
+# DIRECTION EFFECT
+# ============================================================================
 
 class DirectionEffect:
     """

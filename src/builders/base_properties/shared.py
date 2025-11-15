@@ -65,27 +65,29 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
         is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
         if is_temporary:
-            # Create temporary property effect
-            from ...effects import PropertyEffect
-            effect = PropertyEffect(self.property_name, self.operation, value, self._effect_name)
-            effect.in_duration_ms = self._in_duration_ms  # Can be None for instant application
-            effect.in_easing = self._in_easing
-            effect.hold_duration_ms = self._hold_duration_ms
+            # Create temporary property effect using unified Effect
+            from ...effects import Effect
+            effect = Effect(
+                property_name=self.property_name,
+                operation=self.operation,
+                value=value,
+                name=self._effect_name
+            )
 
-            # PRD5: .hold() alone implies instant revert after hold period
-            if self._hold_duration_ms is not None and self._out_duration_ms is None:
-                effect.out_duration_ms = 0
-            else:
-                effect.out_duration_ms = self._out_duration_ms
-            effect.out_easing = self._out_easing
-
-            # Attach stage-specific callbacks
-            effect.after_forward_callback = self._after_forward_callback
-            effect.after_hold_callback = self._after_hold_callback
-            effect.after_revert_callback = self._after_revert_callback
+            # UNIFIED: Configure lifecycle using single source of truth
+            effect.configure_lifecycle(
+                in_duration_ms=self._in_duration_ms,
+                in_easing=self._in_easing,
+                hold_duration_ms=self._hold_duration_ms,
+                out_duration_ms=self._out_duration_ms,
+                out_easing=self._out_easing,
+                after_forward_callback=self._after_forward_callback,
+                after_hold_callback=self._after_hold_callback,
+                after_revert_callback=self._after_revert_callback
+            )
 
             self.rig_state.start()
-            self.rig_state._property_effects.append(effect)
+            self.rig_state._effects.append(effect)
             return
 
         # Permanent changes with transition (has .over())

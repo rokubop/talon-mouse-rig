@@ -10,7 +10,7 @@ from .core import (
     Vec2, SubpixelAdjuster,
     SpeedTransition, DirectionTransition, PositionTransition
 )
-from .effects import EffectStack, EffectLifecycle, Force, PropertyEffect, DirectionEffect
+from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect
 from .builders.base import (
     AccelController,
     DirectionController,
@@ -35,8 +35,9 @@ class RigState:
         self._direction_transition: Optional[DirectionTransition] = None
         self._position_transitions: list[PositionTransition] = []
 
-        # Temporary effects on base rig properties
-        self._property_effects: list[PropertyEffect] = []  # speed/accel temporary effects
+        # UNIFIED EFFECT SYSTEM
+        # All effects (property and stack-based) managed in single list
+        self._effects: list[Effect] = []  # Unified: property effects (speed/accel) and stack effects
         self._direction_effects: list[DirectionEffect] = []  # direction temporary effects
 
         # Named forces (for backward compatibility with force API)
@@ -47,6 +48,7 @@ class RigState:
         self._effect_order: list[str] = []  # Track creation order for composition
 
         # PRD 8: Effect lifecycles (lifecycle-aware wrappers for effect stacks)
+        # Maps stack key to its EffectLifecycle wrapper (which wraps unified Effect)
         self._effect_lifecycles: dict[str, EffectLifecycle] = {}  # key: same as _effect_stacks
 
         # Controllers (fluent API)
@@ -177,6 +179,7 @@ class RigState:
             "accel_velocity": accel_velocity,  # Integrated velocity from accel effects
             "total_speed": total_speed,  # Total effective speed (cruise + accel velocity)
             "velocity": total_velocity.to_tuple(),  # Total velocity vector
+            "active_effects": len(self._effects),
             "active_effect_stacks": len(self._effect_stacks),
             "active_effect_lifecycles": len(self._effect_lifecycles),
             "has_speed_transition": self._speed_transition is not None,
@@ -218,8 +221,8 @@ class RigState:
         base_speed = self._speed
 
         # Apply temporary property effects first (base rig temporary modifications)
-        for effect in self._property_effects:
-            if effect.property_name == "speed":
+        for effect in self._effects:
+            if effect.is_property_effect and effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
 
         # Apply effect stacks (PRD 8 - named effects)
@@ -273,8 +276,8 @@ class RigState:
         base_accel = self._accel
 
         # Apply temporary property effects first (base rig temporary modifications)
-        for effect in self._property_effects:
-            if effect.property_name == "accel":
+        for effect in self._effects:
+            if effect.is_property_effect and effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
 
         # Apply effect stacks (PRD 8 - named effects)
@@ -484,7 +487,7 @@ class RigState:
 
         # Clear all effects and forces
         self._named_forces.clear()
-        self._property_effects.clear()
+        self._effects.clear()
         self._direction_effects.clear()
 
         # Clear effect system (PRD 8)
@@ -505,6 +508,7 @@ class RigState:
 
         # Clear effects
         self._named_forces.clear()
+        self._effects.clear()
         self._effect_stacks.clear()
         self._effect_lifecycles.clear()
         self._effect_order.clear()
@@ -719,8 +723,8 @@ class RigState:
         if len(self._effect_lifecycles) > 0:
             return False
 
-        # Check for active property effects (speed/accel temporary effects)
-        if len(self._property_effects) > 0:
+        # Check for active effects (unified property and stack effects)
+        if len(self._effects) > 0:
             return False
 
         # Check for active direction effects
@@ -748,14 +752,14 @@ class RigState:
                 self._direction_transition = None
 
         # Start any property effects that haven't been started yet
-        for effect in self._property_effects:
-            if effect.phase == "not_started":
+        for effect in self._effects:
+            if effect.is_property_effect and effect.phase == "not_started":
                 current_value = self._speed if effect.property_name == "speed" else self._accel
                 effect.start(current_value)
 
-        # Update and cleanup temporary property effects (speed/accel)
-        self._property_effects = [
-            effect for effect in self._property_effects
+        # Update and cleanup all effects (property and stack-based)
+        self._effects = [
+            effect for effect in self._effects
             if not effect.complete
         ]
 
