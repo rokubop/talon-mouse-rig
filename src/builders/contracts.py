@@ -1,7 +1,7 @@
 """Abstract base classes and protocols for builder contracts"""
 
 from abc import ABC, abstractmethod
-from typing import Union, Optional, TYPE_CHECKING, TypeVar, Generic
+from typing import Union, Optional, TYPE_CHECKING, TypeVar, Generic, Callable
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -69,6 +69,7 @@ class TimingMethodsContract(ABC, Generic[T]):
     - .over() - transition/fade in over duration or at rate
     - .hold() - sustain/hold for duration
     - .revert() - fade out/restore over duration or at rate
+    - .then() - callback at current stage in lifecycle
     """
 
     @abstractmethod
@@ -115,6 +116,18 @@ class TimingMethodsContract(ABC, Generic[T]):
             rate_speed: Speed rate in units/second (rate-based)
             rate_accel: Acceleration rate in units/second² (rate-based)
             rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        pass
+
+    @abstractmethod
+    def then(self, callback: 'Callable') -> T:
+        """Execute callback at current point in lifecycle chain
+        
+        Can be called after .over(), .hold(), or .revert() to fire callback
+        when that stage completes.
+        
+        Args:
+            callback: Function to call when current stage completes
         """
         pass
 
@@ -176,3 +189,66 @@ class PropertyOperationsContract(OperationsContract[T], TimingMethodsContract[T]
     - NamedForceSpeedController, NamedForceAccelController (forces)
     """
     pass
+
+
+class AutoExecuteBuilder(ABC):
+    """
+    Base class for builders that auto-execute on cleanup.
+
+    Provides the common __del__ → _execute() pattern with error handling.
+    Subclasses must implement _execute() to define their execution logic.
+    """
+
+    def __del__(self):
+        """Execute when builder goes out of scope"""
+        try:
+            self._execute()
+        except:
+            pass  # Silently ignore errors during cleanup
+
+    @abstractmethod
+    def _execute(self):
+        """Override this to define execution behavior"""
+        pass
+
+
+class TransitionBasedBuilder(AutoExecuteBuilder):
+    """
+    Base class for builders that use transition vs instant execution pattern.
+
+    Implements the common flow:
+    1. Check if has transition timing
+    2. Either create transition or apply instantly
+    3. Register with rig_state
+    4. Start rig
+    5. Handle callbacks
+
+    Subclasses provide specific implementations via abstract methods.
+    """
+
+    def _execute(self):
+        """Execute the configured operation - transition or instant"""
+        if self._has_transition():
+            self._execute_transition()
+        elif self._has_instant():
+            self._execute_instant()
+
+    @abstractmethod
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition"""
+        pass
+
+    @abstractmethod
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        pass
+
+    @abstractmethod
+    def _execute_transition(self):
+        """Execute with transition/animation"""
+        pass
+
+    @abstractmethod
+    def _execute_instant(self):
+        """Execute instantly without transition"""
+        pass

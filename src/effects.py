@@ -2,7 +2,7 @@
 
 import time
 import math
-from typing import Optional, Union, Literal
+from typing import Optional, Union, Literal, Callable
 from dataclasses import dataclass, field
 
 from .core import Vec2, EASING_FUNCTIONS, ease_linear, lerp
@@ -487,6 +487,11 @@ class PropertyEffect:
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
 
+        # Stage-specific callbacks
+        self.after_forward_callback: Optional[Callable] = None
+        self.after_hold_callback: Optional[Callable] = None
+        self.after_revert_callback: Optional[Callable] = None
+
         # Runtime state
         self.phase: str = "not_started"  # "in", "hold", "out", "complete"
         self.phase_start_time: Optional[float] = None
@@ -552,6 +557,11 @@ class PropertyEffect:
             if elapsed_ms >= self.in_duration_ms:
                 # Move to next phase
                 self.current_multiplier = 1.0
+                
+                # Fire after-forward callback
+                if self.after_forward_callback:
+                    self.after_forward_callback()
+                
                 if self.hold_duration_ms is not None:
                     self.phase = "hold"
                     self.phase_start_time = current_time
@@ -572,6 +582,10 @@ class PropertyEffect:
             # Check if we have a duration specified
             if self.hold_duration_ms is not None:
                 if elapsed_ms >= self.hold_duration_ms:
+                    # Fire after-hold callback
+                    if self.after_hold_callback:
+                        self.after_hold_callback()
+                    
                     # Move to next phase
                     if self.out_duration_ms is not None:
                         self.phase = "out"
@@ -585,6 +599,10 @@ class PropertyEffect:
 
         elif self.phase == "out":
             if elapsed_ms >= self.out_duration_ms:
+                # Fire after-revert callback
+                if self.after_revert_callback:
+                    self.after_revert_callback()
+                
                 self.phase = "complete"
                 self.complete = True
                 return current_base_value
@@ -685,6 +703,11 @@ class DirectionEffect:
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
 
+        # Stage-specific callbacks
+        self.after_forward_callback: Optional[Callable] = None
+        self.after_hold_callback: Optional[Callable] = None
+        self.after_revert_callback: Optional[Callable] = None
+
         # Runtime state
         self.phase: str = "not_started"  # "in", "hold", "out", "complete"
         self.phase_start_time: Optional[float] = None
@@ -770,6 +793,10 @@ class DirectionEffect:
             # Check if we have a duration specified
             if self.hold_duration_ms is not None:
                 if elapsed_ms >= self.hold_duration_ms:
+                    # Fire after-hold callback
+                    if self.after_hold_callback:
+                        self.after_hold_callback()
+                    
                     # Move to next phase
                     if self.out_duration_ms is not None:
                         self.phase = "out"
@@ -783,6 +810,10 @@ class DirectionEffect:
 
         elif self.phase == "out":
             if elapsed_ms >= self.out_duration_ms:
+                # Fire after-revert callback
+                if self.after_revert_callback:
+                    self.after_revert_callback()
+                
                 self.phase = "complete"
                 self.complete = True
                 return current_base_direction

@@ -7,7 +7,7 @@ from ...core import (
     Vec2, DEFAULT_EASING, PositionTransition,
     _error_unknown_builder_attribute
 )
-from ..contracts import TimingMethodsContract
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -27,7 +27,7 @@ class PositionController:
         return PositionBuilder(self.rig_state, dx, dy, mode="relative", instant=True)
 
 
-class PositionBuilder(TimingMethodsContract['PositionBuilder']):
+class PositionBuilder(TimingMethodsContract['PositionBuilder'], TransitionBasedBuilder):
     """
     Unified builder for position operations - handles both absolute (.to()) and relative (.by()).
 
@@ -167,134 +167,178 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
             self._after_forward_callback = callback
         return self
 
-    def __del__(self):
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition"""
+        return self._duration_ms is not None or self._revert_duration_ms is not None
+
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        return self._should_execute_instant
+
+    def _execute_transition(self):
+        """Execute with transition/timing"""
+        self._execute_with_timing()
+
+    def _execute(self):
         """Execute the position change based on how the builder was configured"""
-        try:
-            if self._duration_ms is not None or self._revert_duration_ms is not None:
-                # Store original position BEFORE any movement for potential revert
-                current_pos = Vec2(*ctrl.mouse_pos())
-                self._original_pos = current_pos
+        if self._duration_ms is not None or self._revert_duration_ms is not None:
+            self._execute_with_timing()
+        elif self._should_execute_instant:
+            self._execute_instant()
 
-                # Calculate forward offset based on mode
-                if self.mode == "absolute":
-                    # Absolute: calculate offset to target position
-                    target_pos = Vec2(self.x_or_dx, self.y_or_dy)
-                    offset = target_pos - current_pos
+    def _execute_with_timing(self):
+        """Execute position change with timing (transitions, holds, reverts)"""
+        # Store original position BEFORE any movement for potential revert
+        current_pos = Vec2(*ctrl.mouse_pos())
+        self._original_pos = current_pos
+
+        # Calculate forward offset and create transition
+        offset = self._calculate_forward_offset(current_pos)
+        transition = self._create_forward_transition(current_pos, offset)
+
+        # Build callback chain and wire up transition
+        callback_chain = self._build_callback_chain()
+        self._start_transition(transition, callback_chain)
+
+    def _calculate_forward_offset(self, current_pos: Vec2) -> Vec2:
+        """Calculate the offset for forward movement based on mode"""
+        if self.mode == "absolute":
+            # Absolute: calculate offset to target position
+            target_pos = Vec2(self.x_or_dx, self.y_or_dy)
+            return target_pos - current_pos
+        else:
+            # Relative: offset is direct
+            return Vec2(self.x_or_dx, self.y_or_dy)
+
+    def _create_forward_transition(self, current_pos: Vec2, offset: Vec2) -> Optional[PositionTransition]:
+        """Create transition for forward movement, or execute instant move"""
+        if self._duration_ms is not None and self._duration_ms > 0:
+            # Animate with offset
+            return PositionTransition(current_pos, offset, self._duration_ms, self._easing)
+        else:
+            # Instant move (no duration or duration is 0)
+            if self.mode == "absolute":
+                ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
+            else:
+                ctrl.mouse_move(int(current_pos.x + self.x_or_dx), int(current_pos.y + self.y_or_dy))
+            return None
+
+    def _build_callback_chain(self) -> Callable:
+        """Build the complete callback chain: forward → hold → revert"""
+        hold_duration = self._hold_duration_ms or 0
+
+        # Stage 3: Revert callback
+        revert_callback = self._create_revert_callback() if self._revert_duration_ms is not None else None
+
+        # Stage 2: Hold callback (combines hold wait with revert scheduling)
+        hold_callback = self._create_hold_callback(revert_callback)
+
+        # Stage 1: Forward callback (triggers hold or goes straight to revert)
+        return self._create_forward_callback(hold_duration, hold_callback)
+
+    def _create_revert_callback(self) -> Callable:
+        """Create callback that handles reverting to original position"""
+        revert_duration = self._revert_duration_ms
+        revert_easing = self._revert_easing
+        after_revert_cb = self._after_revert_callback
+        rig_state = self.rig_state
+
+        if self.mode == "absolute":
+            # Absolute: revert to stored original position
+            original_x, original_y = self._original_pos.x, self._original_pos.y
+
+            def schedule_revert():
+                curr_pos = Vec2(*ctrl.mouse_pos())
+                back_offset = Vec2(original_x, original_y) - curr_pos
+
+                if revert_duration > 0:
+                    revert_transition = PositionTransition(
+                        curr_pos, back_offset, revert_duration, revert_easing
+                    )
+                    if after_revert_cb:
+                        revert_transition.on_complete = after_revert_cb
+                    rig_state.start()
+                    rig_state._position_transitions.append(revert_transition)
                 else:
-                    # Relative: offset is direct
-                    offset = Vec2(self.x_or_dx, self.y_or_dy)
+                    ctrl.mouse_move(int(original_x), int(original_y))
+                    if after_revert_cb:
+                        after_revert_cb()
+        else:
+            # Relative: revert using inverse offset
+            inverse_offset = Vec2(-self.x_or_dx, -self.y_or_dy)
 
-                if self._duration_ms is not None and self._duration_ms > 0:
-                    # Animate with offset
-                    transition = PositionTransition(current_pos, offset, self._duration_ms, self._easing)
+            def schedule_revert():
+                curr_pos = Vec2(*ctrl.mouse_pos())
+
+                if revert_duration > 0:
+                    revert_transition = PositionTransition(
+                        curr_pos, inverse_offset, revert_duration, revert_easing
+                    )
+                    if after_revert_cb:
+                        revert_transition.on_complete = after_revert_cb
+                    rig_state.start()
+                    rig_state._position_transitions.append(revert_transition)
                 else:
-                    # Instant move (no duration or duration is 0)
-                    if self.mode == "absolute":
-                        ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
-                    else:
-                        ctrl.mouse_move(int(current_pos.x + self.x_or_dx), int(current_pos.y + self.y_or_dy))
-                    transition = None
+                    ctrl.mouse_move(int(curr_pos.x - self.x_or_dx), int(curr_pos.y - self.y_or_dy))
+                    if after_revert_cb:
+                        after_revert_cb()
 
-                # Build callback chain from the end backwards
-                rig_state = self.rig_state
-                hold_duration = self._hold_duration_ms or 0
+        return schedule_revert
 
-                # Stage 3: After revert callback
-                after_revert_cb = self._after_revert_callback
+    def _create_hold_callback(self, revert_callback: Optional[Callable]) -> Optional[Callable]:
+        """Create callback for hold stage, combining hold callback with revert"""
+        if revert_callback is None:
+            # No revert, just use the after_hold callback
+            return self._after_hold_callback
 
-                # Stage 2: After hold + schedule revert + after_revert callback
-                if self._revert_duration_ms is not None:
-                    revert_duration = self._revert_duration_ms
-                    revert_easing = self._revert_easing
+        # Combine after_hold callback with revert scheduling
+        def after_hold_combined():
+            if self._after_hold_callback:
+                self._after_hold_callback()
+            revert_callback()
 
-                    if self.mode == "absolute":
-                        # Absolute: revert to stored original position
-                        original_x, original_y = self._original_pos.x, self._original_pos.y
+        return after_hold_combined
 
-                        def schedule_revert():
-                            curr_pos = Vec2(*ctrl.mouse_pos())
-                            back_offset = Vec2(original_x, original_y) - curr_pos
+    def _create_forward_callback(self, hold_duration: float, hold_callback: Optional[Callable]) -> Callable:
+        """Create callback for forward movement completion"""
+        def after_forward_combined():
+            # Call after_forward callback
+            if self._after_forward_callback:
+                self._after_forward_callback()
 
-                            if revert_duration > 0:
-                                revert_transition = PositionTransition(
-                                    curr_pos, back_offset, revert_duration, revert_easing
-                                )
-                                if after_revert_cb:
-                                    revert_transition.on_complete = after_revert_cb
-                                rig_state.start()  # Ensure ticking is active
-                                rig_state._position_transitions.append(revert_transition)
-                            else:
-                                ctrl.mouse_move(int(original_x), int(original_y))
-                                if after_revert_cb:
-                                    after_revert_cb()
-                    else:
-                        # Relative: revert using inverse offset
-                        inverse_offset = Vec2(-self.x_or_dx, -self.y_or_dy)
+            # Schedule hold period if specified
+            if hold_duration > 0:
+                if hold_callback:
+                    cron.after(f"{hold_duration}ms", hold_callback)
+            else:
+                # No hold, go straight to after_hold callback (which includes revert)
+                if hold_callback:
+                    hold_callback()
 
-                        def schedule_revert():
-                            curr_pos = Vec2(*ctrl.mouse_pos())
+        return after_forward_combined
 
-                            if revert_duration > 0:
-                                revert_transition = PositionTransition(
-                                    curr_pos, inverse_offset, revert_duration, revert_easing
-                                )
-                                if after_revert_cb:
-                                    revert_transition.on_complete = after_revert_cb
-                                rig_state.start()  # Ensure ticking is active
-                                rig_state._position_transitions.append(revert_transition)
-                            else:
-                                ctrl.mouse_move(int(curr_pos.x - self.x_or_dx), int(curr_pos.y - self.y_or_dy))
-                                if after_revert_cb:
-                                    after_revert_cb()
+    def _start_transition(self, transition: Optional[PositionTransition], callback: Callable):
+        """Start the transition or call callback immediately if instant"""
+        if transition is not None:
+            transition.on_complete = callback
+            self.rig_state.start()
+            self.rig_state._position_transitions.append(transition)
+        else:
+            # Instant forward, call callback immediately
+            callback()
 
-                    # Combine after_hold callback with revert scheduling
-                    def after_hold_combined():
-                        if self._after_hold_callback:
-                            self._after_hold_callback()
-                        schedule_revert()
+    def _execute_instant(self):
+        """Execute instant position change without timing"""
+        # Instant move
+        if self.mode == "absolute":
+            ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
+        else:
+            current_x, current_y = ctrl.mouse_pos()
+            ctrl.mouse_move(int(current_x + self.x_or_dx), int(current_y + self.y_or_dy))
 
-                    after_hold_cb = after_hold_combined
-                else:
-                    # No revert, just use the after_hold callback
-                    after_hold_cb = self._after_hold_callback
-
-                # Stage 1: After forward + hold + callbacks
-                def after_forward_combined():
-                    # Call after_forward callback
-                    if self._after_forward_callback:
-                        self._after_forward_callback()
-
-                    # Schedule hold period if specified
-                    if hold_duration > 0:
-                        if after_hold_cb:
-                            cron.after(f"{hold_duration}ms", after_hold_cb)
-                    else:
-                        # No hold, go straight to after_hold callback (which includes revert)
-                        if after_hold_cb:
-                            after_hold_cb()
-
-                # Wire up the forward transition
-                if transition is not None:
-                    transition.on_complete = after_forward_combined
-                    self.rig_state.start()  # Ensure ticking is active
-                    self.rig_state._position_transitions.append(transition)
-                else:
-                    # Instant forward, call callback immediately
-                    after_forward_combined()
-
-            elif self._should_execute_instant:
-                # Instant move
-                if self.mode == "absolute":
-                    ctrl.mouse_move(int(self.x_or_dx), int(self.y_or_dy))
-                else:
-                    current_x, current_y = ctrl.mouse_pos()
-                    ctrl.mouse_move(int(current_x + self.x_or_dx), int(current_y + self.y_or_dy))
-
-                # Execute callback immediately
-                if self._after_forward_callback:
-                    self._after_forward_callback()
-        except:
-            pass  # Ignore errors during cleanup
+        # Execute callback immediately
+        if self._after_forward_callback:
+            self._after_forward_callback()
 
     def __getattr__(self, name: str):
         """Enable property chaining or provide helpful error messages"""
@@ -318,8 +362,8 @@ class PositionBuilder(TimingMethodsContract['PositionBuilder']):
             # Execute current position change immediately
             self._should_execute_instant = True
 
-            # Trigger execution via __del__
-            self.__del__()
+            # Trigger execution
+            self._execute()
 
             # Return the appropriate property controller for chaining
             if name == 'speed':

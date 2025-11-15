@@ -7,32 +7,46 @@ from ...core import (
     _error_unknown_builder_attribute
 )
 from ...effects import DirectionEffect
-from ..contracts import TimingMethodsContract
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
+class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBasedBuilder):
     """Builder for direction operations with .over() support"""
     def __init__(self, rig_state: 'RigState', target_direction: Vec2, instant: bool = False):
         self.rig_state = rig_state
         self.target_direction = target_direction.normalized()
         self._easing = "linear"
         self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
         self._duration_ms: Optional[float] = None
         self._rate_rotation: Optional[float] = None
+        
+        # Temporary effect support
+        self._hold_duration_ms: Optional[float] = None
+        self._out_duration_ms: Optional[float] = None
+        self._out_easing: str = "linear"
+        
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def __del__(self):
-        """Execute the operation when builder goes out of scope"""
-        try:
-            self._execute()
-        except:
-            pass  # Ignore errors during cleanup
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition or effect"""
+        return (self._duration_ms is not None or 
+                self._rate_rotation is not None or 
+                self._hold_duration_ms is not None or 
+                self._out_duration_ms is not None)
 
-    def _execute(self):
-        """Execute the configured operation"""
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        return self._should_execute_instant
+
+    def _execute_transition(self):
+        """Execute with transition"""
         if self._duration_ms is not None or self._rate_rotation is not None:
             # Calculate duration from rate if needed
             duration_ms = self._duration_ms
@@ -62,15 +76,16 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
             # Register callback with transition if set
             if self._then_callback:
                 transition.on_complete = self._then_callback
-        elif self._should_execute_instant:
-            # Instant execution
-            self.rig_state._direction = self.target_direction
-            self.rig_state._direction_transition = None
-            self.rig_state.start()  # Ensure ticking is active
 
-            # Execute callback immediately
-            if self._then_callback:
-                self._then_callback()
+    def _execute_instant(self):
+        """Execute instantly without transition"""
+        self.rig_state._direction = self.target_direction
+        self.rig_state._direction_transition = None
+        self.rig_state.start()  # Ensure ticking is active
+
+        # Execute callback immediately
+        if self._then_callback:
+            self._then_callback()
 
     def over(
         self,
@@ -105,8 +120,10 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
         return self
 
     def hold(self, duration_ms: float) -> 'DirectionBuilder':
-        """Not applicable for DirectionBuilder - raises error"""
-        raise NotImplementedError("DirectionBuilder does not support .hold() - only for temporary effects")
+        """Hold at target direction for duration before reverting"""
+        self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
+        return self
 
     def revert(
         self,
@@ -117,12 +134,44 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
         rate_accel: Optional[float] = None,
         rate_rotation: Optional[float] = None
     ) -> 'DirectionBuilder':
-        """Not applicable for DirectionBuilder - raises error"""
-        raise NotImplementedError("DirectionBuilder does not support .revert() - only for temporary effects")
+        """Revert to original direction after hold
+        
+        Args:
+            duration_ms: Duration in milliseconds (time-based), 0 for instant
+            easing: Easing function
+            rate_rotation: Rotation rate in degrees/second (rate-based)
+        """
+        rate_provided = rate_rotation is not None
+        if duration_ms is not None and rate_provided:
+            raise ValueError("Cannot specify both duration_ms and rate_rotation")
+        
+        if rate_provided:
+            # Calculate based on angle difference - for now use default
+            duration_ms = 500  # TODO: Calculate based on current angle vs original
+        
+        self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
+        self._out_easing = easing
+        self._current_stage = "after_revert"
+        return self
 
     def then(self, callback: Callable) -> 'DirectionBuilder':
-        """Execute callback after direction change completes"""
-        self._then_callback = callback
+        """Execute callback at current point in lifecycle chain
+        
+        Can be called multiple times at different stages:
+        - After .over(): fires when forward rotation completes
+        - After .hold(): fires when hold period completes
+        - After .revert(): fires when revert completes
+        
+        Examples:
+            rig.direction.to(0, 1).over(500).then(cb1)
+            rig.direction.to(0, 1).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
+        """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
         return self
 
     def __getattr__(self, name: str):
@@ -171,14 +220,13 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder']):
         raise AttributeError(_error_unknown_builder_attribute('DirectionBuilder', name, 'over, then'))
 
 
-class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
+class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], TransitionBasedBuilder):
     """Builder for direction.by(degrees) - relative rotation"""
     def __init__(self, rig_state: 'RigState', degrees: float, instant: bool = False):
         self.rig_state = rig_state
         self.degrees = degrees
         self._easing = "linear"
         self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
         self._duration_ms: Optional[float] = None
         self._rate_rotation: Optional[float] = None
 
@@ -187,18 +235,27 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
         self._out_rate_rotation: Optional[float] = None
+        
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"  # Track what stage we're configuring
 
-    def __del__(self):
-        """Execute the operation when builder goes out of scope"""
-        try:
-            self._execute()
-        except:
-            pass  # Ignore errors during cleanup
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition"""
+        # DirectionByBuilder uses effect system for temporary changes
+        return (self._hold_duration_ms is not None or self._out_duration_ms is not None or
+                self._duration_ms is not None or self._rate_rotation is not None)
 
-    def _execute(self):
-        """Execute the configured operation"""
-        # Check if this is a temporary effect (has .revert() or .hold())
-        is_temporary = self._hold_duration_ms is not None or self._out_duration_ms is not None
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        return self._should_execute_instant
+
+    def _execute_transition(self):
+        """Execute with transition or effect"""
+        # Check if this is a temporary effect
+        is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
         if is_temporary:
             # Create and register temporary direction effect
@@ -214,10 +271,13 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
                 dir_effect.out_duration_ms = self._out_duration_ms
             dir_effect.out_easing = self._out_easing
 
+            # Attach stage-specific callbacks
+            dir_effect.after_forward_callback = self._after_forward_callback
+            dir_effect.after_hold_callback = self._after_hold_callback
+            dir_effect.after_revert_callback = self._after_revert_callback
+
             self.rig_state.start()
             self.rig_state._direction_effects.append(dir_effect)
-
-            # TODO: Handle callback when effect completes
             return
 
         # Non-temporary: permanent rotation
@@ -255,17 +315,24 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
             self.rig_state._direction_transition = transition
 
             # Register callback
-            if self._then_callback:
-                transition.on_complete = self._then_callback
-        elif self._should_execute_instant:
-            # Instant execution
-            self.rig_state._direction = target_direction
-            self.rig_state._direction_transition = None
-            self.rig_state.start()  # Ensure ticking is active
+            if self._after_forward_callback:
+                transition.on_complete = self._after_forward_callback
 
-            # Execute callback immediately
-            if self._then_callback:
-                self._then_callback()
+    def _execute_instant(self):
+        """Execute instantly without transition"""
+        # Instant rotation
+        current_dir = self.rig_state._direction
+        angle_rad = math.radians(self.degrees)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        new_x = current_dir.x * cos_a - current_dir.y * sin_a
+        new_y = current_dir.x * sin_a + current_dir.y * cos_a
+        self.rig_state._direction = Vec2(new_x, new_y).normalized()
+        self.rig_state._direction_transition = None
+        self.rig_state.start()  # Ensure ticking is active
+
+        if self._after_forward_callback:
+            self._after_forward_callback()
 
     def over(
         self,
@@ -295,6 +362,7 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
     def hold(self, duration_ms: float) -> 'DirectionByBuilder':
         """Hold rotation at full strength for duration"""
         self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
         return self
 
     def revert(
@@ -319,11 +387,27 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder']):
         self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
         self._out_rate_rotation = rate_rotation
         self._out_easing = easing
+        self._current_stage = "after_revert"
         return self
 
     def then(self, callback: Callable) -> 'DirectionByBuilder':
-        """Execute callback after rotation completes"""
-        self._then_callback = callback
+        """Execute callback at current point in lifecycle chain
+        
+        Can be called multiple times at different stages:
+        - After .over(): fires when forward rotation completes
+        - After .hold(): fires when hold period completes
+        - After .revert(): fires when revert completes
+        
+        Examples:
+            rig.direction.by(90).over(500).then(cb1)
+            rig.direction.by(90).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
+        """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
         return self
 
     def __getattr__(self, name: str):

@@ -1,7 +1,6 @@
-"""Speed builder for base rig - speed control"""
+"""Speed controller for base rig - speed control"""
 
-from typing import Optional, Callable, TYPE_CHECKING
-from ...core import DEFAULT_EASING, SpeedTransition
+from typing import TYPE_CHECKING
 from .shared import PropertyEffectBuilder
 from ..contracts import OperationsContract
 
@@ -9,82 +8,20 @@ if TYPE_CHECKING:
     from ...state import RigState
 
 
-class SpeedBuilder:
-    """Builder for speed operations with .over() support"""
-    def __init__(self, rig_state: 'RigState', target_speed: float, instant: bool = False):
-        self.rig_state = rig_state
-        self.target_speed = target_speed
-        self._easing = "linear"
-        self._should_execute_instant = instant
-        self._then_callback: Optional[Callable] = None
-        self._duration_ms: Optional[float] = None
-
-    def __del__(self):
-        """Execute the operation when builder goes out of scope"""
-        try:
-            self._execute()
-        except:
-            pass  # Ignore errors during cleanup
-
-    def _execute(self):
-        """Execute the configured operation"""
-        if self._duration_ms is not None:
-            # Create transition with all configured options
-            transition = SpeedTransition(
-                self.rig_state._speed,
-                self.target_speed,
-                self._duration_ms,
-                self._easing
-            )
-            self.rig_state.start()  # Ensure ticking is active
-            self.rig_state._speed_transition = transition
-            self.rig_state._brake_transition = None  # Cancel any active brake
-
-            # Register callback with transition if set
-            if self._then_callback:
-                transition.on_complete = self._then_callback
-        elif self._should_execute_instant:
-            # Instant execution
-            # Clamp speed to valid range
-            value = max(0.0, self.target_speed)
-            max_speed = self.rig_state.limits_max_speed
-            if max_speed is not None:
-                value = min(value, max_speed)
-
-            self.rig_state._speed = value
-            self.rig_state._speed_transition = None
-            self.rig_state._brake_transition = None
-            self.rig_state.start()  # Ensure ticking is active
-
-            # Execute callback immediately
-            if self._then_callback:
-                self._then_callback()
-
-    def over(self, duration_ms: float) -> 'SpeedBuilder':
-        """Ramp to target speed over time"""
-        self._should_execute_instant = False
-        self._duration_ms = duration_ms
-        return self
-
-    def ease(self, easing_type: str = DEFAULT_EASING) -> 'SpeedBuilder':
-        """Set easing function (defaults to ease_out if not specified)"""
-        self._easing = easing_type
-        return self
-
-    def then(self, callback: Callable) -> 'SpeedBuilder':
-        """Execute callback after speed change completes"""
-        self._then_callback = callback
-        return self
-
-
 class SpeedController(OperationsContract['PropertyEffectBuilder']):
     """Controller for speed operations (accessed via rig.speed)"""
     def __init__(self, rig_state: 'RigState'):
         self.rig_state = rig_state
 
-    def __call__(self, value: float) -> SpeedBuilder:
+    def __call__(self, value: float) -> PropertyEffectBuilder:
         """Set speed instantly or return builder for .over()"""
-        return SpeedBuilder(self.rig_state, value, instant=True)
+        # Immediate execution, then return builder for potential .over()/.hold()/.revert()
+        self.rig_state._speed = max(0.0, value)
+        max_speed = self.rig_state.limits_max_speed
+        if max_speed is not None:
+            self.rig_state._speed = min(self.rig_state._speed, max_speed)
+        self.rig_state.start()
+        return PropertyEffectBuilder(self.rig_state, "speed", "to", value, instant_done=True)
 
     def add(self, delta: float) -> PropertyEffectBuilder:
         """Add delta to current speed"""

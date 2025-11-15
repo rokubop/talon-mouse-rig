@@ -1,13 +1,13 @@
 """Shared builders for base properties - common classes for speed and acceleration"""
 
 from typing import Optional, Callable, Union, TYPE_CHECKING
-from ..contracts import TimingMethodsContract
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
+class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], TransitionBasedBuilder):
     """
     Universal builder for property effects supporting both permanent (.over())
     and temporary (.revert()/.hold()) modifications.
@@ -28,24 +28,31 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
         self._in_easing: str = "linear"
         self._out_easing: str = "linear"
 
-        # Callback support
-        self._then_callback: Optional[Callable] = None
+        # Stage-specific callbacks
+        self._after_forward_callback: Optional[Callable] = None
+        self._after_hold_callback: Optional[Callable] = None
+        self._after_revert_callback: Optional[Callable] = None
+        self._current_stage: str = "initial"  # Track what stage we're configuring
 
         # Named modifier
         self._effect_name: Optional[str] = None
 
-    def __del__(self):
-        """Execute the operation when builder goes out of scope"""
-        try:
-            self._execute()
-        except:
-            pass
-
-    def _execute(self):
-        """Execute the configured operation"""
+    def _has_transition(self) -> bool:
+        """Check if this builder should create a transition or effect"""
         if self._instant_done:
-            return  # Already executed
+            return False
+        # Has transition if has timing OR is temporary (hold/revert)
+        return (self._in_duration_ms is not None or
+                self._hold_duration_ms is not None or
+                self._out_duration_ms is not None)
 
+    def _has_instant(self) -> bool:
+        """Check if this builder should execute instantly"""
+        # Execute instantly if not already done and no timing
+        return not self._instant_done and not self._has_transition()
+
+    def _execute_transition(self):
+        """Execute with transition or effect"""
         # Evaluate value if it's a callable (lambda)
         value = self.value
         if callable(value):
@@ -72,57 +79,69 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
                 effect.out_duration_ms = self._out_duration_ms
             effect.out_easing = self._out_easing
 
+            # Attach stage-specific callbacks
+            effect.after_forward_callback = self._after_forward_callback
+            effect.after_hold_callback = self._after_hold_callback
+            effect.after_revert_callback = self._after_revert_callback
+
             self.rig_state.start()
             self.rig_state._property_effects.append(effect)
             return
 
-        # Permanent changes (no .hold() or .revert())
-        if self._in_duration_ms is not None:
-            # Transition over time
-            if self.property_name == "speed":
-                from ...core import SpeedTransition
-                current = self.rig_state._speed
-                target = self._calculate_target_value(current, value)
-                transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
+        # Permanent changes with transition (has .over())
+        if self.property_name == "speed":
+            from ...core import SpeedTransition
+            current = self.rig_state._speed
+            target = self._calculate_target_value(current, value)
+            transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
 
-                # Register callback with transition if set
-                if self._then_callback:
-                    transition.on_complete = self._then_callback
+            # Register callback with transition if set
+            if self._after_forward_callback:
+                transition.on_complete = self._after_forward_callback
 
-                self.rig_state.start()
-                self.rig_state._speed_transition = transition
-            elif self.property_name == "accel":
-                # TODO: Add accel transition support if needed
-                current = self.rig_state._accel
-                target = self._calculate_target_value(current, value)
-                self.rig_state._accel = target
+            self.rig_state.start()
+            self.rig_state._speed_transition = transition
+        elif self.property_name == "accel":
+            # TODO: Add accel transition support if needed
+            current = self.rig_state._accel
+            target = self._calculate_target_value(current, value)
+            self.rig_state._accel = target
 
-                if self._then_callback:
-                    self._then_callback()
-        else:
-            # Immediate execution (no .over() timing specified)
-            if self.property_name == "speed":
-                current = self.rig_state._speed
-                target = self._calculate_target_value(current, value)
-                target = max(0.0, target)
+            if self._after_forward_callback:
+                self._after_forward_callback()
 
-                # Apply speed limit if set
-                max_speed = self.rig_state.limits_max_speed
-                if max_speed is not None:
-                    target = min(target, max_speed)
+    def _execute_instant(self):
+        """Execute instantly without transition"""
+        # Evaluate value if it's a callable (lambda)
+        value = self.value
+        if callable(value):
+            if not hasattr(self.rig_state, '_state_accessor'):
+                from ...state import StateAccessor
+                self.rig_state._state_accessor = StateAccessor(self.rig_state)
+            value = value(self.rig_state._state_accessor)
 
-                self.rig_state._speed = target
-                self.rig_state.start()  # Ensure ticking is active
+        if self.property_name == "speed":
+            current = self.rig_state._speed
+            target = self._calculate_target_value(current, value)
+            target = max(0.0, target)
 
-                if self._then_callback:
-                    self._then_callback()
-            elif self.property_name == "accel":
-                current = self.rig_state._accel
-                target = self._calculate_target_value(current, value)
-                self.rig_state._accel = target
+            # Apply speed limit if set
+            max_speed = self.rig_state.limits_max_speed
+            if max_speed is not None:
+                target = min(target, max_speed)
 
-                if self._then_callback:
-                    self._then_callback()
+            self.rig_state._speed = target
+            self.rig_state.start()  # Ensure ticking is active
+
+            if self._after_forward_callback:
+                self._after_forward_callback()
+        elif self.property_name == "accel":
+            current = self.rig_state._accel
+            target = self._calculate_target_value(current, value)
+            self.rig_state._accel = target
+
+            if self._after_forward_callback:
+                self._after_forward_callback()
 
     def _calculate_target_value(self, current: float, value: float) -> float:
         """Calculate the target value based on operation (value already evaluated)"""
@@ -188,11 +207,13 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
 
         self._in_duration_ms = duration_ms
         self._in_easing = easing
+        self._current_stage = "after_forward"
         return self
 
     def hold(self, duration_ms: float) -> 'PropertyEffectBuilder':
         """Hold effect at full strength for duration"""
         self._hold_duration_ms = duration_ms
+        self._current_stage = "after_hold"
         return self
 
     def revert(
@@ -224,11 +245,27 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder']):
 
         self._out_duration_ms = duration_ms if duration_ms is not None and duration_ms > 0 else 0
         self._out_easing = easing
+        self._current_stage = "after_revert"
         return self
 
     def then(self, callback: Callable) -> 'PropertyEffectBuilder':
-        """Execute callback after property change completes"""
-        self._then_callback = callback
+        """Execute callback at current point in lifecycle chain
+
+        Can be called multiple times at different stages:
+        - After .over(): fires when forward transition completes
+        - After .hold(): fires when hold period completes
+        - After .revert(): fires when revert completes
+
+        Examples:
+            rig.speed.by(5).over(400).then(cb1)
+            rig.speed.by(5).over(400).then(cb1).hold(100).then(cb2).revert(400).then(cb3)
+        """
+        if self._current_stage == "after_forward":
+            self._after_forward_callback = callback
+        elif self._current_stage == "after_hold":
+            self._after_hold_callback = callback
+        elif self._current_stage == "after_revert":
+            self._after_revert_callback = callback
         return self
 
     def __getattr__(self, name: str):

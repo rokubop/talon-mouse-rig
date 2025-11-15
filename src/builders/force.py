@@ -3,7 +3,7 @@
 from typing import Optional, TYPE_CHECKING, TypeVar
 from ..core import Vec2
 from ..effects import Force
-from .contracts import PropertyOperationsContract, TimingMethodsContract
+from .contracts import PropertyOperationsContract, TimingMethodsContract, TransitionBasedBuilder
 
 if TYPE_CHECKING:
     from ..state import RigState
@@ -312,7 +312,7 @@ class NamedForceAccelController(ForcePropertyController['NamedForceAccelControll
 
 
 
-class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuilder']):
+class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuilder'], TransitionBasedBuilder):
     """Direction builder for named forces"""
     def __init__(self, rig_state: 'RigState', name: str, x: float, y: float):
         self.rig_state = rig_state
@@ -320,18 +320,27 @@ class NamedForceDirectionBuilder(TimingMethodsContract['NamedForceDirectionBuild
         self.x = x
         self.y = y
 
-    def __del__(self):
-        """Execute when builder goes out of scope"""
-        try:
-            # Set direction on the Force object
-            if self.name not in self.rig_state._named_forces:
-                self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+    def _has_transition(self) -> bool:
+        """Named force direction always executes (no transition concept)"""
+        return False
 
-            force = self.rig_state._named_forces[self.name]
-            force._direction = Vec2(self.x, self.y).normalized()
-            self.rig_state.start()  # Ensure ticking is active
-        except:
-            pass
+    def _has_instant(self) -> bool:
+        """Always execute instantly"""
+        return True
+
+    def _execute_transition(self):
+        """Not used for force direction"""
+        pass
+
+    def _execute_instant(self):
+        """Execute when builder goes out of scope"""
+        # Set direction on the Force object
+        if self.name not in self.rig_state._named_forces:
+            self.rig_state._named_forces[self.name] = Force(self.name, self.rig_state)
+
+        force = self.rig_state._named_forces[self.name]
+        force._direction = Vec2(self.x, self.y).normalized()
+        self.rig_state.start()  # Ensure ticking is active
 
     @property
     def speed(self) -> 'NamedForceSpeedController':
