@@ -1,4 +1,4 @@
-"""Force builders for PRD 8 - independent velocity sources"""
+"""Force builders - independent velocity sources"""
 
 from typing import Optional, TYPE_CHECKING, TypeVar
 from ..core import Vec2

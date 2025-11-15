@@ -9,7 +9,7 @@ from .core import Vec2, EASING_FUNCTIONS, ease_linear, lerp
 
 
 # ============================================================================
-# EFFECT STACK (PRD 8 - tracks operation stacking for effects)
+# EFFECT STACK (tracks operation stacking for effects)
 # ============================================================================
 
 @dataclass
@@ -17,7 +17,7 @@ class EffectStack:
     """
     Tracks stacking behavior for effect operations.
 
-    PRD 8: Default on-repeat strategy = "replace" (1 stack, replace semantics)
+    Default on-repeat strategy = "replace" (1 stack, replace semantics)
     - .to(value): Set absolute value
     - .mul(value): Multiply (replaces by default, use .on_repeat("stack") to allow multiple)
     - .div(value): Divide (replaces by default)
@@ -529,7 +529,7 @@ class Effect:
         self.in_easing = in_easing
         self.hold_duration_ms = hold_duration_ms
 
-        # PRD5: .hold() alone implies instant revert after hold period
+        # .hold() alone implies instant revert after hold period
         if hold_duration_ms is not None and out_duration_ms is None:
             self.out_duration_ms = 0
         else:
@@ -897,6 +897,164 @@ class DirectionEffect:
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the effect to stop"""
         self._effect.request_stop(duration_ms, easing)
+
+
+class ReverseEffect:
+    """
+    Temporary reverse effect with lifecycle phases.
+
+    Unlike DirectionEffect which rotates, ReverseEffect flips direction 180°
+    and manipulates speed to create a backing-up motion effect.
+
+    Lifecycle:
+    - Forward: Flip direction, fade speed from -start to +start
+    - Hold: Stay reversed with normal speed
+    - Revert: Flip back, fade speed from -start to +start again
+    """
+    def __init__(self, name: Optional[str] = None):
+        self.name = name
+        self.phase = "initial"
+        self.complete = False
+
+        # Lifecycle timing
+        self.in_duration_ms: Optional[float] = None
+        self.in_easing: str = "linear"
+        self.hold_duration_ms: Optional[float] = None
+        self.out_duration_ms: Optional[float] = None
+        self.out_easing: str = "linear"
+
+        # Callbacks
+        self.after_forward_callback: Optional[Callable] = None
+        self.after_hold_callback: Optional[Callable] = None
+        self.after_revert_callback: Optional[Callable] = None
+
+        # State
+        self.phase_start_time: Optional[float] = None
+        self.start_speed: float = 0.0
+        self.direction_flipped: bool = False
+        self.original_direction: Optional[Vec2] = None
+
+    def configure_lifecycle(
+        self,
+        in_duration_ms: Optional[float] = None,
+        in_easing: str = "linear",
+        hold_duration_ms: Optional[float] = None,
+        out_duration_ms: Optional[float] = None,
+        out_easing: str = "linear",
+        after_forward_callback: Optional[Callable] = None,
+        after_hold_callback: Optional[Callable] = None,
+        after_revert_callback: Optional[Callable] = None
+    ) -> None:
+        """Configure lifecycle phases"""
+        self.in_duration_ms = in_duration_ms
+        self.in_easing = in_easing
+        self.hold_duration_ms = hold_duration_ms
+        self.out_duration_ms = out_duration_ms
+        self.out_easing = out_easing
+        self.after_forward_callback = after_forward_callback
+        self.after_hold_callback = after_hold_callback
+        self.after_revert_callback = after_revert_callback
+
+    def start(self, start_speed: float, current_direction: Vec2) -> None:
+        """Start the reverse effect"""
+        self.start_speed = abs(start_speed)
+        self.original_direction = current_direction
+        self.phase_start_time = time.perf_counter()
+        self.phase = "forward"
+        self.direction_flipped = False
+
+    def update(self, rig_state: 'RigState') -> None:
+        """Update the reverse effect - modifies rig_state direction and speed directly"""
+        if self.complete or self.phase == "initial":
+            return
+
+        current_time = time.perf_counter()
+        elapsed_ms = (current_time - self.phase_start_time) * 1000
+
+        if self.phase == "forward":
+            # Flip direction on first update
+            if not self.direction_flipped:
+                rig_state._direction = Vec2(-rig_state._direction.x, -rig_state._direction.y)
+                self.direction_flipped = True
+
+            # Fade speed from -start_speed to +start_speed
+            if self.in_duration_ms is not None and self.in_duration_ms > 0:
+                progress = min(elapsed_ms / self.in_duration_ms, 1.0)
+                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
+                eased = easing_fn(progress)
+                rig_state._speed = lerp(-self.start_speed, self.start_speed, eased)
+
+                if progress >= 1.0:
+                    self._transition_to_hold()
+            else:
+                # Instant forward
+                rig_state._speed = self.start_speed
+                self._transition_to_hold()
+
+        elif self.phase == "hold":
+            # Just wait
+            if self.hold_duration_ms is not None:
+                if elapsed_ms >= self.hold_duration_ms:
+                    self._transition_to_out()
+            else:
+                # No hold phase, go straight to out if configured
+                if self.out_duration_ms is not None:
+                    self._transition_to_out()
+                else:
+                    self.complete = True
+
+        elif self.phase == "out":
+            # Flip direction back
+            if self.direction_flipped:
+                rig_state._direction = Vec2(-rig_state._direction.x, -rig_state._direction.y)
+                self.direction_flipped = False
+
+            # Fade speed from -start_speed to +start_speed again
+            if self.out_duration_ms is not None and self.out_duration_ms > 0:
+                progress = min(elapsed_ms / self.out_duration_ms, 1.0)
+                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
+                eased = easing_fn(progress)
+                rig_state._speed = lerp(-self.start_speed, self.start_speed, eased)
+
+                if progress >= 1.0:
+                    if self.after_revert_callback:
+                        self.after_revert_callback()
+                    self.complete = True
+            else:
+                # Instant revert
+                rig_state._speed = self.start_speed
+                if self.after_revert_callback:
+                    self.after_revert_callback()
+                self.complete = True
+
+    def _transition_to_hold(self) -> None:
+        """Transition from forward to hold phase"""
+        if self.after_forward_callback:
+            self.after_forward_callback()
+
+        self.phase_start_time = time.perf_counter()
+        if self.hold_duration_ms is not None:
+            self.phase = "hold"
+        elif self.out_duration_ms is not None:
+            self.phase = "out"
+            self.direction_flipped = True  # Mark as flipped so out phase can flip back
+        else:
+            self.complete = True
+
+    def _transition_to_out(self) -> None:
+        """Transition from hold to out phase"""
+        if self.after_hold_callback:
+            self.after_hold_callback()
+
+        self.phase_start_time = time.perf_counter()
+        self.phase = "out"
+
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request early stop"""
+        self.out_duration_ms = duration_ms if duration_ms is not None else 0
+        self.out_easing = easing
+        self.phase_start_time = time.perf_counter()
+        self.phase = "out"
 
 
 # ============================================================================

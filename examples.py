@@ -1,5 +1,5 @@
 """
-Mouse Rig Examples - Comprehensive Feature Showcase (PRD 8)
+Mouse Rig Examples - Comprehensive Feature Showcase
 
 Demonstrates all core mouse rig features:
 - Basic movement (direction, speed, acceleration)
@@ -98,7 +98,7 @@ class Actions:
         rig.speed.by(20).over(500, "ease_in_out").hold(1500).revert(500, "ease_out")
 
     # =========================================================================
-    # EFFECT SYSTEM - PRD 8 (Multiplicative - Replace Mode)
+    # EFFECT SYSTEM (Multiplicative - Replace Mode)
     # =========================================================================
 
     def mouse_rig_sprint_on():
@@ -146,7 +146,7 @@ class Actions:
         rig.effect("wobble").revert()
 
     # =========================================================================
-    # EFFECT SYSTEM - PRD 8 (On-Repeat Strategies)
+    # EFFECT SYSTEM (On-Repeat Strategies)
     # =========================================================================
 
     def mouse_rig_boost_pad():
@@ -210,7 +210,7 @@ class Actions:
             .then(lambda: print("revert"))
 
     # =========================================================================
-    # FORCE SYSTEM (Independent Entities) - PRD 7
+    # FORCE SYSTEM (Independent Entities)
     # =========================================================================
 
     def mouse_rig_gravity_on():
@@ -280,14 +280,12 @@ class Actions:
         the circular arc.rr
         """
         rig = actions.user.mouse_rig()
-        # rig.direction.by(180).over(1000, "ease_in_out")
         rig.reverse().over(1000).revert(1000)
-        # rig.direction.to(-1, 0).over(1000, "ease_in_out")
 
     def mouse_rig_reverse():
         """Smooth linear reverse - backs up motion"""
         rig = actions.user.mouse_rig()
-        rig.reverse().over(500)
+        rig.reverse()
 
     # =========================================================================
     # POSITION CONTROL

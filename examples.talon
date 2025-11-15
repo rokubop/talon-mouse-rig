@@ -1,5 +1,4 @@
 # Mouse Rig Examples - Voice Commands
-# Comprehensive feature showcase for PRD 7
 
 # =============================================================================
 # BASIC MOVEMENT

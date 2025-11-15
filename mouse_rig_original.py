@@ -1,5 +1,5 @@
 # """
-# Talon Mouse Rig - Continuous motion-based mouse control system (PRD 8)
+# Talon Mouse Rig - Continuous motion-based mouse control system
 
 # A fluent, stateful mouse control API with:
 # - Named effects with strict syntax (.effect())
@@ -22,7 +22,7 @@
 #     rig.speed(10)                # Set base speed
 #     rig.speed.to(20).over(500)   # Ramp to 20 over 500ms
 
-# Explicit Entity API (PRD 8):
+# Explicit Entity API:
 #     rig.effect("name")   # Named effect (modifies base properties) - STRICT syntax
 #     rig.force("name")    # Named force (independent entity) - loose syntax
 
@@ -542,7 +542,7 @@
 
 
 # # ============================================================================
-# # EFFECT STACK (PRD 8 - tracks operation stacking for effects)
+# # EFFECT STACK (tracks operation stacking for effects)
 # # ============================================================================
 
 # @dataclass
@@ -550,7 +550,7 @@
 #     """
 #     Tracks stacking behavior for effect operations.
 
-#     PRD 8: Default on-repeat strategy = "replace" (1 stack, replace semantics)
+#     Default on-repeat strategy = "replace" (1 stack, replace semantics)
 #     - .to(value): Set absolute value
 #     - .mul(value): Multiply (replaces by default, use .on_repeat("stack") to allow multiple)
 #     - .div(value): Divide (replaces by default)

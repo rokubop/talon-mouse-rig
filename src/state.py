@@ -11,7 +11,7 @@ from .core import (
     Vec2, SubpixelAdjuster,
     SpeedTransition, DirectionTransition, PositionTransition, ReverseTransition
 )
-from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect
+from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect, ReverseEffect
 from .builders.base import (
     AccelController,
     DirectionController,
@@ -41,15 +41,16 @@ class RigState:
         # All effects (property and stack-based) managed in single list
         self._effects: list[Effect] = []  # Unified: property effects (speed/accel) and stack effects
         self._direction_effects: list[DirectionEffect] = []  # direction temporary effects
+        self._reverse_effect: Optional['ReverseEffect'] = None  # special reverse effect
 
         # Named forces (for backward compatibility with force API)
         self._named_forces: dict[str, Force] = {}
 
-        # PRD 8: Effect stacks (operations with stacking control)
+        # Effect stacks (operations with stacking control)
         self._effect_stacks: dict[str, EffectStack] = {}  # key: "entity_name:property:op_type"
         self._effect_order: list[str] = []  # Track creation order for composition
 
-        # PRD 8: Effect lifecycles (lifecycle-aware wrappers for effect stacks)
+        # Effect lifecycles (lifecycle-aware wrappers for effect stacks)
         # Maps stack key to its EffectLifecycle wrapper (which wraps unified Effect)
         self._effect_lifecycles: dict[str, EffectLifecycle] = {}  # key: same as _effect_stacks
 
@@ -80,7 +81,7 @@ class RigState:
         self._last_position_offset = Vec2(0, 0)
 
     def effect(self, name: str) -> EffectBuilder:
-        """Create or access a named effect entity (PRD 8)
+        """Create or access a named effect entity
 
         Effects modify base properties using explicit operations:
         - .to(value): Set absolute value
@@ -99,7 +100,7 @@ class RigState:
         return EffectBuilder(self, name, strict_mode=True)
 
     def force(self, name: str) -> 'NamedForceBuilder':
-        """Create or access a named force entity (PRD 8)
+        """Create or access a named force entity
 
         Forces are independent entities with their own speed, direction, and acceleration.
         They combine with the base rig via vector addition.
@@ -227,7 +228,7 @@ class RigState:
             if effect.is_property_effect and effect.property_name == "speed":
                 base_speed = effect.update(base_speed)
 
-        # Apply effect stacks (PRD 8 - named effects)
+        # Apply effect stacks (named effects)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
         # This ensures multiplicative operations apply before additive
 
@@ -266,8 +267,8 @@ class RigState:
                     else:
                         base_speed = stack.apply_to_base(base_speed)
 
-        # Allow negative speed during ReverseTransition
-        if isinstance(self._direction_transition, ReverseTransition):
+        # Allow negative speed during ReverseTransition or ReverseEffect
+        if isinstance(self._direction_transition, ReverseTransition) or self._reverse_effect:
             return base_speed
         return max(0.0, base_speed)
 
@@ -285,7 +286,7 @@ class RigState:
             if effect.is_property_effect and effect.property_name == "accel":
                 base_accel = effect.update(base_accel)
 
-        # Apply effect stacks (PRD 8 - named effects)
+        # Apply effect stacks (named effects)
         # Pipeline: base → all mul/div effects → all add/sub effects (in entity creation order)
 
         # Group by entity name to track first occurrence order
@@ -333,7 +334,7 @@ class RigState:
         for effect in self._direction_effects:
             base_direction = effect.update(base_direction)
 
-        # Apply effect stacks (PRD 8 - named effects) - direction rotations
+        # Apply effect stacks (named effects) - direction rotations
         # Direction uses add/sub for rotation by degrees, and to() for absolute
         # Group by entity name to track first occurrence order
         entity_order = []
@@ -376,7 +377,7 @@ class RigState:
         """Get total position offset from all position effects"""
         offset = Vec2(0, 0)
 
-        # Apply position effect stacks (PRD 8)
+        # Apply position effect stacks
         # Position uses add/sub for offsets, to() for absolute
         # Group by entity name to track first occurrence order
         entity_order = []
@@ -414,7 +415,7 @@ class RigState:
     def _get_accel_velocity_contribution(self) -> float:
         """Get total velocity contribution from all acceleration effects
 
-        PRD 8: Currently returns 0 - accel velocity tracking removed with old effect system.
+        Currently returns 0 - accel velocity tracking removed with old effect system.
         Accel effects now directly modify the accel property through effect stacks.
         """
         return 0.0
@@ -496,7 +497,7 @@ class RigState:
         self._effects.clear()
         self._direction_effects.clear()
 
-        # Clear effect system (PRD 8)
+        # Clear effect system
         self._effect_stacks.clear()
         self._effect_lifecycles.clear()
         self._effect_order.clear()
@@ -718,7 +719,7 @@ class RigState:
         if len(self._pending_wait_jobs) > 0:
             return False
 
-        # Check for active effects (PRD 8)
+        # Check for active effects
         if len(self._effect_stacks) > 0:
             return False
 
@@ -753,6 +754,12 @@ class RigState:
             self._direction_transition.update(self)
             if self._direction_transition.complete:
                 self._direction_transition = None
+
+        # Update reverse effect (manages both direction and speed)
+        if self._reverse_effect:
+            self._reverse_effect.update(self)
+            if self._reverse_effect.complete:
+                self._reverse_effect = None
 
         # Start any property effects that haven't been started yet
         for effect in self._effects:
@@ -801,8 +808,8 @@ class RigState:
         effective_accel = self._get_effective_accel()
         if abs(effective_accel) > 1e-6:
             self._speed += effective_accel * dt
-            # Allow negative speed only during ReverseTransition
-            if not isinstance(self._direction_transition, ReverseTransition):
+            # Allow negative speed only during ReverseTransition or ReverseEffect
+            if not isinstance(self._direction_transition, ReverseTransition) and not self._reverse_effect:
                 self._speed = max(0.0, self._speed)
             if self.limits_max_speed is not None:
                 self._speed = min(self._speed, self.limits_max_speed)
@@ -814,10 +821,10 @@ class RigState:
         accel_velocity_contribution = self._get_accel_velocity_contribution()
         total_speed = effective_speed + accel_velocity_contribution
 
-        # Clamp total speed (allow negative during ReverseTransition)
+        # Clamp total speed (allow negative during ReverseTransition or ReverseEffect)
         if self.limits_max_speed is not None:
             total_speed = min(total_speed, self.limits_max_speed)
-        if not isinstance(self._direction_transition, ReverseTransition):
+        if not isinstance(self._direction_transition, ReverseTransition) and not self._reverse_effect:
             total_speed = max(0.0, total_speed)
 
         # Get effective direction (with rotation effects applied)

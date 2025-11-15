@@ -3,7 +3,7 @@
 import math
 from typing import Optional, Callable, TYPE_CHECKING
 from ...core import Vec2, clamp, DirectionTransition, ReverseTransition, EPSILON
-from ...effects import DirectionEffect
+from ...effects import DirectionEffect, ReverseEffect
 from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
                 self._easing,
                 self._interpolation
             )
-            
+
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 
@@ -377,15 +377,31 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
     def _execute_transition(self):
         """Execute with ReverseTransition or ReverseEffect"""
         print(f"[DirectionReverseBuilder._execute_transition] duration_ms={self._duration_ms}, hold={self._hold_duration_ms}, out={self._out_duration_ms}")
-        
+
         # Check if this is a temporary effect (has lifecycle)
         is_temporary = (self._hold_duration_ms is not None or self._out_duration_ms is not None)
 
         if is_temporary:
-            # TODO: Create ReverseEffect for lifecycle support
-            print("[DirectionReverseBuilder] Temporary reverse effect not yet implemented")
-            # For now, just do instant reverse
-            self._execute_instant()
+            # Create ReverseEffect for lifecycle support
+            print("[DirectionReverseBuilder] Creating ReverseEffect for lifecycle")
+            reverse_effect = ReverseEffect()
+
+            reverse_effect.configure_lifecycle(
+                in_duration_ms=self._duration_ms,
+                in_easing=self._easing,
+                hold_duration_ms=self._hold_duration_ms,
+                out_duration_ms=0 if (self._hold_duration_ms is not None and self._out_duration_ms is None) else self._out_duration_ms,
+                out_easing=self._out_easing,
+                after_forward_callback=self._after_forward_callback,
+                after_hold_callback=self._after_hold_callback,
+                after_revert_callback=self._after_revert_callback
+            )
+
+            start_speed = self.rig_state._get_effective_speed()
+            reverse_effect.start(start_speed, self.rig_state._direction)
+
+            self.rig_state.start()
+            self.rig_state._reverse_effect = reverse_effect
             return
 
         # Permanent reverse with speed fade

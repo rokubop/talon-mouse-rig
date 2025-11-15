@@ -1,4 +1,4 @@
-"""Effect builders for PRD 8 named effects"""
+"""Effect builders for named effects"""
 
 from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic, Callable
 from ..core import Vec2
@@ -300,7 +300,7 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
 
 class EffectBuilder:
     """
-    PRD 8: Builder for named effect entities.
+    Builder for named effect entities.
 
     Effects modify base properties using direct operations:
     - .to(value): Set absolute value
