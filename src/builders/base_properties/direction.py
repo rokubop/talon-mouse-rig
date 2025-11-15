@@ -215,14 +215,24 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
                     duration_sec = angle_deg / self._rate_rotation
                     duration_ms = duration_sec * 1000
 
-            # Create transition
-            transition = DirectionTransition(
-                self.rig_state._direction,
-                target_direction,
-                duration_ms,
-                self._easing,
-                self._interpolation
-            )
+            # Check if this is a 180° reversal - use special ReverseTransition
+            if abs(abs(self.degrees) - 180) < 0.1:
+                from ...core import ReverseTransition
+                transition = ReverseTransition(
+                    self.rig_state._speed,
+                    duration_ms,
+                    self._easing
+                )
+            else:
+                # Normal direction transition
+                transition = DirectionTransition(
+                    self.rig_state._direction,
+                    target_direction,
+                    duration_ms,
+                    self._easing,
+                    self._interpolation
+                )
+            
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 

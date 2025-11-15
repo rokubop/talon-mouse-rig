@@ -265,6 +265,10 @@ class RigState:
                     else:
                         base_speed = stack.apply_to_base(base_speed)
 
+        # Allow negative speed during ReverseTransition
+        from .core import ReverseTransition
+        if isinstance(self._direction_transition, ReverseTransition):
+            return base_speed
         return max(0.0, base_speed)
 
     def _get_effective_accel(self) -> float:
@@ -796,7 +800,10 @@ class RigState:
         effective_accel = self._get_effective_accel()
         if abs(effective_accel) > 1e-6:
             self._speed += effective_accel * dt
-            self._speed = max(0.0, self._speed)
+            # Allow negative speed only during ReverseTransition
+            from .core import ReverseTransition
+            if not isinstance(self._direction_transition, ReverseTransition):
+                self._speed = max(0.0, self._speed)
             if self.limits_max_speed is not None:
                 self._speed = min(self._speed, self.limits_max_speed)
 
@@ -807,10 +814,12 @@ class RigState:
         accel_velocity_contribution = self._get_accel_velocity_contribution()
         total_speed = effective_speed + accel_velocity_contribution
 
-        # Clamp total speed
+        # Clamp total speed (allow negative during ReverseTransition)
+        from .core import ReverseTransition
         if self.limits_max_speed is not None:
             total_speed = min(total_speed, self.limits_max_speed)
-        total_speed = max(0.0, total_speed)
+        if not isinstance(self._direction_transition, ReverseTransition):
+            total_speed = max(0.0, total_speed)
 
         # Get effective direction (with rotation effects applied)
         effective_direction = self._get_effective_direction()
