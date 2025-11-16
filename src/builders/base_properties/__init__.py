@@ -4,7 +4,7 @@ from .speed import SpeedController
 from .accel import AccelController
 from .direction import DirectionBuilder, DirectionByBuilder, DirectionReverseBuilder, DirectionController
 from .position import PositionBuilder, PositionController
-from .shared import PropertyEffectBuilder
+from .shared import SpeedAccelBuilder
 
 __all__ = [
     "SpeedController",
@@ -15,5 +15,5 @@ __all__ = [
     "DirectionController",
     "PositionBuilder",
     "PositionController",
-    "PropertyEffectBuilder",
+    "SpeedAccelBuilder",
 ]

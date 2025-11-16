@@ -2,10 +2,13 @@
 
 import time
 import math
-from typing import Optional, Union, Literal, Callable
+from typing import Optional, Union, Literal, Callable, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from .core import Vec2, EASING_FUNCTIONS, ease_linear, lerp
+
+if TYPE_CHECKING:
+    from .state import RigState
 
 
 # ============================================================================
@@ -130,8 +133,9 @@ class EffectLifecycle:
     Wrapper for EffectStack with lifecycle support.
     Now uses the unified Effect class internally.
     """
-    def __init__(self, stack: EffectStack):
+    def __init__(self, stack: EffectStack, rig_state: 'RigState'):
         self.stack = stack
+        self.rig_state = rig_state
         # Create unified Effect for stack-based lifecycle
         self._effect = Effect(stack=stack)
 
@@ -139,7 +143,6 @@ class EffectLifecycle:
         self.repeat_strategy: str = "stack"  # Default: unlimited stacking
         self.throttle_ms: Optional[float] = None  # For throttle strategy
         self.last_activation_time: Optional[float] = None  # Track last activation
-        self.queued_operations: list = []  # For queue strategy
 
     # Delegate lifecycle configuration to unified Effect
     @property
@@ -195,16 +198,16 @@ class EffectLifecycle:
         return self._effect.current_multiplier
 
     @property
-    def after_forward_callback(self):
-        return self._effect.after_forward_callback
+    def after_forward_callbacks(self):
+        return self._effect.after_forward_callbacks
 
     @property
-    def after_hold_callback(self):
-        return self._effect.after_hold_callback
+    def after_hold_callbacks(self):
+        return self._effect.after_hold_callbacks
 
     @property
-    def after_revert_callback(self):
-        return self._effect.after_revert_callback
+    def after_revert_callbacks(self):
+        return self._effect.after_revert_callbacks
 
     def configure_lifecycle(
         self,
@@ -213,9 +216,9 @@ class EffectLifecycle:
         hold_duration_ms: Optional[float] = None,
         out_duration_ms: Optional[float] = None,
         out_easing: str = "linear",
-        after_forward_callback: Optional[Callable] = None,
-        after_hold_callback: Optional[Callable] = None,
-        after_revert_callback: Optional[Callable] = None
+        after_forward_callbacks: Optional[list[Callable]] = None,
+        after_hold_callbacks: Optional[list[Callable]] = None,
+        after_revert_callbacks: Optional[list[Callable]] = None
     ) -> None:
         """Configure lifecycle - delegates to unified Effect"""
         self._effect.configure_lifecycle(
@@ -224,9 +227,9 @@ class EffectLifecycle:
             hold_duration_ms=hold_duration_ms,
             out_duration_ms=out_duration_ms,
             out_easing=out_easing,
-            after_forward_callback=after_forward_callback,
-            after_hold_callback=after_hold_callback,
-            after_revert_callback=after_revert_callback
+            after_forward_callbacks=after_forward_callbacks,
+            after_hold_callbacks=after_hold_callbacks,
+            after_revert_callbacks=after_revert_callbacks
         )
 
     def start(self) -> None:
@@ -236,22 +239,9 @@ class EffectLifecycle:
     def update(self) -> float:
         """Update lifecycle and return current multiplier
 
-        Also handles processing queued operations for queue strategy.
+        Queue strategy now uses RigState._segment_queues for unified queuing.
         """
         multiplier = self._effect.update()
-
-        # Process queued operations if lifecycle just completed
-        if self.repeat_strategy == "queue" and self._effect.complete and self.queued_operations:
-            # Take the first queued operation and apply it
-            next_value = self.queued_operations.pop(0)
-            self.stack.add_operation(next_value)
-
-            # Restart the lifecycle for the queued operation
-            self._effect.complete = False
-            self._effect.phase = "not_started"
-            self._effect.start()
-            multiplier = self._effect.update()
-
         return multiplier
 
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
@@ -333,214 +323,22 @@ class EffectLifecycle:
                     self._effect.current_multiplier = 1.0
             return
 
-        # Queue: store operation to be applied later
+        # Queue: use unified RigState queue system
         if self.repeat_strategy == "queue":
             if self._effect.phase in ("not_started", "complete"):
                 # No active effect, apply immediately
                 self.stack.add_operation(value)
             else:
-                # Effect is active, queue for later
-                self.queued_operations.append(value)
+                # Effect is active, queue callback to RigState
+                tag_name = self.stack.name
+                def apply_queued_value():
+                    self.stack.add_operation(value)
+                    # Restart the lifecycle for the queued operation
+                    self._effect.complete = False
+                    self._effect.phase = "not_started"
+                    self._effect.start()
+                self.rig_state._queue_segment(tag_name, apply_queued_value)
             return
-
-
-# ============================================================================
-# EFFECT SYSTEM (temporary property modifications with lifecycle)
-# ============================================================================
-
-class Effect:
-    """
-    Represents a temporary property modification with lifecycle phases.
-
-    Effects have three optional phases:
-    - in: fade in the effect value over duration
-    - hold: maintain the effect value for duration
-    - out: fade out the effect value over duration
-
-    Effects auto-remove when their lifecycle completes.
-    """
-    def __init__(self,
-                 property_name: str,  # "speed" or "accel"
-                 operation: str,      # "to", "by", "mul", "div"
-                 value: float,
-                 name: Optional[str] = None):
-        self.property_name = property_name
-        self.operation = operation
-        self.value = value
-        self.name = name  # Optional name for stopping early
-
-        # Lifecycle configuration
-        self.in_duration_ms: Optional[float] = None
-        self.in_easing: str = "linear"
-        self.hold_duration_ms: Optional[float] = None
-        self.out_duration_ms: Optional[float] = None
-        self.out_easing: str = "linear"
-
-        # Runtime state
-        self.phase: str = "not_started"  # "in", "hold", "out", "complete"
-        self.phase_start_time: Optional[float] = None
-        self.base_value: Optional[float] = None  # Value before effect was applied
-        self.current_multiplier: float = 0.0  # 0 to 1, how much of the effect is active
-        self.complete = False
-
-        # For stopping
-        self.stop_requested = False
-        self.stop_duration_ms: Optional[float] = None
-        self.stop_easing: str = "linear"
-        self.stop_start_time: Optional[float] = None
-
-    def start(self, current_value: float) -> None:
-        """Start the effect lifecycle"""
-        self.base_value = current_value
-
-        if self.in_duration_ms is not None:
-            self.phase = "in"
-            self.phase_start_time = time.perf_counter()
-        elif self.hold_duration_ms is not None:
-            self.phase = "hold"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        elif self.out_duration_ms is not None:
-            # Start at full strength if only out phase
-            self.phase = "out"
-            self.phase_start_time = time.perf_counter()
-            self.current_multiplier = 1.0
-        else:
-            # No lifecycle specified
-            if self.name:
-                # Named modifiers without lifecycle persist indefinitely at full strength
-                self.phase = "hold"
-                self.current_multiplier = 1.0
-            else:
-                # Unnamed effects without lifecycle complete immediately
-                self.phase = "complete"
-                self.complete = True
-
-    def update(self, current_base_value: float) -> float:
-        """
-        Update effect and return the modified value.
-
-        Args:
-            current_base_value: The current base value of the property (without this effect)
-
-        Returns:
-            The modified value with this effect applied
-        """
-        if self.complete:
-            return current_base_value
-
-        # Handle stop request
-        if self.stop_requested:
-            return self._update_stop(current_base_value)
-
-        # Normal lifecycle progression
-        current_time = time.perf_counter()
-        elapsed_ms = (current_time - self.phase_start_time) * 1000 if self.phase_start_time else 0
-
-        if self.phase == "in":
-            if elapsed_ms >= self.in_duration_ms:
-                # Move to next phase
-                self.current_multiplier = 1.0
-                if self.hold_duration_ms is not None:
-                    self.phase = "hold"
-                    self.phase_start_time = current_time
-                elif self.out_duration_ms is not None:
-                    self.phase = "out"
-                    self.phase_start_time = current_time
-                else:
-                    # No hold or revert specified - persist at full strength
-                    self.phase = "hold"
-                    self.hold_duration_ms = None  # Persist indefinitely
-            else:
-                # Update multiplier with easing
-                t = elapsed_ms / self.in_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.in_easing, ease_linear)
-                self.current_multiplier = easing_fn(t)
-
-        elif self.phase == "hold":
-            # Check if we have a duration specified
-            if self.hold_duration_ms is not None:
-                if elapsed_ms >= self.hold_duration_ms:
-                    # Move to next phase
-                    if self.out_duration_ms is not None:
-                        self.phase = "out"
-                        self.phase_start_time = current_time
-                    else:
-                        self.phase = "complete"
-                        self.complete = True
-                        return current_base_value
-            # else: persist indefinitely at full strength (named modifiers without timing)
-            # Multiplier stays at 1.0 during hold
-
-        elif self.phase == "out":
-            if elapsed_ms >= self.out_duration_ms:
-                self.phase = "complete"
-                self.complete = True
-                return current_base_value
-            else:
-                # Fade out
-                t = elapsed_ms / self.out_duration_ms
-                easing_fn = EASING_FUNCTIONS.get(self.out_easing, ease_linear)
-                self.current_multiplier = 1.0 - easing_fn(t)
-
-        # Apply effect based on operation and current multiplier
-        return self._apply_effect(current_base_value)
-
-    def _apply_effect(self, base_value: float) -> float:
-        """Apply the effect to the base value based on operation and multiplier"""
-        if self.current_multiplier == 0.0:
-            return base_value
-
-        if self.operation == "to":
-            # Interpolate from base to target
-            return lerp(base_value, self.value, self.current_multiplier)
-
-        elif self.operation == "by":
-            # Add offset scaled by multiplier
-            return base_value + (self.value * self.current_multiplier)
-
-        elif self.operation == "mul":
-            # Multiply: lerp from 1.0 to factor
-            factor = lerp(1.0, self.value, self.current_multiplier)
-            return base_value * factor
-
-        elif self.operation == "div":
-            # Divide: lerp from 1.0 to 1/divisor
-            divisor = lerp(1.0, self.value, self.current_multiplier)
-            if divisor != 0:
-                return base_value / divisor
-            return base_value
-
-        return base_value
-
-    def _update_stop(self, current_base_value: float) -> float:
-        """Handle graceful stop with optional duration"""
-        if self.stop_duration_ms is None or self.stop_duration_ms == 0:
-            # Immediate stop
-            self.complete = True
-            return current_base_value
-
-        # Graceful stop over duration
-        if self.stop_start_time is None:
-            self.stop_start_time = time.perf_counter()
-
-        elapsed_ms = (time.perf_counter() - self.stop_start_time) * 1000
-        if elapsed_ms >= self.stop_duration_ms:
-            self.complete = True
-            return current_base_value
-
-        # Fade out the current multiplier (from 1.0 to 0.0)
-        t = elapsed_ms / self.stop_duration_ms
-        easing_fn = EASING_FUNCTIONS.get(self.stop_easing, ease_linear)
-        self.current_multiplier = 1.0 - easing_fn(t)
-
-        return self._apply_effect(current_base_value)
-
-    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
-        """Request the effect to stop, optionally over a duration"""
-        self.stop_requested = True
-        self.stop_duration_ms = duration_ms if duration_ms is not None else 0
-        self.stop_easing = easing
 
 
 # ============================================================================
@@ -586,10 +384,10 @@ class Effect:
         self.out_duration_ms: Optional[float] = None
         self.out_easing: str = "linear"
 
-        # Stage-specific callbacks (for property effects)
-        self.after_forward_callback: Optional[Callable] = None
-        self.after_hold_callback: Optional[Callable] = None
-        self.after_revert_callback: Optional[Callable] = None
+        # Stage-specific callbacks (for property effects) - now supports multiple
+        self.after_forward_callbacks: list[Callable] = []
+        self.after_hold_callbacks: list[Callable] = []
+        self.after_revert_callbacks: list[Callable] = []
 
         # Runtime state
         self.phase: str = "not_started"  # "in", "hold", "out", "complete"
@@ -610,15 +408,15 @@ class Effect:
         hold_duration_ms: Optional[float] = None,
         out_duration_ms: Optional[float] = None,
         out_easing: str = "linear",
-        after_forward_callback: Optional[Callable] = None,
-        after_hold_callback: Optional[Callable] = None,
-        after_revert_callback: Optional[Callable] = None
+        after_forward_callbacks: Optional[list[Callable]] = None,
+        after_hold_callbacks: Optional[list[Callable]] = None,
+        after_revert_callbacks: Optional[list[Callable]] = None
     ) -> 'Effect':
         """
         UNIFIED configuration method for all Effect lifecycle settings.
 
         Single source of truth for configuring Effect objects from both
-        PropertyEffectBuilder and EffectBuilderBase.
+        SpeedAccelBuilder and EffectBuilderBase.
 
         Returns self for chaining.
         """
@@ -633,10 +431,13 @@ class Effect:
             self.out_duration_ms = out_duration_ms
         self.out_easing = out_easing
 
-        # Callbacks (only for property effects, but harmless to set on stack effects)
-        self.after_forward_callback = after_forward_callback
-        self.after_hold_callback = after_hold_callback
-        self.after_revert_callback = after_revert_callback
+        # Callbacks - append to existing lists (supports multiple then() calls)
+        if after_forward_callbacks:
+            self.after_forward_callbacks.extend(after_forward_callbacks)
+        if after_hold_callbacks:
+            self.after_hold_callbacks.extend(after_hold_callbacks)
+        if after_revert_callbacks:
+            self.after_revert_callbacks.extend(after_revert_callbacks)
 
         return self
 
@@ -704,9 +505,9 @@ class Effect:
                 # Move to next phase
                 self.current_multiplier = 1.0
 
-                # Fire after-forward callback (property effects only)
-                if self.after_forward_callback:
-                    self.after_forward_callback()
+                # Fire all after-forward callbacks (property effects only)
+                for callback in self.after_forward_callbacks:
+                    callback()
 
                 if self.hold_duration_ms is not None:
                     self.phase = "hold"
@@ -729,9 +530,9 @@ class Effect:
             # Check if we have a duration specified
             if self.hold_duration_ms is not None:
                 if elapsed_ms >= self.hold_duration_ms:
-                    # Fire after-hold callback (property effects only)
-                    if self.after_hold_callback:
-                        self.after_hold_callback()
+                    # Fire all after-hold callbacks (property effects only)
+                    for callback in self.after_hold_callbacks:
+                        callback()
 
                     # Move to next phase
                     if self.out_duration_ms is not None:
@@ -746,9 +547,9 @@ class Effect:
 
         elif self.phase == "out":
             if elapsed_ms >= self.out_duration_ms:
-                # Fire after-revert callback (property effects only)
-                if self.after_revert_callback:
-                    self.after_revert_callback()
+                # Fire all after-revert callbacks (property effects only)
+                for callback in self.after_revert_callbacks:
+                    callback()
 
                 self.phase = "complete"
                 self.complete = True
@@ -893,28 +694,16 @@ class DirectionEffect:
         self._effect.out_easing = value
 
     @property
-    def after_forward_callback(self):
-        return self._effect.after_forward_callback
-
-    @after_forward_callback.setter
-    def after_forward_callback(self, value):
-        self._effect.after_forward_callback = value
+    def after_forward_callbacks(self):
+        return self._effect.after_forward_callbacks
 
     @property
-    def after_hold_callback(self):
-        return self._effect.after_hold_callback
-
-    @after_hold_callback.setter
-    def after_hold_callback(self, value):
-        self._effect.after_hold_callback = value
+    def after_hold_callbacks(self):
+        return self._effect.after_hold_callbacks
 
     @property
-    def after_revert_callback(self):
-        return self._effect.after_revert_callback
-
-    @after_revert_callback.setter
-    def after_revert_callback(self, value):
-        self._effect.after_revert_callback = value
+    def after_revert_callbacks(self):
+        return self._effect.after_revert_callbacks
 
     @property
     def phase(self):
@@ -935,9 +724,9 @@ class DirectionEffect:
         hold_duration_ms: Optional[float] = None,
         out_duration_ms: Optional[float] = None,
         out_easing: str = "linear",
-        after_forward_callback: Optional[Callable] = None,
-        after_hold_callback: Optional[Callable] = None,
-        after_revert_callback: Optional[Callable] = None
+        after_forward_callbacks: Optional[list[Callable]] = None,
+        after_hold_callbacks: Optional[list[Callable]] = None,
+        after_revert_callbacks: Optional[list[Callable]] = None
     ) -> None:
         """Configure lifecycle - delegates to unified Effect"""
         self._effect.configure_lifecycle(
@@ -946,9 +735,9 @@ class DirectionEffect:
             hold_duration_ms=hold_duration_ms,
             out_duration_ms=out_duration_ms,
             out_easing=out_easing,
-            after_forward_callback=after_forward_callback,
-            after_hold_callback=after_hold_callback,
-            after_revert_callback=after_revert_callback
+            after_forward_callbacks=after_forward_callbacks,
+            after_hold_callbacks=after_hold_callbacks,
+            after_revert_callbacks=after_revert_callbacks
         )
 
     def start(self, current_direction: Vec2 = None) -> None:
@@ -1021,9 +810,9 @@ class ReverseEffect:
         self.out_easing: str = "linear"
 
         # Callbacks
-        self.after_forward_callback: Optional[Callable] = None
-        self.after_hold_callback: Optional[Callable] = None
-        self.after_revert_callback: Optional[Callable] = None
+        self.after_forward_callbacks: list[Callable] = []
+        self.after_hold_callbacks: list[Callable] = []
+        self.after_revert_callbacks: list[Callable] = []
 
         # State
         self.phase_start_time: Optional[float] = None
@@ -1038,9 +827,9 @@ class ReverseEffect:
         hold_duration_ms: Optional[float] = None,
         out_duration_ms: Optional[float] = None,
         out_easing: str = "linear",
-        after_forward_callback: Optional[Callable] = None,
-        after_hold_callback: Optional[Callable] = None,
-        after_revert_callback: Optional[Callable] = None
+        after_forward_callbacks: Optional[list[Callable]] = None,
+        after_hold_callbacks: Optional[list[Callable]] = None,
+        after_revert_callbacks: Optional[list[Callable]] = None
     ) -> None:
         """Configure lifecycle phases"""
         self.in_duration_ms = in_duration_ms
@@ -1048,9 +837,12 @@ class ReverseEffect:
         self.hold_duration_ms = hold_duration_ms
         self.out_duration_ms = out_duration_ms
         self.out_easing = out_easing
-        self.after_forward_callback = after_forward_callback
-        self.after_hold_callback = after_hold_callback
-        self.after_revert_callback = after_revert_callback
+        if after_forward_callbacks:
+            self.after_forward_callbacks.extend(after_forward_callbacks)
+        if after_hold_callbacks:
+            self.after_hold_callbacks.extend(after_hold_callbacks)
+        if after_revert_callbacks:
+            self.after_revert_callbacks.extend(after_revert_callbacks)
 
     def start(self, start_speed: float, current_direction: Vec2) -> None:
         """Start the reverse effect"""
@@ -1114,20 +906,20 @@ class ReverseEffect:
                 rig_state._speed = lerp(-self.start_speed, self.start_speed, eased)
 
                 if progress >= 1.0:
-                    if self.after_revert_callback:
-                        self.after_revert_callback()
+                    for callback in self.after_revert_callbacks:
+                        callback()
                     self.complete = True
             else:
                 # Instant revert
                 rig_state._speed = self.start_speed
-                if self.after_revert_callback:
-                    self.after_revert_callback()
+                for callback in self.after_revert_callbacks:
+                    callback()
                 self.complete = True
 
     def _transition_to_hold(self) -> None:
         """Transition from forward to hold phase"""
-        if self.after_forward_callback:
-            self.after_forward_callback()
+        for callback in self.after_forward_callbacks:
+            callback()
 
         self.phase_start_time = time.perf_counter()
         if self.hold_duration_ms is not None:
@@ -1140,8 +932,8 @@ class ReverseEffect:
 
     def _transition_to_out(self) -> None:
         """Transition from hold to out phase"""
-        if self.after_hold_callback:
-            self.after_hold_callback()
+        for callback in self.after_hold_callbacks:
+            callback()
 
         self.phase_start_time = time.perf_counter()
         self.phase = "out"
@@ -1152,6 +944,180 @@ class ReverseEffect:
         self.out_easing = easing
         self.phase_start_time = time.perf_counter()
         self.phase = "out"
+
+
+class PositionEffect:
+    """
+    Represents a temporary position offset with lifecycle phases.
+
+    Uses the unified Effect class for lifecycle management, with position-specific
+    application logic for Vec2 offset values. Supports both absolute and relative modes.
+    """
+    def __init__(self, offset: Vec2, mode: str = "relative", name: Optional[str] = None):
+        """
+        Args:
+            offset: Position offset (relative) or target position (absolute)
+            mode: "relative" or "absolute"
+            name: Optional name for stopping early
+        """
+        self.offset = offset  # Vec2 offset or target position
+        self.mode = mode  # "relative" or "absolute"
+        self.name = name  # Optional name for stopping early
+        self.original_pos: Optional[Vec2] = None  # Captured at start
+
+        # Create unified Effect for lifecycle management
+        self._effect = Effect(value=0.0, operation="add", name=name)
+
+    # Delegate all lifecycle properties to unified Effect
+    @property
+    def in_duration_ms(self):
+        return self._effect.in_duration_ms
+
+    @in_duration_ms.setter
+    def in_duration_ms(self, value):
+        self._effect.in_duration_ms = value
+
+    @property
+    def in_easing(self):
+        return self._effect.in_easing
+
+    @in_easing.setter
+    def in_easing(self, value):
+        self._effect.in_easing = value
+
+    @property
+    def hold_duration_ms(self):
+        return self._effect.hold_duration_ms
+
+    @hold_duration_ms.setter
+    def hold_duration_ms(self, value):
+        self._effect.hold_duration_ms = value
+
+    @property
+    def out_duration_ms(self):
+        return self._effect.out_duration_ms
+
+    @out_duration_ms.setter
+    def out_duration_ms(self, value):
+        self._effect.out_duration_ms = value
+
+    @property
+    def out_easing(self):
+        return self._effect.out_easing
+
+    @out_easing.setter
+    def out_easing(self, value):
+        self._effect.out_easing = value
+
+    @property
+    def after_forward_callbacks(self):
+        return self._effect.after_forward_callbacks
+
+    @property
+    def after_hold_callbacks(self):
+        return self._effect.after_hold_callbacks
+
+    @property
+    def after_revert_callbacks(self):
+        return self._effect.after_revert_callbacks
+
+    @property
+    def phase(self):
+        return self._effect.phase
+
+    @property
+    def complete(self):
+        return self._effect.complete
+
+    @property
+    def current_multiplier(self):
+        return self._effect.current_multiplier
+
+    def configure_lifecycle(
+        self,
+        in_duration_ms: Optional[float] = None,
+        in_easing: str = "linear",
+        hold_duration_ms: Optional[float] = None,
+        out_duration_ms: Optional[float] = None,
+        out_easing: str = "linear",
+        after_forward_callbacks: Optional[list[Callable]] = None,
+        after_hold_callbacks: Optional[list[Callable]] = None,
+        after_revert_callbacks: Optional[list[Callable]] = None
+    ) -> None:
+        """Configure lifecycle - delegates to unified Effect"""
+        self._effect.configure_lifecycle(
+            in_duration_ms=in_duration_ms,
+            in_easing=in_easing,
+            hold_duration_ms=hold_duration_ms,
+            out_duration_ms=out_duration_ms,
+            out_easing=out_easing,
+            after_forward_callbacks=after_forward_callbacks,
+            after_hold_callbacks=after_hold_callbacks,
+            after_revert_callbacks=after_revert_callbacks
+        )
+
+    def start(self, current_pos: Vec2) -> None:
+        """Start the effect lifecycle"""
+        from talon import ctrl
+        # Capture current actual mouse position for revert
+        self.original_pos = Vec2(*ctrl.mouse_pos())
+        self._effect.start()
+
+    def update(self) -> Optional[Vec2]:
+        """
+        Update effect and return the target position to move to, or None if complete.
+
+        Returns:
+            Target position to move to, or None if effect is complete
+        """
+        from talon import ctrl
+
+        # Update the unified effect lifecycle
+        self._effect.update()
+
+        if self._effect.complete:
+            return None
+
+        # Get current mouse position
+        current_pos = Vec2(*ctrl.mouse_pos())
+
+        # Calculate target position based on phase and multiplier
+        if self._effect.phase in ("in", "hold"):
+            # Moving forward to target
+            if self.mode == "absolute":
+                # Interpolate from original to target
+                target = Vec2(
+                    lerp(self.original_pos.x, self.offset.x, self._effect.current_multiplier),
+                    lerp(self.original_pos.y, self.offset.y, self._effect.current_multiplier)
+                )
+            else:  # relative
+                # Apply scaled offset from original position
+                target = Vec2(
+                    self.original_pos.x + (self.offset.x * self._effect.current_multiplier),
+                    self.original_pos.y + (self.offset.y * self._effect.current_multiplier)
+                )
+            return target
+
+        elif self._effect.phase == "out":
+            # Reverting back to original position
+            # Get current position (which may have been modified by forward phase)
+            forward_pos = current_pos
+            if self._effect.current_multiplier > 0:
+                # Still has some effect, interpolate back
+                target = Vec2(
+                    lerp(forward_pos.x, self.original_pos.x, 1.0 - self._effect.current_multiplier),
+                    lerp(forward_pos.y, self.original_pos.y, 1.0 - self._effect.current_multiplier)
+                )
+            else:
+                # Fully reverted
+                target = self.original_pos
+            return target
+
+        return None
+
+    def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
+        """Request the effect to stop"""
+        self._effect.request_stop(duration_ms, easing)
 
 
 # ============================================================================

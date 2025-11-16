@@ -3,7 +3,7 @@
 from typing import Optional, TYPE_CHECKING, Union, TypeVar, Generic, Callable
 from ..core import Vec2
 from ..effects import EffectStack, EffectLifecycle
-from .contracts import PropertyOperationsContract
+from .contracts import PropertyOperationsContract, MultiSegmentMixin
 from .rate_utils import (
     validate_rate_params,
     calculate_duration_from_rate,
@@ -18,11 +18,13 @@ if TYPE_CHECKING:
 T = TypeVar('T', bound='EffectBuilderBase')
 
 
-class EffectBuilderBase(PropertyOperationsContract[T]):
+class EffectBuilderBase(MultiSegmentMixin[T], PropertyOperationsContract[T]):
     """
     Base class for all effect property builders.
     Consolidates shared implementation for operations and timing methods.
     Subclasses only need to specify property name and override type hints.
+
+    Uses MultiSegmentMixin for unified operation chaining behavior.
     """
     # Override in subclasses
     _property_name: str = None
@@ -34,16 +36,23 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         self._last_op_type: Optional[str] = None
         self._started = False
 
-        # Stage-specific callbacks
-        self._after_forward_callback: Optional[callable] = None
-        self._after_hold_callback: Optional[callable] = None
-        self._after_revert_callback: Optional[callable] = None
+        # Stage-specific callbacks - support multiple then() calls
+        self._after_forward_callbacks: list[Callable] = []
+        self._after_hold_callbacks: list[Callable] = []
+        self._after_revert_callbacks: list[Callable] = []
         self._current_stage: str = "initial"
 
         # Timing configuration
         self._hold_duration_ms: Optional[float] = None
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
+
+        # Multi-segment chaining flag (for MultiSegmentMixin)
+        self._is_chaining: bool = False  # Set to True by timing methods
+
+        # Pre-configured repeat strategy (from sugar syntax)
+        self._pending_repeat_strategy: Optional[str] = None
+        self._pending_repeat_args: tuple = ()
 
     def __del__(self):
         try:
@@ -81,7 +90,7 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         key = f"{self.name}:{self._property_name}:{op_type}"
         if key not in self.rig_state._effect_lifecycles:
             stack = self._get_or_create_stack(op_type)
-            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
+            self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack, self.rig_state)
         return self.rig_state._effect_lifecycles[key]
 
     def _apply_operation(self, op_type: str, value: Union[float, Vec2]) -> bool:
@@ -91,6 +100,11 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             True if operation was applied, False if rejected by strategy
         """
         key = f"{self.name}:{self._property_name}:{op_type}"
+
+        # Apply pending repeat strategy if set (from sugar syntax)
+        if self._pending_repeat_strategy and key not in self.rig_state._effect_lifecycles:
+            self.on_repeat(self._pending_repeat_strategy, *self._pending_repeat_args)
+            self._pending_repeat_strategy = None  # Clear after applying
 
         # Check if there's a lifecycle managing this operation
         if key in self.rig_state._effect_lifecycles:
@@ -105,15 +119,48 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
 
         return True
 
+    # Override MultiSegmentMixin operations to apply effect-specific logic before chaining
     def to(self, value: Union[float, Vec2]) -> T:
         """Set absolute value"""
+        # Check if in chaining mode (uses MultiSegmentMixin logic)
+        if self._is_chaining:
+            return self._queue_next_segment("to", (value,))
+
         stack = self._get_or_create_stack("to")
         stack.add_operation(value)
         self._last_op_type = "to"
         return self
 
+    def add(self, value: Union[float, Vec2]) -> T:
+        """Add delta (stacks by default - unlimited)"""
+        # Check if in chaining mode (uses MultiSegmentMixin logic)
+        if self._is_chaining:
+            return self._queue_next_segment("add", (value,))
+
+        self._apply_operation("add", value)
+        self._last_op_type = "add"
+        return self
+
+    # by() inherited from MultiSegmentMixin - calls add()
+
+    def sub(self, value: Union[float, Vec2]) -> T:
+        """Subtract (stacks by default - unlimited)"""
+        negated = -value if isinstance(value, (int, float)) else Vec2(-value.x, -value.y)
+
+        # Check if in chaining mode (uses MultiSegmentMixin logic)
+        if self._is_chaining:
+            return self._queue_next_segment("sub", (negated,))
+
+        self._apply_operation("sub", negated)
+        self._last_op_type = "sub"
+        return self
+
     def mul(self, value: float) -> T:
         """Multiply (stacks by default - unlimited)"""
+        # Check if in chaining mode (uses MultiSegmentMixin logic)
+        if self._is_chaining:
+            return self._queue_next_segment("mul", (value,))
+
         self._apply_operation("mul", value)
         self._last_op_type = "mul"
         return self
@@ -122,26 +169,28 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         """Divide (stacks by default - unlimited)"""
         if abs(value) < 1e-6:
             raise ValueError("Cannot divide by zero or near-zero value")
+
+        # Check if in chaining mode (uses MultiSegmentMixin logic)
+        if self._is_chaining:
+            return self._queue_next_segment("div", (1.0 / value,))
+
         self._apply_operation("div", 1.0 / value)
         self._last_op_type = "div"
         return self
 
-    def add(self, value: Union[float, Vec2]) -> T:
-        """Add delta (stacks by default - unlimited)"""
-        self._apply_operation("add", value)
-        self._last_op_type = "add"
-        return self
-
-    def by(self, value: Union[float, Vec2]) -> T:
-        """Alias for add() - add delta"""
-        return self.add(value)
-
-    def sub(self, value: Union[float, Vec2]) -> T:
-        """Subtract (stacks by default - unlimited)"""
-        negated = -value if isinstance(value, (int, float)) else Vec2(-value.x, -value.y)
-        self._apply_operation("sub", negated)
-        self._last_op_type = "sub"
-        return self
+    def _get_queue_builder(self, queue_namespace):
+        """Get the builder for this operation type from queue namespace (MultiSegmentMixin hook)"""
+        # Return the appropriate property builder from EffectBuilder.queue namespace
+        if self._property_name == "speed":
+            return queue_namespace.speed
+        elif self._property_name == "accel":
+            return queue_namespace.accel
+        elif self._property_name == "direction":
+            return queue_namespace.direction
+        elif self._property_name == "pos":
+            return queue_namespace.pos
+        else:
+            raise ValueError(f"Unknown property: {self._property_name}")
 
     def on_repeat(self, strategy: str = "stack", *args) -> T:
         """Configure behavior when effect is called multiple times
@@ -198,6 +247,10 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         if self._last_op_type is None:
             raise ValueError("No operation to apply .over() to - call .mul()/.div()/.add()/.sub() first")
 
+        # Validate: cannot call over() twice on same segment
+        if self._is_chaining and self._current_stage == "after_forward":
+            raise ValueError("Cannot call .over() multiple times on the same segment. Use separate operations for chaining.")
+
     def _calculate_over_duration_from_rate(
         self,
         rate_speed: Optional[float],
@@ -225,13 +278,25 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             hold_duration_ms=effect.hold_duration_ms,  # Preserve existing
             out_duration_ms=effect.out_duration_ms,    # Preserve existing
             out_easing=effect.out_easing,             # Preserve existing
-            after_forward_callback=self._after_forward_callback,
-            after_hold_callback=effect.after_hold_callback,  # Preserve existing
-            after_revert_callback=effect.after_revert_callback  # Preserve existing
+            after_forward_callbacks=self._after_forward_callbacks if self._after_forward_callbacks else None,
+            after_hold_callbacks=None,  # Preserve existing
+            after_revert_callbacks=None  # Preserve existing
         )
 
     def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
-        """Start rig if not started"""
+        """Start rig if not started and set up queue execution"""
+        # Add callback to execute next queued segment if no hold/revert will be called
+        # (If hold/revert are called, they will add their own callbacks)
+        if self._after_forward_callbacks is None:
+            self._after_forward_callbacks = []
+
+        tag_name = self.name
+        rig_state = self.rig_state
+        def execute_next_queued_segment():
+            rig_state._execute_next_segment(tag_name)
+
+        self._after_forward_callbacks.append(execute_next_queued_segment)
+
         if not self._started:
             self.rig_state.start()
             self._started = True
@@ -241,18 +306,34 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         if self._last_op_type is None:
             raise ValueError("No operation to apply .hold() to - call .mul()/.div()/.add()/.sub() first")
 
+        # Validate: cannot call hold() if segment already has hold
+        if self._is_chaining and self._current_stage == "after_hold":
+            raise ValueError("Cannot call .hold() multiple times on the same segment.")
+
     def _after_hold_configured(self, duration_ms: float) -> None:
         """UNIFIED: Apply hold using Effect.configure_lifecycle"""
         effect = self._get_or_create_effect(self._last_op_type)
+
+        # Add callback to execute next queued segment if no revert will be called
+        if self._after_hold_callbacks is None:
+            self._after_hold_callbacks = []
+
+        tag_name = self.name
+        rig_state = self.rig_state
+        def execute_next_queued_segment():
+            rig_state._execute_next_segment(tag_name)
+
+        self._after_hold_callbacks.append(execute_next_queued_segment)
+
         effect.configure_lifecycle(
             in_duration_ms=effect.in_duration_ms,    # Preserve existing
             in_easing=effect.in_easing,              # Preserve existing
             hold_duration_ms=duration_ms,
             out_duration_ms=effect.out_duration_ms,  # Preserve existing
             out_easing=effect.out_easing,            # Preserve existing
-            after_forward_callback=effect.after_forward_callback,  # Preserve existing
-            after_hold_callback=self._after_hold_callback,
-            after_revert_callback=effect.after_revert_callback  # Preserve existing
+            after_forward_callbacks=None,  # Preserve existing
+            after_hold_callbacks=self._after_hold_callbacks if self._after_hold_callbacks else None,
+            after_revert_callbacks=None  # Preserve existing
         )
 
         if not self._started:
@@ -262,9 +343,13 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
     def _before_revert(self, duration_ms: Optional[float], easing: str,
                       rate_speed: Optional[float], rate_accel: Optional[float],
                       rate_rotation: Optional[float]) -> None:
-        """Validate that an operation was called first"""
+        """Validate revert rules"""
         if self._last_op_type is None:
             raise ValueError("No operation to apply .revert() to - call .mul()/.div()/.add()/.sub() first")
+
+        # Validate: cannot call revert() twice on same segment
+        if self._is_chaining and self._current_stage == "after_revert":
+            raise ValueError("Cannot call .revert() multiple times on the same segment.")
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],
@@ -286,15 +371,27 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         if effect.in_duration_ms is not None and hold_ms is None:
             hold_ms = 0
 
+        # Add callback to execute next queued segment when this one completes
+        if self._after_revert_callbacks is None:
+            self._after_revert_callbacks = []
+
+        # Create callback to execute next segment from queue
+        tag_name = self.name
+        rig_state = self.rig_state
+        def execute_next_queued_segment():
+            rig_state._execute_next_segment(tag_name)
+
+        self._after_revert_callbacks.append(execute_next_queued_segment)
+
         effect.configure_lifecycle(
             in_duration_ms=effect.in_duration_ms,    # Preserve existing
             in_easing=effect.in_easing,              # Preserve existing
             hold_duration_ms=hold_ms,
             out_duration_ms=duration_ms,
             out_easing=easing,
-            after_forward_callback=effect.after_forward_callback,  # Preserve existing
-            after_hold_callback=effect.after_hold_callback,  # Preserve existing
-            after_revert_callback=self._after_revert_callback
+            after_forward_callbacks=None,  # Preserve existing
+            after_hold_callbacks=None,  # Preserve existing
+            after_revert_callbacks=self._after_revert_callbacks if self._after_revert_callbacks else None
         )
 
         if not self._started:
@@ -313,14 +410,14 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             hold_duration_ms=effect.hold_duration_ms,
             out_duration_ms=effect.out_duration_ms,
             out_easing=effect.out_easing,
-            after_forward_callback=self._after_forward_callback,
-            after_hold_callback=self._after_hold_callback,
-            after_revert_callback=self._after_revert_callback
+            after_forward_callbacks=self._after_forward_callbacks if self._after_forward_callbacks else None,
+            after_hold_callbacks=self._after_hold_callbacks if self._after_hold_callbacks else None,
+            after_revert_callbacks=self._after_revert_callbacks if self._after_revert_callbacks else None
         )
 
 class EffectBuilder:
     """
-    Builder for named effect entities.
+    Builder for named effect entities (tags).
 
     Effects modify base properties using direct operations:
     - .to(value): Set absolute value
@@ -332,12 +429,20 @@ class EffectBuilder:
     Effects use strict syntax - shorthand like speed(10) is not allowed.
     Use explicit operations like speed.to(10) or speed.add(10).
 
+    Sugar syntax for repeat strategies (only for tags):
+        rig.tag("x").stack.pos.to(...)         # Unlimited stacking
+        rig.tag("x").stack(3).pos.to(...)      # Max 3 stacks
+        rig.tag("x").replace.pos.to(...)       # Replace on repeat
+        rig.tag("x").queue.pos.to(...)         # Queue segments
+        rig.tag("x").throttle(300).pos.to(...) # Throttle 300ms
+        rig.tag("x").ignore.pos.to(...)        # Ignore repeats
+
     Examples:
-        rig.effect("sprint").speed.mul(2)       # Double speed
-        rig.effect("boost").speed.add(10)       # Add 10 to speed
-        rig.effect("drift").direction.add(15)   # Rotate 15 degrees
+        rig.tag("sprint").speed.mul(2)       # Double speed
+        rig.tag("boost").speed.add(10)       # Add 10 to speed
+        rig.tag("drift").direction.add(15)   # Rotate 15 degrees
     """
-    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = True):
+    def __init__(self, rig_state: 'RigState', name: str, strict_mode: bool = True, repeat_strategy: Optional[str] = None, repeat_args: Optional[tuple] = None):
         self.rig_state = rig_state
         self.name = name
         self.strict_mode = strict_mode
@@ -345,12 +450,18 @@ class EffectBuilder:
         self._accel_builder = None
         self._direction_builder = None
         self._pos_builder = None
+        self._repeat_strategy = repeat_strategy
+        self._repeat_args = repeat_args or ()
 
     @property
     def speed(self) -> 'EffectSpeedBuilder':
         """Access speed effect operations"""
         if self._speed_builder is None:
             self._speed_builder = EffectSpeedBuilder(self.rig_state, self.name, self.strict_mode)
+            # Apply pre-configured repeat strategy if set
+            if self._repeat_strategy:
+                self._speed_builder._pending_repeat_strategy = self._repeat_strategy
+                self._speed_builder._pending_repeat_args = self._repeat_args
         return self._speed_builder
 
     @property
@@ -358,6 +469,10 @@ class EffectBuilder:
         """Access accel effect operations"""
         if self._accel_builder is None:
             self._accel_builder = EffectAccelBuilder(self.rig_state, self.name, self.strict_mode)
+            # Apply pre-configured repeat strategy if set
+            if self._repeat_strategy:
+                self._accel_builder._pending_repeat_strategy = self._repeat_strategy
+                self._accel_builder._pending_repeat_args = self._repeat_args
         return self._accel_builder
 
     @property
@@ -365,6 +480,10 @@ class EffectBuilder:
         """Access direction effect operations (rotation)"""
         if self._direction_builder is None:
             self._direction_builder = EffectDirectionBuilder(self.rig_state, self.name, self.strict_mode)
+            # Apply pre-configured repeat strategy if set
+            if self._repeat_strategy:
+                self._direction_builder._pending_repeat_strategy = self._repeat_strategy
+                self._direction_builder._pending_repeat_args = self._repeat_args
         return self._direction_builder
 
     @property
@@ -372,7 +491,67 @@ class EffectBuilder:
         """Access position effect operations (offsets)"""
         if self._pos_builder is None:
             self._pos_builder = EffectPosBuilder(self.rig_state, self.name, self.strict_mode)
+            # Apply pre-configured repeat strategy if set
+            if self._repeat_strategy:
+                self._pos_builder._pending_repeat_strategy = self._repeat_strategy
+                self._pos_builder._pending_repeat_args = self._repeat_args
         return self._pos_builder
+
+    # Sugar syntax for repeat strategies
+    @property
+    def stack(self) -> 'EffectBuilder':
+        """Set repeat strategy to stack (unlimited or with max count)
+
+        Usage:
+            rig.tag("x").stack.pos.to(...)      # Unlimited stacking
+            rig.tag("x").stack(3).pos.to(...)   # Max 3 stacks
+        """
+        return EffectBuilder(self.rig_state, self.name, self.strict_mode, "stack", ())
+
+    def __call__(self, *args) -> 'EffectBuilder':
+        """Allow stack(n) syntax for max stack count"""
+        if self._repeat_strategy == "stack" and len(args) == 1:
+            return EffectBuilder(self.rig_state, self.name, self.strict_mode, "stack", (args[0],))
+        elif self._repeat_strategy == "throttle" and len(args) == 1:
+            return EffectBuilder(self.rig_state, self.name, self.strict_mode, "throttle", (args[0],))
+        else:
+            raise ValueError(f"Invalid call on EffectBuilder. Use stack(n) or throttle(ms) only.")
+
+    @property
+    def replace(self) -> 'EffectBuilder':
+        """Set repeat strategy to replace
+
+        Usage:
+            rig.tag("x").replace.pos.to(...)
+        """
+        return EffectBuilder(self.rig_state, self.name, self.strict_mode, "replace", ())
+
+    @property
+    def queue(self) -> 'EffectBuilder':
+        """Set repeat strategy to queue
+
+        Usage:
+            rig.tag("x").queue.pos.to(...)
+        """
+        return EffectBuilder(self.rig_state, self.name, self.strict_mode, "queue", ())
+
+    @property
+    def ignore(self) -> 'EffectBuilder':
+        """Set repeat strategy to ignore
+
+        Usage:
+            rig.tag("x").ignore.pos.to(...)
+        """
+        return EffectBuilder(self.rig_state, self.name, self.strict_mode, "ignore", ())
+
+    @property
+    def throttle(self) -> 'EffectBuilder':
+        """Set repeat strategy to throttle (requires duration via call)
+
+        Usage:
+            rig.tag("x").throttle(300).pos.to(...)
+        """
+        return EffectBuilder(self.rig_state, self.name, self.strict_mode, "throttle", ())
 
     def revert(
         self,
@@ -432,7 +611,7 @@ class EffectBuilder:
             elif duration_ms is not None and duration_ms > 0:
                 # Effect has no lifecycle but user wants gradual revert - create lifecycle for fadeout
                 stack = self.rig_state._effect_stacks[key]
-                lifecycle = EffectLifecycle(stack)
+                lifecycle = EffectLifecycle(stack, self.rig_state)
                 # Configure to start at full strength and fade out
                 lifecycle.configure_lifecycle(
                     in_duration_ms=None,  # No fade in

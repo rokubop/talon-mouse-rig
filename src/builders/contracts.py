@@ -7,6 +7,7 @@ from .rate_utils import validate_rate_params
 if TYPE_CHECKING:
     from ..state import RigState
     from ..core import Vec2
+    from .effect import EffectBuilder
 
 # Type variable for self-return types
 T = TypeVar('T')
@@ -16,55 +17,154 @@ class OperationsContract(ABC, Generic[T]):
     """
     Contract for classes that support standard operations.
 
-    All property builders (base, effect, force) must implement:
+    All property builders must implement:
     - () - shorthand for .to()
     - .to(value) - set absolute value
     - .add(delta) - add delta
-    - .by(delta) - alias for .add()
-    - .sub(delta) - subtract
-    - .mul(factor) - multiply
-    - .div(divisor) - divide
+    - .by(delta) - add delta (alias for .add)
+    - .sub(delta) - subtract delta
+    - .mul(factor) - multiply by factor
+    - .div(divisor) - divide by divisor
     """
 
     @abstractmethod
-    def __call__(self, value: Union[float, 'Vec2']) -> T:
+    def __call__(self, *args) -> T:
         """Shorthand for .to() - set absolute value"""
         pass
 
     @abstractmethod
-    def to(self, value: Union[float, 'Vec2']) -> T:
+    def to(self, *args) -> T:
         """Set absolute value"""
         pass
 
     @abstractmethod
-    def add(self, value: Union[float, 'Vec2']) -> T:
+    def add(self, *args) -> T:
         """Add delta"""
         pass
 
     @abstractmethod
-    def by(self, value: Union[float, 'Vec2']) -> T:
-        """Add delta (alias for .add())"""
+    def by(self, *args) -> T:
+        """Add delta (alias for .add)"""
         pass
 
     @abstractmethod
-    def sub(self, value: Union[float, 'Vec2']) -> T:
+    def sub(self, *args) -> T:
         """Subtract delta"""
         pass
 
     @abstractmethod
-    def mul(self, factor: float) -> T:
+    def mul(self, value: float) -> T:
         """Multiply by factor"""
         pass
 
     @abstractmethod
-    def div(self, divisor: float) -> T:
+    def div(self, value: float) -> T:
         """Divide by divisor"""
+        pass
+
+
+class MultiSegmentMixin(Generic[T]):
+    """
+    Mixin that adds multi-segment chaining support to operation builders.
+
+    Enables sequential execution of operations when combined with timing methods.
+    Uses the unified effect system's queue strategy for both named and anonymous tags.
+
+    When a timing method (.over/.hold/.revert) is called:
+    1. For anonymous builders: assigns self.name = "__anon_1" (if not set)
+    2. Configures that tag with "queue" repeat strategy
+    3. Sets _is_chaining = True to enable queue mode
+    4. Subsequent operations queue through the effect system via self.name
+
+    Requires:
+    - rig_state: RigState
+    - name: str (tag name - may be assigned by timing method for anonymous)
+    - _is_chaining: bool (tracks if in chain mode)
+    - _property_name: str (e.g., "pos", "speed", "direction")
+    """
+
+    rig_state: 'RigState'
+    name: str
+    _is_chaining: bool
+    _property_name: str
+
+    def _operation_or_chain(self, operation: str, args: tuple) -> T:
+        """Generic handler for all operations - chains or raises error
+
+        If in chaining mode (timing method was called), queue the operation.
+        Otherwise, raise error about needing timing method.
+        """
+        if self._is_chaining:
+            return self._queue_next_segment(operation, args)
+        raise ValueError(
+            f"Cannot call two .{operation}() operations in a row.\n\n"
+            f"Use a timing method (.over, .hold, .revert) before chaining:\n"
+            f"  rig.{self._property_name}.{operation}(...).over(150).{operation}(...)"
+        )
+
+    def to(self, *args) -> T:
+        """Set absolute value - chains to next segment if locked"""
+        return self._operation_or_chain("to", args)
+
+    def add(self, *args) -> T:
+        """Add delta - chains to next segment if locked"""
+        return self._operation_or_chain("add", args)
+
+    def by(self, *args) -> T:
+        """Add delta (alias for .add) - chains to next segment if locked"""
+        return self._operation_or_chain("by", args)
+
+    def sub(self, *args) -> T:
+        """Subtract delta - chains to next segment if locked"""
+        return self._operation_or_chain("sub", args)
+
+    def mul(self, value: float) -> T:
+        """Multiply - chains to next segment if locked"""
+        return self._operation_or_chain("mul", (value,))
+
+    def div(self, value: float) -> T:
+        """Divide - chains to next segment if locked"""
+        return self._operation_or_chain("div", (value,))
+
+    def _queue_next_segment(self, operation: str, args: tuple) -> T:
+        """Queue next segment for execution after current segment completes
+
+        Auto-assigns tag name for anonymous builders on first queue operation.
+        Uses the unified effect system's queue mechanism via self.name.
+        """
+        # Import here to avoid circular dependency at runtime
+        from .effect import EffectBuilder
+
+        # Auto-assign tag for anonymous builders on first queue
+        if not self.name:
+            self.name = self.rig_state._generate_internal_tag()
+            # Configure queue strategy for this tag
+            EffectBuilder(self.rig_state, self.name, strict_mode=True).on_repeat("queue")
+
+        # Create execution callback
+        def execute_segment():
+            tagged_builder = EffectBuilder(self.rig_state, self.name, strict_mode=True)
+            op_builder = self._get_queue_builder(tagged_builder.queue)
+            getattr(op_builder, operation)(*args)
+
+        # Queue this segment via RigState's centralized queue using self.name
+        self.rig_state._queue_segment(self.name, execute_segment)
+
+        # Return self for chaining
+        return self
+
+    @abstractmethod
+    def _get_queue_builder(self, queue_namespace):
+        """Get the builder for this operation type from queue namespace"""
         pass
 
 
 class TimingMethodsContract(ABC, Generic[T]):
     """
-    Contract for classes that support timing methods.
+    Contract for timing methods that control animation/transition timing.
+
+    Provides segment locking mechanism: after .over(), .hold(), or .revert()
+    is called, the segment becomes "locked" enabling multi-segment chaining.
 
     All builders with animations/transitions must implement:
     - .over() - transition/fade in over duration or at rate
@@ -110,6 +210,10 @@ class TimingMethodsContract(ABC, Generic[T]):
 
         self._current_stage = "after_forward"
 
+        # Enable multi-segment chaining
+        if hasattr(self, '_is_chaining'):
+            self._is_chaining = True
+
         # Hook for post-processing (start rig, create objects, disable instant mode, etc.)
         self._after_over_configured(duration_ms, easing)
 
@@ -122,6 +226,10 @@ class TimingMethodsContract(ABC, Generic[T]):
 
         self._hold_duration_ms = duration_ms
         self._current_stage = "after_hold"
+
+        # Enable multi-segment chaining
+        if hasattr(self, '_is_chaining'):
+            self._is_chaining = True
 
         # Hook for post-processing (e.g., start rig ticking, create effects)
         self._after_hold_configured(duration_ms)
@@ -165,6 +273,10 @@ class TimingMethodsContract(ABC, Generic[T]):
         self._out_interpolation = interpolation
         self._current_stage = "after_revert"
 
+        # Enable multi-segment chaining
+        if hasattr(self, '_is_chaining'):
+            self._is_chaining = True
+
         # Hook for post-processing
         self._after_revert_configured(duration_ms, easing)
 
@@ -173,18 +285,26 @@ class TimingMethodsContract(ABC, Generic[T]):
     def then(self, callback: 'Callable') -> T:
         """Execute callback at current point in lifecycle chain - default implementation
 
-        Can be called after .over(), .hold(), or .revert() to fire callback
-        when that stage completes.
+        Can be called multiple times after .over(), .hold(), or .revert().
+        All callbacks fire in order when that stage completes.
 
         Args:
             callback: Function to call when current stage completes
         """
+        # Support multiple then() calls by using lists
+        if not hasattr(self, '_after_forward_callbacks'):
+            self._after_forward_callbacks = []
+        if not hasattr(self, '_after_hold_callbacks'):
+            self._after_hold_callbacks = []
+        if not hasattr(self, '_after_revert_callbacks'):
+            self._after_revert_callbacks = []
+
         if self._current_stage == "after_forward":
-            self._after_forward_callback = callback
+            self._after_forward_callbacks.append(callback)
         elif self._current_stage == "after_hold":
-            self._after_hold_callback = callback
+            self._after_hold_callbacks.append(callback)
         elif self._current_stage == "after_revert":
-            self._after_revert_callback = callback
+            self._after_revert_callbacks.append(callback)
 
         # Hook for updating underlying effect objects
         self._after_then_configured(callback)
@@ -327,7 +447,7 @@ class PropertyOperationsContract(OperationsContract[T], TimingMethodsContract[T]
     Combined contract for property BUILDERS that support both operations and timing.
 
     This is the full contract for builders like:
-    - PropertyEffectBuilder (returned from controllers)
+    - SpeedAccelBuilder (returned from controllers)
     - EffectSpeedBuilder, EffectAccelBuilder (effects)
     - NamedForceSpeedController, NamedForceAccelController (forces)
     """

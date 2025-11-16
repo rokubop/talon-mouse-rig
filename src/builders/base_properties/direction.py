@@ -4,7 +4,7 @@ import math
 from typing import Optional, Callable, TYPE_CHECKING
 from ...core import Vec2, clamp, DirectionTransition, ReverseTransition, EPSILON
 from ...effects import DirectionEffect, ReverseEffect
-from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract, MultiSegmentMixin
 
 if TYPE_CHECKING:
     from ...state import RigState
@@ -26,11 +26,17 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
 
-        # Stage-specific callbacks
-        self._after_forward_callback: Optional[Callable] = None
-        self._after_hold_callback: Optional[Callable] = None
-        self._after_revert_callback: Optional[Callable] = None
+        # Stage-specific callbacks - support multiple then() calls
+        self._after_forward_callbacks: list[Callable] = []
+        self._after_hold_callbacks: list[Callable] = []
+        self._after_revert_callbacks: list[Callable] = []
         self._current_stage: str = "initial"  # Track what stage we're configuring
+
+        # Multi-segment support (reactive tag assignment)
+        self.name: str = ""  # Auto-assigned when chaining begins
+        self._is_chaining: bool = False  # Set to True by timing methods
+        self._queued_segments: list = []  # Queued segments for chaining
+        self._property_name: str = "direction"  # For error messages
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition or effect"""
@@ -72,16 +78,20 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 
-            if self._then_callback:
-                transition.on_complete = self._then_callback
+            if self._after_forward_callbacks:
+                def chain_callbacks():
+                    for cb in self._after_forward_callbacks:
+                        cb()
+                transition.on_complete = chain_callbacks
 
     def _execute_instant(self):
         self.rig_state._direction = self.target_direction
         self.rig_state._direction_transition = None
         self.rig_state.start()
 
-        if self._then_callback:
-            self._then_callback()
+        if self._after_forward_callbacks:
+            for cb in self._after_forward_callbacks:
+                cb()
 
     # ===== Hooks for TimingMethodsContract =====
 
@@ -118,6 +128,18 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         if interpolation != "lerp":
             self._interpolation = interpolation
 
+    def _after_over_configured(self) -> None:
+        """Hook called after over() has configured timing"""
+        self._current_stage = "over"
+
+    def _after_hold_configured(self) -> None:
+        """Hook called after hold() has configured hold duration"""
+        self._current_stage = "hold"
+
+    def _after_revert_configured(self) -> None:
+        """Hook called after revert() has configured revert duration"""
+        self._current_stage = "revert"
+
     # No custom behavior needed for hold/revert - using base implementation
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
@@ -139,7 +161,7 @@ class DirectionBuilder(TimingMethodsContract['DirectionBuilder'], TransitionBase
         self._execute()
 
 
-class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], TransitionBasedBuilder, PropertyChainingContract):
+class DirectionByBuilder(MultiSegmentMixin['DirectionByBuilder'], TimingMethodsContract['DirectionByBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """Builder for direction.by(degrees) - relative rotation"""
     def __init__(self, rig_state: 'RigState', degrees: float, instant: bool = False):
         self.rig_state = rig_state
@@ -156,11 +178,22 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         self._out_easing: str = "linear"
         self._out_rate_rotation: Optional[float] = None
 
-        # Stage-specific callbacks
-        self._after_forward_callback: Optional[Callable] = None
-        self._after_hold_callback: Optional[Callable] = None
-        self._after_revert_callback: Optional[Callable] = None
+        # Stage-specific callbacks - support multiple then() calls
+        self._after_forward_callbacks: list[Callable] = []
+        self._after_hold_callbacks: list[Callable] = []
+        self._after_revert_callbacks: list[Callable] = []
         self._current_stage: str = "initial"  # Track what stage we're configuring
+
+        # Multi-segment support (reactive tag assignment)
+        self.name: str = ""  # Auto-assigned when chaining begins
+        self._is_chaining: bool = False  # Set to True by timing methods
+        self._property_name: str = "direction"  # For error messages
+
+    # ===== MultiSegmentMixin hooks =====
+
+    def _get_queue_builder(self, queue_namespace):
+        """Return direction builder from queue namespace"""
+        return queue_namespace.direction
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition"""
@@ -187,9 +220,9 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
                 hold_duration_ms=self._hold_duration_ms,
                 out_duration_ms=0 if (self._hold_duration_ms is not None and self._out_duration_ms is None) else self._out_duration_ms,
                 out_easing=self._out_easing,
-                after_forward_callback=self._after_forward_callback,
-                after_hold_callback=self._after_hold_callback,
-                after_revert_callback=self._after_revert_callback
+                after_forward_callbacks=self._after_forward_callbacks if self._after_forward_callbacks else None,
+                after_hold_callbacks=self._after_hold_callbacks if self._after_hold_callbacks else None,
+                after_revert_callbacks=self._after_revert_callbacks if self._after_revert_callbacks else None
             )
 
             self.rig_state.start()
@@ -234,8 +267,11 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
             self.rig_state._direction_transition = transition
 
             # Register callback
-            if self._after_forward_callback:
-                transition.on_complete = self._after_forward_callback
+            if self._after_forward_callbacks:
+                def chain_callbacks():
+                    for cb in self._after_forward_callbacks:
+                        cb()
+                transition.on_complete = chain_callbacks
 
     def _execute_instant(self):
         """Execute instantly without transition"""
@@ -250,8 +286,9 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         self.rig_state._direction_transition = None
         self.rig_state.start()  # Ensure ticking is active
 
-        if self._after_forward_callback:
-            self._after_forward_callback()
+        if self._after_forward_callbacks:
+            for cb in self._after_forward_callbacks:
+                cb()
 
     # ===== Hooks for TimingMethodsContract =====
 
@@ -277,6 +314,18 @@ class DirectionByBuilder(TimingMethodsContract['DirectionByBuilder'], Transition
         # Only override interpolation if explicitly provided (not base default "lerp")
         if interpolation != "lerp":
             self._interpolation = interpolation
+
+    def _after_over_configured(self) -> None:
+        """Hook called after over() has configured timing"""
+        self._current_stage = "over"
+
+    def _after_hold_configured(self) -> None:
+        """Hook called after hold() has configured hold duration"""
+        self._current_stage = "hold"
+
+    def _after_revert_configured(self) -> None:
+        """Hook called after revert() has configured revert duration"""
+        self._current_stage = "revert"
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],
@@ -359,11 +408,16 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
         self._out_duration_ms: Optional[float] = None
         self._out_easing: str = "linear"
 
-        # Stage-specific callbacks
-        self._after_forward_callback: Optional[Callable] = None
-        self._after_hold_callback: Optional[Callable] = None
-        self._after_revert_callback: Optional[Callable] = None
+        # Stage-specific callbacks - support multiple then() calls
+        self._after_forward_callbacks: list[Callable] = []
+        self._after_hold_callbacks: list[Callable] = []
+        self._after_revert_callbacks: list[Callable] = []
         self._current_stage: str = "initial"
+
+        # Multi-segment support (reactive tag assignment)
+        self.name: str = ""  # Auto-assigned when chaining begins
+        self._is_chaining: bool = False  # Set to True by timing methods
+        self._property_name: str = "direction"  # For error messages
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition"""
@@ -392,9 +446,9 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
                 hold_duration_ms=self._hold_duration_ms,
                 out_duration_ms=0 if (self._hold_duration_ms is not None and self._out_duration_ms is None) else self._out_duration_ms,
                 out_easing=self._out_easing,
-                after_forward_callback=self._after_forward_callback,
-                after_hold_callback=self._after_hold_callback,
-                after_revert_callback=self._after_revert_callback
+                after_forward_callbacks=self._after_forward_callbacks if self._after_forward_callbacks else None,
+                after_hold_callbacks=self._after_hold_callbacks if self._after_hold_callbacks else None,
+                after_revert_callbacks=self._after_revert_callbacks if self._after_revert_callbacks else None
             )
 
             start_speed = self.rig_state._get_effective_speed()
@@ -417,8 +471,11 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
             self.rig_state.start()
             self.rig_state._direction_transition = transition
 
-            if self._after_forward_callback:
-                transition.on_complete = self._after_forward_callback
+            if self._after_forward_callbacks:
+                def chain_callbacks():
+                    for cb in self._after_forward_callbacks:
+                        cb()
+                transition.on_complete = chain_callbacks
 
     def _execute_instant(self):
         """Execute instant 180° flip"""
@@ -427,8 +484,9 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
         self.rig_state._direction_transition = None
         self.rig_state.start()
 
-        if self._after_forward_callback:
-            self._after_forward_callback()
+        if self._after_forward_callbacks:
+            for cb in self._after_forward_callbacks:
+                cb()
 
     # ===== Hooks for TimingMethodsContract =====
 
@@ -446,6 +504,18 @@ class DirectionReverseBuilder(TimingMethodsContract['DirectionReverseBuilder'], 
         self._should_execute_instant = False
         self._duration_ms = duration_ms
         self._easing = easing
+
+    def _after_over_configured(self) -> None:
+        """Hook called after over() has configured timing"""
+        self._current_stage = "over"
+
+    def _after_hold_configured(self) -> None:
+        """Hook called after hold() has configured hold duration"""
+        self._current_stage = "hold"
+
+    def _after_revert_configured(self) -> None:
+        """Hook called after revert() has configured revert duration"""
+        self._current_stage = "revert"
 
     def _calculate_revert_duration_from_rate(self, rate_speed: Optional[float],
                                             rate_accel: Optional[float],

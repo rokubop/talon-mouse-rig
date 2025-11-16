@@ -1,14 +1,14 @@
 """Shared builders for base properties - common classes for speed and acceleration"""
 
 from typing import Optional, Callable, Union, TYPE_CHECKING
-from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract
+from ..contracts import TimingMethodsContract, TransitionBasedBuilder, PropertyChainingContract, MultiSegmentMixin
 from ..rate_utils import calculate_over_duration_for_property, calculate_revert_duration_for_property
 
 if TYPE_CHECKING:
     from ...state import RigState
 
 
-class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], TransitionBasedBuilder, PropertyChainingContract):
+class SpeedAccelBuilder(MultiSegmentMixin['SpeedAccelBuilder'], TimingMethodsContract['SpeedAccelBuilder'], TransitionBasedBuilder, PropertyChainingContract):
     """
     Universal builder for property effects supporting both permanent (.over())
     and temporary (.revert()/.hold()) modifications.
@@ -29,14 +29,30 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
         self._in_easing: str = "linear"
         self._out_easing: str = "linear"
 
-        # Stage-specific callbacks
-        self._after_forward_callback: Optional[Callable] = None
-        self._after_hold_callback: Optional[Callable] = None
-        self._after_revert_callback: Optional[Callable] = None
+        # Stage-specific callbacks - support multiple then() calls
+        self._after_forward_callbacks: list[Callable] = []
+        self._after_hold_callbacks: list[Callable] = []
+        self._after_revert_callbacks: list[Callable] = []
         self._current_stage: str = "initial"  # Track what stage we're configuring
 
         # Named modifier
         self._effect_name: Optional[str] = None
+
+        # Multi-segment support (reactive tag assignment)
+        self.name: str = ""  # Auto-assigned when chaining begins
+        self._is_chaining: bool = False  # Set to True by timing methods
+        # Note: self.property_name already set above, used by mixin for error messages
+
+    # ===== MultiSegmentMixin hooks =====
+
+    def _get_queue_builder(self, queue_namespace):
+        """Return property builder from queue namespace"""
+        if self.property_name == "speed":
+            return queue_namespace.speed
+        elif self.property_name == "accel":
+            return queue_namespace.accel
+        else:
+            raise ValueError(f"Unknown property: {self.property_name}")
 
     def _has_transition(self) -> bool:
         """Check if this builder should create a transition or effect"""
@@ -82,9 +98,9 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
                 hold_duration_ms=self._hold_duration_ms,
                 out_duration_ms=self._out_duration_ms,
                 out_easing=self._out_easing,
-                after_forward_callback=self._after_forward_callback,
-                after_hold_callback=self._after_hold_callback,
-                after_revert_callback=self._after_revert_callback
+                after_forward_callbacks=self._after_forward_callbacks if self._after_forward_callbacks else None,
+                after_hold_callbacks=self._after_hold_callbacks if self._after_hold_callbacks else None,
+                after_revert_callbacks=self._after_revert_callbacks if self._after_revert_callbacks else None
             )
 
             self.rig_state.start()
@@ -98,8 +114,11 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             target = self._calculate_target_value(current, value)
             transition = SpeedTransition(current, target, self._in_duration_ms, self._in_easing)
 
-            if self._after_forward_callback:
-                transition.on_complete = self._after_forward_callback
+            if self._after_forward_callbacks:
+                def chain_callbacks():
+                    for cb in self._after_forward_callbacks:
+                        cb()
+                transition.on_complete = chain_callbacks
 
             self.rig_state.start()
             self.rig_state._speed_transition = transition
@@ -108,8 +127,9 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             target = self._calculate_target_value(current, value)
             self.rig_state._accel = target
 
-            if self._after_forward_callback:
-                self._after_forward_callback()
+            if self._after_forward_callbacks:
+                for cb in self._after_forward_callbacks:
+                    cb()
 
     def _execute_instant(self):
         value = self.value
@@ -131,15 +151,17 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             self.rig_state._speed = target
             self.rig_state.start()
 
-            if self._after_forward_callback:
-                self._after_forward_callback()
+            if self._after_forward_callbacks:
+                for cb in self._after_forward_callbacks:
+                    cb()
         elif self.property_name == "accel":
             current = self.rig_state._accel
             target = self._calculate_target_value(current, value)
             self.rig_state._accel = target
 
-            if self._after_forward_callback:
-                self._after_forward_callback()
+            if self._after_forward_callbacks:
+                for cb in self._after_forward_callbacks:
+                    cb()
 
     def _calculate_target_value(self, current: float, value: float) -> float:
         """Calculate the target value based on operation"""
@@ -188,6 +210,21 @@ class PropertyEffectBuilder(TimingMethodsContract['PropertyEffectBuilder'], Tran
             self.property_name, current,
             rate_speed, rate_accel, rate_rotation
         )
+
+    def _after_over_configured(self, duration_ms: Optional[float], easing: str) -> None:
+        """Hook called after over() - start rig execution"""
+        # Don't execute immediately - let builder go out of scope and trigger __del__
+        pass
+
+    def _after_hold_configured(self, duration_ms: float) -> None:
+        """Hook called after hold() - start rig execution"""
+        # Don't execute immediately - let builder go out of scope and trigger __del__
+        pass
+
+    def _after_revert_configured(self, duration_ms: Optional[float], easing: str) -> None:
+        """Hook called after revert() - start rig execution"""
+        # Don't execute immediately - let builder go out of scope and trigger __del__
+        pass
 
     # ===== PropertyChainingContract hooks =====
 

@@ -1775,9 +1775,9 @@
 #         """Multiply current speed by factor (legacy - use .mul() for new code)"""
 #         return SpeedMultiplyBuilder(self.rig_state, factor, instant=True)
 
-#     def mul(self, factor: float) -> 'PropertyEffectBuilder':
+#     def mul(self, factor: float) -> 'SpeedAccelBuilder':
 #         """Multiply speed by factor (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
+#         return SpeedAccelBuilder(self.rig_state, "speed", "mul", factor)
 
 #     def divide(self, divisor: float) -> SpeedDivideBuilder:
 #         """Divide current speed by divisor (legacy - use .div() for new code)"""
@@ -1786,19 +1786,19 @@
 
 #         return SpeedDivideBuilder(self.rig_state, divisor, instant=True)
 
-#     def div(self, divisor: float) -> 'PropertyEffectBuilder':
+#     def div(self, divisor: float) -> 'SpeedAccelBuilder':
 #         """Divide speed by divisor (can use with .over(), .hold(), .revert())"""
 #         if abs(divisor) < 1e-10:
 #             raise ValueError("Cannot divide speed by zero")
-#         return PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
+#         return SpeedAccelBuilder(self.rig_state, "speed", "div", divisor)
 
-#     def to(self, value: float) -> 'PropertyEffectBuilder':
+#     def to(self, value: float) -> 'SpeedAccelBuilder':
 #         """Set speed to absolute value (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "speed", "to", value)
+#         return SpeedAccelBuilder(self.rig_state, "speed", "to", value)
 
-#     def by(self, delta: float) -> 'PropertyEffectBuilder':
+#     def by(self, delta: float) -> 'SpeedAccelBuilder':
 #         """Add delta to speed (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
+#         return SpeedAccelBuilder(self.rig_state, "speed", "by", delta)
 
 
 # class AccelController:
@@ -1806,33 +1806,33 @@
 #     def __init__(self, rig_state: 'RigState'):
 #         self.rig_state = rig_state
 
-#     def __call__(self, value: float) -> 'PropertyEffectBuilder':
+#     def __call__(self, value: float) -> 'SpeedAccelBuilder':
 #         """Set acceleration instantly or return builder for transitions/effects"""
 #         # Immediate set
 #         self.rig_state._accel = value
 #         self.rig_state.start()
-#         return PropertyEffectBuilder(self.rig_state, "accel", "to", value, instant_done=True)
+#         return SpeedAccelBuilder(self.rig_state, "accel", "to", value, instant_done=True)
 
-#     def to(self, value: float) -> 'PropertyEffectBuilder':
+#     def to(self, value: float) -> 'SpeedAccelBuilder':
 #         """Set accel to absolute value (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "accel", "to", value)
+#         return SpeedAccelBuilder(self.rig_state, "accel", "to", value)
 
-#     def by(self, delta: float) -> 'PropertyEffectBuilder':
+#     def by(self, delta: float) -> 'SpeedAccelBuilder':
 #         """Add delta to accel (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+#         return SpeedAccelBuilder(self.rig_state, "accel", "by", delta)
 
-#     def mul(self, factor: float) -> 'PropertyEffectBuilder':
+#     def mul(self, factor: float) -> 'SpeedAccelBuilder':
 #         """Multiply accel by factor (can use with .over(), .hold(), .revert())"""
-#         return PropertyEffectBuilder(self.rig_state, "accel", "mul", factor)
+#         return SpeedAccelBuilder(self.rig_state, "accel", "mul", factor)
 
-#     def div(self, divisor: float) -> 'PropertyEffectBuilder':
+#     def div(self, divisor: float) -> 'SpeedAccelBuilder':
 #         """Divide accel by divisor (can use with .over(), .hold(), .revert())"""
 #         if abs(divisor) < 1e-10:
 #             raise ValueError("Cannot divide accel by zero")
-#         return PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
+#         return SpeedAccelBuilder(self.rig_state, "accel", "div", divisor)
 
 
-# class PropertyEffectBuilder:
+# class SpeedAccelBuilder:
 #     """
 #     Universal builder for property effects supporting both permanent (.over())
 #     and temporary (.revert()/.hold()) modifications.
@@ -1946,7 +1946,7 @@
 #             return current
 #         return current
 
-#     def over(self, duration_ms: float, easing: str = "linear") -> 'PropertyEffectBuilder':
+#     def over(self, duration_ms: float, easing: str = "linear") -> 'SpeedAccelBuilder':
 #         """Apply change over duration - can be permanent or temporary based on .revert()/.hold()"""
 #         # Check if this is a temporary effect (has hold or revert)
 #         # We'll set _in_duration_ms which will be checked in _execute
@@ -1954,18 +1954,18 @@
 #         self._in_easing = easing
 #         return self
 
-#     def hold(self, duration_ms: float) -> 'PropertyEffectBuilder':
+#     def hold(self, duration_ms: float) -> 'SpeedAccelBuilder':
 #         """Hold effect at full strength for duration"""
 #         self._hold_duration_ms = duration_ms
 #         return self
 
-#     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'PropertyEffectBuilder':
+#     def revert(self, duration_ms: float = 0, easing: str = "linear") -> 'SpeedAccelBuilder':
 #         """Revert to original value - instant if duration=0, gradual otherwise"""
 #         self._out_duration_ms = duration_ms if duration_ms > 0 else 0
 #         self._out_easing = easing
 #         return self
 
-#     def rate(self, value: float = None) -> Union['PropertyEffectBuilder', 'PropertyRateNamespace']:
+#     def rate(self, value: float = None) -> Union['SpeedAccelBuilder', 'PropertyRateNamespace']:
 #         """Change at specified rate or access rate namespace
 
 #         If value provided: context-aware rate (speed->speed/sec, accel->accel/sec²)
@@ -2052,10 +2052,10 @@
 
 # class PropertyRateNamespace:
 #     """Namespace for rate-based timing on properties"""
-#     def __init__(self, builder: 'PropertyEffectBuilder'):
+#     def __init__(self, builder: 'SpeedAccelBuilder'):
 #         self._builder = builder
 
-#     def speed(self, value: float) -> 'PropertyEffectBuilder':
+#     def speed(self, value: float) -> 'SpeedAccelBuilder':
 #         """Change at specified speed rate (units/sec)
 
 #         Only valid for position changes.
@@ -2068,7 +2068,7 @@
 #             raise ValueError(f".rate.speed() only valid for position, not {self._builder.property_name}")
 #         return self._builder
 
-#     def accel(self, value: float) -> 'PropertyEffectBuilder':
+#     def accel(self, value: float) -> 'SpeedAccelBuilder':
 #         """Change via acceleration rate (units/sec²)
 
 #         For speed: accelerate/decelerate at specified rate until reaching target
@@ -3882,30 +3882,30 @@
 #         self.rig_state = rig_state
 #         self.name = name
 
-#     def to(self, value: float) -> 'PropertyEffectBuilder':
+#     def to(self, value: float) -> 'SpeedAccelBuilder':
 #         """ERROR: Modifiers cannot use .to() - use rig.force() for absolute values"""
 #         raise ValueError(
 #             f"Modifiers can only use relative operations (.mul, .by, .div). "
 #             f"Use rig.force('{self.name}') for absolute values (.to)."
 #         )
 
-#     def by(self, delta: float) -> 'PropertyEffectBuilder':
+#     def by(self, delta: float) -> 'SpeedAccelBuilder':
 #         """Add delta to speed"""
-#         builder = PropertyEffectBuilder(self.rig_state, "speed", "by", delta)
+#         builder = SpeedAccelBuilder(self.rig_state, "speed", "by", delta)
 #         builder._effect_name = self.name
 #         return builder
 
-#     def mul(self, factor: float) -> 'PropertyEffectBuilder':
+#     def mul(self, factor: float) -> 'SpeedAccelBuilder':
 #         """Multiply speed by factor"""
-#         builder = PropertyEffectBuilder(self.rig_state, "speed", "mul", factor)
+#         builder = SpeedAccelBuilder(self.rig_state, "speed", "mul", factor)
 #         builder._effect_name = self.name
 #         return builder
 
-#     def div(self, divisor: float) -> 'PropertyEffectBuilder':
+#     def div(self, divisor: float) -> 'SpeedAccelBuilder':
 #         """Divide speed by divisor"""
 #         if abs(divisor) < 1e-10:
 #             raise ValueError("Cannot divide speed by zero")
-#         builder = PropertyEffectBuilder(self.rig_state, "speed", "div", divisor)
+#         builder = SpeedAccelBuilder(self.rig_state, "speed", "div", divisor)
 #         builder._effect_name = self.name
 #         return builder
 
@@ -3916,30 +3916,30 @@
 #         self.rig_state = rig_state
 #         self.name = name
 
-#     def to(self, value: float) -> 'PropertyEffectBuilder':
+#     def to(self, value: float) -> 'SpeedAccelBuilder':
 #         """ERROR: Modifiers cannot use .to() - use rig.force() for absolute values"""
 #         raise ValueError(
 #             f"Modifiers can only use relative operations (.mul, .by, .div). "
 #             f"Use rig.force('{self.name}') for absolute values (.to)."
 #         )
 
-#     def by(self, delta: float) -> 'PropertyEffectBuilder':
+#     def by(self, delta: float) -> 'SpeedAccelBuilder':
 #         """Add delta to accel"""
-#         builder = PropertyEffectBuilder(self.rig_state, "accel", "by", delta)
+#         builder = SpeedAccelBuilder(self.rig_state, "accel", "by", delta)
 #         builder._effect_name = self.name
 #         return builder
 
-#     def mul(self, factor: float) -> 'PropertyEffectBuilder':
+#     def mul(self, factor: float) -> 'SpeedAccelBuilder':
 #         """Multiply accel by factor"""
-#         builder = PropertyEffectBuilder(self.rig_state, "accel", "mul", factor)
+#         builder = SpeedAccelBuilder(self.rig_state, "accel", "mul", factor)
 #         builder._effect_name = self.name
 #         return builder
 
-#     def div(self, divisor: float) -> 'PropertyEffectBuilder':
+#     def div(self, divisor: float) -> 'SpeedAccelBuilder':
 #         """Divide accel by divisor"""
 #         if abs(divisor) < 1e-10:
 #             raise ValueError("Cannot divide accel by zero")
-#         builder = PropertyEffectBuilder(self.rig_state, "accel", "div", divisor)
+#         builder = SpeedAccelBuilder(self.rig_state, "accel", "div", divisor)
 #         builder._effect_name = self.name
 #         return builder
 

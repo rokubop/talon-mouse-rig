@@ -11,7 +11,7 @@ from .core import (
     Vec2, SubpixelAdjuster,
     SpeedTransition, DirectionTransition, PositionTransition, ReverseTransition
 )
-from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect, ReverseEffect
+from .effects import EffectStack, EffectLifecycle, Force, Effect, DirectionEffect, ReverseEffect, PositionEffect
 from .builders.base import (
     AccelController,
     DirectionController,
@@ -41,6 +41,7 @@ class RigState:
         # All effects (property and stack-based) managed in single list
         self._effects: list[Effect] = []  # Unified: property effects (speed/accel) and stack effects
         self._direction_effects: list[DirectionEffect] = []  # direction temporary effects
+        self._position_effects: list['PositionEffect'] = []  # position temporary effects
         self._reverse_effect: Optional['ReverseEffect'] = None  # special reverse effect
 
         # Named forces (for backward compatibility with force API)
@@ -54,6 +55,15 @@ class RigState:
         # Maps stack key to its EffectLifecycle wrapper (which wraps unified Effect)
         self._effect_lifecycles: dict[str, EffectLifecycle] = {}  # key: same as _effect_stacks
 
+        # Auto-tag counter for anonymous multi-segment operations (universal)
+        self._auto_tag_counter: int = 0  # Universal counter for all anonymous tags
+
+        # UNIFIED QUEUE SYSTEM
+        # Single queue per tag for both:
+        # 1. Multi-segment operation chaining (builder segments)
+        # 2. Effect lifecycle value queuing (on_repeat="queue")
+        self._segment_queues: dict[str, list[Callable]] = {}  # tag_name -> [execution callbacks]
+
         # Controllers (fluent API)
         self.speed = SpeedController(self)
         self.accel = AccelController(self)
@@ -62,10 +72,6 @@ class RigState:
 
         # Named force namespace
         self._force_namespace = NamedForceNamespace(self)
-
-        # Sequence state
-        self._sequence_queue: list[Callable] = []
-        self._sequence_running: bool = False
 
         # Pending wait/then callbacks
         self._pending_wait_jobs: list = []
@@ -80,8 +86,73 @@ class RigState:
         # Position offset tracking (for effects)
         self._last_position_offset = Vec2(0, 0)
 
+    def _generate_internal_tag(self) -> str:
+        """Generate unique internal tag for anonymous multi-segment operations
+
+        Returns:
+            Universal tag like "__anon_1", "__anon_2", etc.
+        """
+        self._auto_tag_counter += 1
+        return f"__anon_{self._auto_tag_counter}"
+
+    def _queue_segment(self, tag_name: str, execution_callback: Callable) -> None:
+        """Queue a segment execution callback for a tag
+
+        UNIFIED QUEUE: Handles both:
+        - Multi-segment builder operations (e.g., .to().over().to().over())
+        - Effect lifecycle value queuing (on_repeat="queue")
+
+        Args:
+            tag_name: Tag name (internal or user-defined)
+            execution_callback: Callback to execute the segment or apply queued value
+        """
+        if tag_name not in self._segment_queues:
+            self._segment_queues[tag_name] = []
+        self._segment_queues[tag_name].append(execution_callback)
+
+    def _execute_next_segment(self, tag_name: str) -> None:
+        """Execute the next queued item for a tag
+
+        UNIFIED QUEUE: Processes next item whether it's:
+        - A builder segment callback
+        - An effect value application callback
+
+        Called when a segment/effect with this tag completes its lifecycle.
+
+        Args:
+            tag_name: Tag name to check for queued items
+        """
+        if tag_name in self._segment_queues and self._segment_queues[tag_name]:
+            next_callback = self._segment_queues[tag_name].pop(0)
+            next_callback()
+
+            # Clean up empty queues
+            if not self._segment_queues[tag_name]:
+                del self._segment_queues[tag_name]
+
+    def tag(self, name: str) -> EffectBuilder:
+        """Create or access a named tag (effect entity)
+
+        Tags modify base properties using explicit operations:
+        - .to(value): Set absolute value
+        - .add(value) / .by(value): Add delta (aliases)
+        - .sub(value): Subtract
+        - .mul(value): Multiply
+        - .div(value): Divide
+
+        Tags use strict syntax - explicit operations are required.
+
+        Examples:
+            rig.tag("sprint").speed.mul(2)       # Double speed
+            rig.tag("boost").speed.add(10)       # Add 10 to speed
+            rig.tag("drift").direction.add(15)   # Rotate 15 degrees
+        """
+        return EffectBuilder(self, name, strict_mode=True)
+
     def effect(self, name: str) -> EffectBuilder:
-        """Create or access a named effect entity
+        """Create or access a named effect entity (alias for tag())
+
+        DEPRECATED: Use rig.tag() instead. This method is kept for backwards compatibility.
 
         Effects modify base properties using explicit operations:
         - .to(value): Set absolute value
@@ -512,6 +583,7 @@ class RigState:
         self._speed_transition = None
         self._direction_transition = None
         self._position_transitions.clear()
+        self._position_effects.clear()
 
         # Clear effects
         self._named_forces.clear()
@@ -580,6 +652,7 @@ class RigState:
             self._speed_transition = None
             self._direction_transition = None
             self._position_transitions.clear()
+            self._position_effects.clear()
 
             # Reset subpixel accumulator
             self._subpixel_adjuster = SubpixelAdjuster()
@@ -606,81 +679,6 @@ class RigState:
             )
             self.start()
             self._speed_transition = transition
-
-    def sequence(self, steps: list[Callable]) -> None:
-        """Execute a sequence of operations in order
-
-        Each step should be a callable (lambda or function) that performs one operation.
-        The sequence waits for each step to complete before moving to the next.
-
-        Args:
-            steps: List of callables to execute in sequence
-
-        Examples:
-            # Click multiple points in order
-            rig.sequence([
-                lambda: rig.pos.to(100, 200).over(350),
-                lambda: actions.mouse_click(0),
-                lambda: rig.pos.to(300, 400).over(350),
-                lambda: actions.mouse_click(0),
-            ])
-
-            # Drag operation
-            rig.sequence([
-                lambda: rig.pos.to(x1, y1).over(500),
-                lambda: actions.mouse_click(0, hold=True),
-                lambda: rig.pos.to(x2, y2).over(500),
-                lambda: actions.mouse_click(0, hold=False),
-            ])
-        """
-        if not steps:
-            return
-
-        self._sequence_queue = list(steps)
-        self._sequence_running = True
-        self._run_next_in_sequence()
-
-    def _run_next_in_sequence(self) -> None:
-        """Internal: Run the next step in the sequence"""
-        if not self._sequence_running or not self._sequence_queue:
-            self._sequence_running = False
-            return
-
-        # Get next step
-        step = self._sequence_queue.pop(0)
-
-        # Execute the step
-        try:
-            step()
-        except Exception as e:
-            print(f"Error in sequence step: {e}")
-            self._sequence_running = False
-            return
-
-        # If there are more steps, we need to wait for this step to complete
-        # For now, we'll use a simple approach: check if idle after a short delay
-        if self._sequence_queue:
-            # Schedule the next step to run after current operations complete
-            self._schedule_next_sequence_step()
-        else:
-            self._sequence_running = False
-
-    def _schedule_next_sequence_step(self) -> None:
-        """Internal: Schedule the next sequence step after current operation completes"""
-        # We need to poll until the rig becomes idle (all transitions complete)
-        def check_and_continue():
-            # Check if all async operations are done
-            if (self._speed_transition is None and
-                self._direction_transition is None and
-                len(self._position_transitions) == 0):
-                # Idle - run next step
-                self._run_next_in_sequence()
-            else:
-                # Still busy - check again soon
-                cron.after("16ms", check_and_continue)
-
-        # Start checking after a frame
-        cron.after("16ms", check_and_continue)
 
     def start(self) -> None:
         """Start the frame loop"""
@@ -795,12 +793,18 @@ class RigState:
 
             # Remove completed effects and their underlying stacks
             if effect_lifecycle.complete:
+                # Get tag name before cleanup for queue processing
+                tag_name = effect_lifecycle.stack.name
+
                 del self._effect_lifecycles[key]
                 # Also remove the effect stack so it stops being applied
                 if key in self._effect_stacks:
                     del self._effect_stacks[key]
                 if key in self._effect_order:
                     self._effect_order.remove(key)
+
+                # Execute next queued item for this tag (unified queue)
+                self._execute_next_segment(tag_name)
 
         # Handle base acceleration (permanent accel changes)
         # Base accel DOES modify cruise speed permanently
@@ -856,6 +860,15 @@ class RigState:
             position_delta = position_delta + glide_delta
             if pos_transition.complete:
                 self._position_transitions.remove(pos_transition)
+
+        # Apply position effects (temporary position changes with hold/revert)
+        for pos_effect in self._position_effects[:]:
+            target_pos = pos_effect.update()
+            if target_pos is not None:
+                # Effect is active, move directly to target position
+                ctrl.mouse_move(int(target_pos.x), int(target_pos.y))
+            if pos_effect.complete:
+                self._position_effects.remove(pos_effect)
 
         # Apply subpixel adjustment to prevent rounding drift
         dx_int, dy_int = self._subpixel_adjuster.adjust(position_delta.x, position_delta.y)
