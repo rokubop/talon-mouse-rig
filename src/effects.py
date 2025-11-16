@@ -17,17 +17,17 @@ class EffectStack:
     """
     Tracks stacking behavior for effect operations.
 
-    Default on-repeat strategy = "replace" (1 stack, replace semantics)
-    - .to(value): Set absolute value
-    - .mul(value): Multiply (replaces by default, use .on_repeat("stack") to allow multiple)
-    - .div(value): Divide (replaces by default)
-    - .add(value): Add (replaces by default)
-    - .sub(value): Subtract (replaces by default)
+    Default on-repeat strategy = unlimited stacking
+    - .to(value): Set absolute value (stacking has no effect - always sets to same value)
+    - .mul(value): Multiply (stacks by default - unlimited)
+    - .div(value): Divide (stacks by default - unlimited)
+    - .add(value): Add (stacks by default - unlimited)
+    - .sub(value): Subtract (stacks by default - unlimited)
 
     On-Repeat Strategies:
-    - Default: max_stack_count = 1 (calling same operation replaces previous)
-    - .on_repeat("stack"): max_stack_count = None (unlimited stacking)
+    - Default: max_stack_count = None (unlimited stacking)
     - .on_repeat("stack", n): max_stack_count = n (max n stacks)
+    - .on_repeat("replace"): max_stack_count = 1 (calling same operation replaces previous)
 
     For effects:
     - Multiplicative ops (.mul/.div) are summed: base * (1.0 + sum of multipliers)
@@ -45,7 +45,7 @@ class EffectStack:
 
     # Constraints
     max_value: Optional[float] = None  # Maximum computed value
-    max_stack_count: Optional[int] = 1  # Default: 1 (replace semantics)
+    max_stack_count: Optional[int] = None  # Default: None (unlimited stacking)
 
     def add_operation(self, value: Union[float, 'Vec2']) -> None:
         """Add a new operation (stacks with existing)"""
@@ -134,6 +134,12 @@ class EffectLifecycle:
         self.stack = stack
         # Create unified Effect for stack-based lifecycle
         self._effect = Effect(stack=stack)
+
+        # Repeat strategy configuration
+        self.repeat_strategy: str = "stack"  # Default: unlimited stacking
+        self.throttle_ms: Optional[float] = None  # For throttle strategy
+        self.last_activation_time: Optional[float] = None  # Track last activation
+        self.queued_operations: list = []  # For queue strategy
 
     # Delegate lifecycle configuration to unified Effect
     @property
@@ -228,8 +234,25 @@ class EffectLifecycle:
         self._effect.start()
 
     def update(self) -> float:
-        """Update lifecycle and return current multiplier"""
-        return self._effect.update()
+        """Update lifecycle and return current multiplier
+
+        Also handles processing queued operations for queue strategy.
+        """
+        multiplier = self._effect.update()
+
+        # Process queued operations if lifecycle just completed
+        if self.repeat_strategy == "queue" and self._effect.complete and self.queued_operations:
+            # Take the first queued operation and apply it
+            next_value = self.queued_operations.pop(0)
+            self.stack.add_operation(next_value)
+
+            # Restart the lifecycle for the queued operation
+            self._effect.complete = False
+            self._effect.phase = "not_started"
+            self._effect.start()
+            multiplier = self._effect.update()
+
+        return multiplier
 
     def request_stop(self, duration_ms: Optional[float] = None, easing: str = "linear") -> None:
         """Request the effect to stop"""
@@ -245,6 +268,80 @@ class EffectLifecycle:
 
         # Interpolate between base and full effect based on multiplier
         return lerp(base_value, full_effect, self._effect.current_multiplier)
+
+    def should_accept_new_operation(self) -> bool:
+        """Check if a new operation should be accepted based on repeat strategy
+
+        Returns:
+            True if operation should be processed, False if it should be rejected
+        """
+        current_time = time.perf_counter()
+
+        # Stack/replace: always accept (handled by max_stack_count)
+        if self.repeat_strategy in ("stack", "replace"):
+            self.last_activation_time = current_time
+            return True
+
+        # Ignore: reject if effect is currently active
+        if self.repeat_strategy == "ignore":
+            if self._effect.phase not in ("not_started", "complete"):
+                return False  # Effect is active, ignore
+            self.last_activation_time = current_time
+            return True
+
+        # Throttle: reject if called too soon after last activation
+        if self.repeat_strategy == "throttle":
+            if self.throttle_ms is None:
+                raise ValueError("Throttle strategy requires throttle_ms to be set")
+            if self.last_activation_time is not None:
+                elapsed_ms = (current_time - self.last_activation_time) * 1000
+                if elapsed_ms < self.throttle_ms:
+                    return False  # Too soon, throttle
+            self.last_activation_time = current_time
+            return True
+
+        # Extend/queue: always accept (special handling in apply_operation_with_strategy)
+        if self.repeat_strategy in ("extend", "queue"):
+            self.last_activation_time = current_time
+            return True
+
+        # Unknown strategy
+        return True
+
+    def apply_operation_with_strategy(self, value: Union[float, Vec2]) -> None:
+        """Apply operation according to repeat strategy
+
+        Handles the actual operation based on the configured strategy.
+        Called after should_accept_new_operation returns True.
+        """
+        # For stack/replace/ignore/throttle: just add the operation normally
+        if self.repeat_strategy in ("stack", "replace", "ignore", "throttle"):
+            self.stack.add_operation(value)
+            return
+
+        # Extend: add operation and extend the hold duration
+        if self.repeat_strategy == "extend":
+            self.stack.add_operation(value)
+            if self._effect.phase == "hold" and self.hold_duration_ms is not None:
+                # Extend hold by resetting the phase start time
+                self._effect.phase_start_time = time.perf_counter()
+            elif self._effect.phase == "out":
+                # Cancel revert, go back to hold
+                if self.hold_duration_ms is not None:
+                    self._effect.phase = "hold"
+                    self._effect.phase_start_time = time.perf_counter()
+                    self._effect.current_multiplier = 1.0
+            return
+
+        # Queue: store operation to be applied later
+        if self.repeat_strategy == "queue":
+            if self._effect.phase in ("not_started", "complete"):
+                # No active effect, apply immediately
+                self.stack.add_operation(value)
+            else:
+                # Effect is active, queue for later
+                self.queued_operations.append(value)
+            return
 
 
 # ============================================================================

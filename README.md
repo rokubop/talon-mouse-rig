@@ -21,9 +21,9 @@ Effects modify base properties with explicit operations and support lifecycle ma
 - `.div(value)` - Divide
 
 **On-Repeat Strategies**:
-- `replace` (default) - New call replaces existing
-- `stack` - Unlimited stacking
+- `stack` (default) - Unlimited stacking
 - `stack(n)` - Max n stacks
+- `replace` - New call replaces existing
 - `extend` - Extend duration
 - `queue` - Queue sequential effects
 - `ignore` - Ignore new calls while active
@@ -71,7 +71,7 @@ rig.effect("sprint").speed.mul(2)
 rig.effect("sprint").revert(500)  # Stop sprinting
 
 # Speed boost with stacking
-rig.effect("boost").speed.add(10).on_repeat("stack")  # Unlimited
+rig.effect("boost").speed.add(10)  # Unlimited (default)
 rig.effect("boost").speed.add(10).on_repeat("stack", 3)  # Max 3
 
 # Drift (rotate direction)

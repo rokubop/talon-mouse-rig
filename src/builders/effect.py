@@ -84,6 +84,27 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             self.rig_state._effect_lifecycles[key] = EffectLifecycle(stack)
         return self.rig_state._effect_lifecycles[key]
 
+    def _apply_operation(self, op_type: str, value: Union[float, Vec2]) -> bool:
+        """Apply operation respecting repeat strategy
+
+        Returns:
+            True if operation was applied, False if rejected by strategy
+        """
+        key = f"{self.name}:{self._property_name}:{op_type}"
+
+        # Check if there's a lifecycle managing this operation
+        if key in self.rig_state._effect_lifecycles:
+            lifecycle = self.rig_state._effect_lifecycles[key]
+            if not lifecycle.should_accept_new_operation():
+                return False  # Rejected by strategy (ignore/throttle)
+            lifecycle.apply_operation_with_strategy(value)
+        else:
+            # No lifecycle yet, just add to stack normally
+            stack = self._get_or_create_stack(op_type)
+            stack.add_operation(value)
+
+        return True
+
     def to(self, value: Union[float, Vec2]) -> T:
         """Set absolute value"""
         stack = self._get_or_create_stack("to")
@@ -92,25 +113,22 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         return self
 
     def mul(self, value: float) -> T:
-        """Multiply (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("mul")
-        stack.add_operation(value)
+        """Multiply (stacks by default - unlimited)"""
+        self._apply_operation("mul", value)
         self._last_op_type = "mul"
         return self
 
     def div(self, value: float) -> T:
-        """Divide (default: replaces, use .on_repeat("stack") for multiple)"""
+        """Divide (stacks by default - unlimited)"""
         if abs(value) < 1e-6:
             raise ValueError("Cannot divide by zero or near-zero value")
-        stack = self._get_or_create_stack("div")
-        stack.add_operation(1.0 / value)
+        self._apply_operation("div", 1.0 / value)
         self._last_op_type = "div"
         return self
 
     def add(self, value: Union[float, Vec2]) -> T:
-        """Add delta (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("add")
-        stack.add_operation(value)
+        """Add delta (stacks by default - unlimited)"""
+        self._apply_operation("add", value)
         self._last_op_type = "add"
         return self
 
@@ -119,27 +137,27 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
         return self.add(value)
 
     def sub(self, value: Union[float, Vec2]) -> T:
-        """Subtract (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("sub")
-        stack.add_operation(-value if isinstance(value, (int, float)) else Vec2(-value.x, -value.y))
+        """Subtract (stacks by default - unlimited)"""
+        negated = -value if isinstance(value, (int, float)) else Vec2(-value.x, -value.y)
+        self._apply_operation("sub", negated)
         self._last_op_type = "sub"
         return self
 
-    def on_repeat(self, strategy: str = "replace", *args) -> T:
+    def on_repeat(self, strategy: str = "stack", *args) -> T:
         """Configure behavior when effect is called multiple times
 
         Strategies:
-            "replace" (default): New call replaces existing effect, resets duration
-            "stack" [max_count]: Stack effects (unlimited or with max count)
+            "stack" (default): Stack effects (unlimited or with max count)
+            "replace": New call replaces existing effect, resets duration
             "extend": Extend duration from current phase, cancel pending revert
             "queue": Queue effects to run sequentially
             "ignore": Ignore new calls while effect is active
             "throttle" [ms]: Rate limit calls (minimum time between calls)
 
         Examples:
-            .add(10).on_repeat("stack")          # Unlimited stacking
+            .add(10)                             # Unlimited stacking (default)
             .add(10).on_repeat("stack", 3)       # Max 3 stacks
-            .add(10).on_repeat("replace")        # Default behavior
+            .add(10).on_repeat("replace")        # Replace instead of stack
             .add(10).on_repeat("extend")         # Extend duration
             .add(10).on_repeat("throttle", 500)  # Max 1 call per 500ms
         """
@@ -153,12 +171,14 @@ class EffectBuilderBase(PropertyOperationsContract[T]):
             if key in self.rig_state._effect_stacks:
                 self.rig_state._effect_stacks[key].max_stack_count = max_count
         elif strategy == "replace":
-            pass
+            if key in self.rig_state._effect_stacks:
+                self.rig_state._effect_stacks[key].max_stack_count = 1
         elif strategy in ("extend", "queue", "ignore", "throttle"):
-            if key in self.rig_state._effect_lifecycles:
-                self.rig_state._effect_lifecycles[key].repeat_strategy = strategy
-                if strategy == "throttle" and args:
-                    self.rig_state._effect_lifecycles[key].throttle_ms = args[0]
+            # Ensure lifecycle exists for these strategies
+            lifecycle = self._get_or_create_effect(self._last_op_type)
+            lifecycle.repeat_strategy = strategy
+            if strategy == "throttle" and args:
+                lifecycle.throttle_ms = args[0]
         else:
             raise ValueError(f"Unknown repeat strategy: {strategy}. Use: replace, stack, extend, queue, ignore, throttle")
 
@@ -489,9 +509,8 @@ class EffectPosBuilder(EffectBuilderBase['EffectPosBuilder']):
         return self
 
     def add(self, x: float, y: float) -> 'EffectPosBuilder':
-        """Add position offset (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("add")
-        stack.add_operation(Vec2(x, y))
+        """Add position offset (stacks by default - unlimited)"""
+        self._apply_operation("add", Vec2(x, y))
         self._last_op_type = "add"
         return self
 
@@ -500,9 +519,8 @@ class EffectPosBuilder(EffectBuilderBase['EffectPosBuilder']):
         return self.add(x, y)
 
     def sub(self, x: float, y: float) -> 'EffectPosBuilder':
-        """Subtract position offset (default: replaces, use .on_repeat("stack") for multiple)"""
-        stack = self._get_or_create_stack("sub")
-        stack.add_operation(Vec2(-x, -y))
+        """Subtract position offset (stacks by default - unlimited)"""
+        self._apply_operation("sub", Vec2(-x, -y))
         self._last_op_type = "sub"
         return self
 

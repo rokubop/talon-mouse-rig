@@ -25,6 +25,16 @@ class Actions:
     # BASIC MOVEMENT
     # =========================================================================
 
+    def mouse_rig_test():
+        """Test function"""
+        rig = actions.user.mouse_rig()
+        rig.effect("test").speed.add(5).over(500).hold(1000).revert(500)
+
+    def mouse_rig_test_two():
+        """Second test function"""
+        rig = actions.user.mouse_rig()
+        rig.stop(500)
+
     def mouse_rig_go_right():
         """Move right at normal speed"""
         rig = actions.user.mouse_rig()
@@ -138,7 +148,7 @@ class Actions:
     def mouse_rig_offset_strict():
         """Position offset using strict syntax"""
         rig = actions.user.mouse_rig()
-        rig.effect("wobble").pos.add(5, 5).on_repeat("stack")
+        rig.effect("wobble").pos.add(5, 5)
 
     def mouse_rig_offset_reset():
         """Reset position offset"""
@@ -152,7 +162,7 @@ class Actions:
     def mouse_rig_boost_pad():
         """Boost pad that stacks when hit multiple times (unlimited)"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost_pad").speed.add(2).on_repeat("stack")
+        rig.effect("boost_pad").speed.add(2)
 
     def mouse_rig_boost_pad_max():
         """Boost pad with max 3 stacks (max +30)"""
@@ -162,7 +172,7 @@ class Actions:
     def mouse_rig_boost_pad_with_timeout():
         """Boost pad that fades in/out with unlimited stacks"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost_pad").speed.add(10).on_repeat("stack").over(1000).revert(1000)
+        rig.effect("boost_pad").speed.add(10).over(1000).revert(1000)
 
     def mouse_rig_rage_stacks():
         """Rage buff - each stack multiplies speed by 1.2 (max 5 stacks)"""
@@ -191,7 +201,7 @@ class Actions:
     def mouse_rig_drift_on():
         """Drift right by 15 degrees"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(90).on_repeat("stack")
+        rig.effect("drift").direction.add(90)
 
     def mouse_rig_drift_off():
         """Stop drift"""

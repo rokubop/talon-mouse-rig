@@ -109,3 +109,6 @@ rig stop: user.mouse_rig_stop()
 rig stop smooth: user.mouse_rig_stop_smooth()
 rig bake: user.mouse_rig_bake()
 rig state: user.mouse_rig_show_state()
+
+rig test: user.mouse_rig_test()
+rig test two: user.mouse_rig_test_two()
