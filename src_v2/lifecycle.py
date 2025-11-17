@@ -16,13 +16,16 @@ import math
 class Lifecycle:
     """Manages the over/hold/revert lifecycle for a builder"""
 
-    def __init__(self):
+    def __init__(self, is_tagged: bool = False):
         # Configuration
         self.over_ms: Optional[float] = None
         self.over_easing: str = "linear"
         self.hold_ms: Optional[float] = None
         self.revert_ms: Optional[float] = None
         self.revert_easing: str = "linear"
+
+        # Whether this is for a tagged builder (affects completion logic)
+        self.is_tagged = is_tagged
 
         # Callbacks per phase (phase -> list of callbacks)
         self.callbacks: dict[str, list[Callable]] = {
@@ -155,12 +158,50 @@ class Lifecycle:
                 print(f"Error in lifecycle callback: {e}")
 
     def is_complete(self) -> bool:
-        """Check if lifecycle is complete"""
+        """Check if lifecycle is complete
+
+        For tagged builders with no lifecycle, they never complete
+        (they stay active until manually reverted)
+        """
+        if self.is_tagged and self.phase is None and not self.has_any_lifecycle():
+            return False  # Tagged builders with no lifecycle stay active forever
         return self.started and self.phase is None
+
+    def has_any_lifecycle(self) -> bool:
+        """Check if this lifecycle has any phases defined"""
+        return (
+            (self.over_ms is not None and self.over_ms > 0) or
+            (self.hold_ms is not None and self.hold_ms > 0) or
+            (self.revert_ms is not None and self.revert_ms >= 0)
+        )
 
     def is_reverting(self) -> bool:
         """Check if currently in revert phase"""
         return self.phase == LifecyclePhase.REVERT
+
+    def has_reverted(self) -> bool:
+        """Check if this lifecycle completed with a revert phase
+
+        Only returns True if revert_ms was explicitly set (meaning .revert() was called).
+        Builders with only .over() or .hold() should still bake.
+        """
+        return (
+            self.started and
+            self.phase is None and
+            self.revert_ms is not None and
+            self.revert_ms >= 0
+        )
+
+    def should_be_garbage_collected(self) -> bool:
+        """Check if builder should be removed and garbage collected
+
+        Tagged builders persist in active_builders forever (until manually reverted/baked)
+        Anonymous builders are removed from active_builders when lifecycle completes (then GC'd)
+        """
+        if not self.is_complete():
+            return False
+        # Only remove anonymous builders from active state
+        return not self.is_tagged
 
 
 class PropertyAnimator:
@@ -190,6 +231,14 @@ class PropertyAnimator:
             # Instant application
             return target_value
 
+        # Determine neutral value based on operator
+        if operator in ("mul", "div"):
+            neutral = 1  # Multiplicative neutral
+        elif operator in ("add", "by", "sub"):
+            neutral = 0  # Additive neutral
+        else:  # "to"
+            neutral = base_value  # Revert to original base value
+
         if operator == "to":
             # For 'to', animate from base to target absolute value
             if phase == LifecyclePhase.OVER:
@@ -199,13 +248,13 @@ class PropertyAnimator:
             elif phase == LifecyclePhase.REVERT:
                 return lerp(target_value, base_value, progress)
         else:
-            # For add/sub/mul/div, animate the delta/multiplier itself
+            # For add/by/sub/mul/div, animate the delta/multiplier itself
             if phase == LifecyclePhase.OVER:
-                return lerp(0, target_value, progress)
+                return lerp(neutral, target_value, progress)
             elif phase == LifecyclePhase.HOLD:
                 return target_value
             elif phase == LifecyclePhase.REVERT:
-                return lerp(target_value, 0, progress)
+                return lerp(target_value, neutral, progress)
 
         return target_value
 

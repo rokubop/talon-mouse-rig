@@ -63,16 +63,48 @@ class RigState:
         behavior = builder.config.get_effective_behavior()
 
         if behavior == "replace":
-            # Cancel existing builder with same tag
-            self.remove_builder(tag)
+            # For tagged builders with delta operators (add/by/mul/div), accumulate instead
+            if (not builder.is_anonymous and
+                tag in self._active_builders and
+                builder.config.operator in ("add", "by", "mul", "div", "sub")):
+                # Accumulate the delta into the existing builder
+                existing = self._active_builders[tag]
+                self._accumulate_delta(existing, builder)
+                return
+            else:
+                # Cancel existing builder with same tag
+                self.remove_builder(tag)
 
         elif behavior == "queue":
-            # Check if there's already an active builder with this tag
-            if tag in self._active_builders:
+            # For anonymous builders, queue by property/operator (e.g., all direction.by() calls queue together)
+            # For tagged builders, queue by tag
+            queue_key = tag
+            if builder.is_anonymous:
+                queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
+
+            # Check if there's already an active builder for this queue
+            is_queue_busy = False
+            if builder.is_anonymous:
+                # Check if any builder with same property/operator is active and animating
+                for active_builder in self._active_builders.values():
+                    if (active_builder.config.property == builder.config.property and
+                        active_builder.config.operator == builder.config.operator and
+                        active_builder.is_anonymous and
+                        not active_builder.lifecycle.is_complete()):
+                        is_queue_busy = True
+                        break
+            else:
+                # Tagged builders queue by tag - check if tag exists AND lifecycle is still active
+                if tag in self._active_builders:
+                    existing = self._active_builders[tag]
+                    # Queue is busy if the existing builder's lifecycle hasn't completed
+                    is_queue_busy = not existing.lifecycle.is_complete()
+
+            if is_queue_busy:
                 # Queue this builder for later
                 def execute_later():
                     self.add_builder(builder)
-                self._queue_manager.enqueue(tag, execute_later)
+                self._queue_manager.enqueue(queue_key, execute_later)
                 return
 
         elif behavior == "extend":
@@ -125,8 +157,13 @@ class RigState:
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
-            # Instant completion - bake immediately if anonymous
-            self.remove_builder(tag)
+            # Instant completion - bake immediately if anonymous, remove if tagged
+            if builder.is_anonymous:
+                self.remove_builder(tag)
+            else:
+                # Tagged builders without lifecycle should stay active indefinitely
+                # (they can be manually reverted later)
+                pass
             return
 
         # Start frame loop if not running
@@ -149,28 +186,105 @@ class RigState:
             if tag in self._tagged_tags:
                 self._tagged_tags.remove(tag)
 
-            # Notify queue system
-            self._queue_manager.on_builder_complete(tag)
+            # Notify queue system (using same queue key logic as add_builder)
+            queue_key = tag
+            if builder.is_anonymous:
+                queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
+            self._queue_manager.on_builder_complete(queue_key)
 
         # Stop frame loop if no active builders AND no movement
         if len(self._active_builders) == 0 and not self._has_movement():
             self._stop_frame_loop()
 
+    def _accumulate_delta(self, existing: 'ActiveBuilder', new: 'ActiveBuilder'):
+        """Accumulate a new delta into an existing tagged builder
+
+        For tagged builders called multiple times with delta operators (add/by/mul/div),
+        this accumulates the effect instead of replacing it.
+        """
+        prop = existing.config.property
+        operator = existing.config.operator
+
+        if prop == "direction" and operator in ("add", "by"):
+            # For direction rotation, accumulate the angle
+            existing_angle = existing.config.value if isinstance(existing.config.value, (int, float)) else existing.config.value[0]
+            new_angle = new.config.value if isinstance(new.config.value, (int, float)) else new.config.value[0]
+            accumulated_angle = existing_angle + new_angle
+
+            # Update config and recalculate target
+            existing.config.value = accumulated_angle
+            import math
+            from .core import Vec2
+            angle_rad = math.radians(accumulated_angle)
+            cos_a = math.cos(angle_rad)
+            sin_a = math.sin(angle_rad)
+            base = existing.base_value  # Keep original base
+            new_x = base.x * cos_a - base.y * sin_a
+            new_y = base.x * sin_a + base.y * cos_a
+            existing.target_value = Vec2(new_x, new_y).normalized()
+
+        elif prop in ("speed", "accel"):
+            if operator in ("add", "by"):
+                # Accumulate additive delta
+                existing.config.value += new.config.value
+                existing.target_value = existing.config.value
+            elif operator == "mul":
+                # Accumulate multiplicative delta
+                existing.config.value *= new.config.value
+                existing.target_value = existing.config.value
+            elif operator == "div":
+                # Accumulate divisive delta
+                if new.config.value != 0:
+                    existing.config.value /= new.config.value
+                    existing.target_value = existing.config.value
+            elif operator == "sub":
+                # Accumulate subtractive delta
+                existing.config.value -= new.config.value
+                existing.target_value = existing.config.value
+
+        # Restart lifecycle animation to show the new accumulated value
+        existing.lifecycle.started = False
+        existing.lifecycle.phase = None
+        existing.lifecycle.elapsed = 0
+        existing.lifecycle.phase_start_time = None
+
     def _bake_builder(self, builder: 'ActiveBuilder'):
         """Merge builder's final value into base state"""
+        # If builder has reverted, don't bake (it's already back to base)
+        if builder.lifecycle.has_reverted():
+            return
+
         prop = builder.config.property
         operator = builder.config.operator
-        value = builder.config.value
+        current_value = builder.get_current_value()
 
         if prop == "speed":
-            self._base_speed = builder.get_current_value()
+            if operator == "to":
+                self._base_speed = current_value
+            elif operator in ("add", "by"):
+                self._base_speed += current_value
+            elif operator == "sub":
+                self._base_speed -= current_value
+            elif operator == "mul":
+                self._base_speed *= current_value
+            elif operator == "div":
+                self._base_speed /= current_value if current_value != 0 else 1
         elif prop == "accel":
-            self._base_accel = builder.get_current_value()
+            if operator == "to":
+                self._base_accel = current_value
+            elif operator in ("add", "by"):
+                self._base_accel += current_value
+            elif operator == "sub":
+                self._base_accel -= current_value
+            elif operator == "mul":
+                self._base_accel *= current_value
+            elif operator == "div":
+                self._base_accel /= current_value if current_value != 0 else 1
         elif prop == "direction":
-            self._base_direction = builder.get_current_value()
+            self._base_direction = current_value
         elif prop == "pos":
             # Position is more complex - update base position
-            offset = builder.get_current_value()
+            offset = current_value
             self._base_pos = self._base_pos + offset
 
         # Ensure frame loop is running if there's movement
@@ -224,6 +338,9 @@ class RigState:
                 elif operator == "div":
                     accel /= current_value if current_value != 0 else 1
             elif prop == "direction":
+                # Direction always uses absolute values (animate_direction handles rotation)
+                # Even for add/by operators, the builder has already calculated the rotated target
+                # and animate_direction returns the interpolated absolute direction
                 direction = current_value
             elif prop == "pos":
                 # Position builders return offsets
@@ -338,10 +455,47 @@ class RigState:
         """Access to base (baked) state only"""
         return RigState.BaseState(self)
 
-    def stop(self, transition_ms: Optional[float] = None):
-        """Stop movement (speed to 0)"""
-        # This will be implemented via builder in builder.py
-        pass
+    def stop(self, transition_ms: Optional[float] = None, easing: str = "linear"):
+        """Stop everything: bake state, clear effects, decelerate to 0
+
+        This matches v1 behavior:
+        1. Bake current computed state into base
+        2. Clear all active builders (effects)
+        3. Set speed to 0 (with optional smooth deceleration)
+        """
+        # 1. Bake all active builders into base
+        for tag in list(self._active_builders.keys()):
+            builder = self._active_builders[tag]
+            if not builder.lifecycle.has_reverted():
+                self._bake_builder(builder)
+
+        # 2. Clear all active builders
+        self._active_builders.clear()
+        self._anonymous_tags.clear()
+        self._tagged_tags.clear()
+
+        # 3. Decelerate speed to 0
+        if transition_ms is None or transition_ms == 0:
+            # Immediate stop
+            self._base_speed = 0.0
+            self._base_accel = 0.0
+        else:
+            # Smooth deceleration - create anonymous builder
+            from .builder import RigBuilder, ActiveBuilder
+            from .contracts import BuilderConfig
+
+            config = BuilderConfig()
+            config.tag_name = self.generate_anonymous_tag()
+            config.property = "speed"
+            config.operator = "to"
+            config.value = 0
+            config.over_ms = transition_ms
+            config.over_easing = easing
+
+            builder = ActiveBuilder(config, self, is_anonymous=True)
+            self._active_builders[config.tag_name] = builder
+            self._anonymous_tags.append(config.tag_name)
+            self._ensure_frame_loop_running()
 
     def reverse(self, transition_ms: Optional[float] = None):
         """Reverse direction (180° turn)"""
@@ -352,3 +506,16 @@ class RigState:
         """Bake all active builders immediately"""
         for tag in list(self._active_builders.keys()):
             self.remove_builder(tag)
+
+    def trigger_revert(self, tag: str, revert_ms: Optional[float] = None, easing: str = "linear"):
+        """Trigger early revert on an existing active builder"""
+        if tag in self._active_builders:
+            builder = self._active_builders[tag]
+            # Set the builder to start reverting
+            builder.lifecycle.revert_ms = revert_ms if revert_ms is not None else 0
+            builder.lifecycle.revert_easing = easing
+            # Force transition to revert phase
+            builder.lifecycle.phase = LifecyclePhase.REVERT
+            builder.lifecycle.phase_start_time = time.perf_counter()
+        else:
+            print(f"  Builder {tag} not found")

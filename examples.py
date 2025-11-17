@@ -28,7 +28,7 @@ class Actions:
     def mouse_rig_test():
         """Test function"""
         rig = actions.user.mouse_rig()
-        rig.effect("test").speed.add(5).over(500).hold(1000).revert(500)
+        rig.speed.add(5).over(1000).hold(1000)
 
     def mouse_rig_test_two():
         """Second test function"""
@@ -114,22 +114,22 @@ class Actions:
     def mouse_rig_sprint_on():
         """Enable sprint mode (2x speed) - replaces on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.effect("sprint").speed.mul(2).over(1000).revert(1000)
+        rig.tag("sprint").speed.mul(2)
 
     def mouse_rig_sprint_off():
         """Disable sprint mode"""
         rig = actions.user.mouse_rig()
-        rig.effect("sprint").revert(500)
+        rig.tag("sprint").revert(500)
 
     def mouse_rig_slow_mode_on():
         """Enable slow mode (half speed) - replaces on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.effect("slow").speed.div(2)
+        rig.tag("slow").speed.div(2)
 
     def mouse_rig_slow_mode_off():
         """Disable slow mode"""
         rig = actions.user.mouse_rig()
-        rig.effect("slow").revert(500)
+        rig.tag("slow").revert(500)
 
     # =========================================================================
     # EFFECT SYSTEM - Strict Syntax (REQUIRED for effects)
@@ -138,22 +138,22 @@ class Actions:
     def mouse_rig_boost_strict():
         """Speed boost using strict syntax - REQUIRED for effects"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost").speed.add(10)  # ✅ Explicit operation required
+        rig.tag("boost").speed.add(10)  # ✅ Explicit operation required
 
     def mouse_rig_drift_strict():
         """Drift using strict syntax"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(15)  # ✅ Explicit operation
+        rig.tag("drift").direction.add(15)  # ✅ Explicit operation
 
     def mouse_rig_offset_strict():
         """Position offset using strict syntax"""
         rig = actions.user.mouse_rig()
-        rig.effect("wobble").pos.add(5, 5)
+        rig.tag("wobble").pos.add(5, 5)
 
     def mouse_rig_offset_reset():
         """Reset position offset"""
         rig = actions.user.mouse_rig()
-        rig.effect("wobble").revert()
+        rig.tag("wobble").revert()
 
     # =========================================================================
     # EFFECT SYSTEM (On-Repeat Strategies)
@@ -162,37 +162,37 @@ class Actions:
     def mouse_rig_boost_pad():
         """Boost pad that stacks when hit multiple times (unlimited)"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost_pad").speed.add(2)
+        rig.tag("boost_pad").speed.add(2)
 
     def mouse_rig_boost_pad_max():
         """Boost pad with max 3 stacks (max +30)"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost_pad").speed.add(10).on_repeat("stack", 3)
+        rig.tag("boost_pad").speed.add(10).on_repeat("stack", 3)
 
     def mouse_rig_boost_pad_with_timeout():
         """Boost pad that fades in/out with unlimited stacks"""
         rig = actions.user.mouse_rig()
-        rig.effect("boost_pad").speed.add(10).over(1000).revert(1000)
+        rig.tag("boost_pad").speed.add(10).over(1000).revert(1000)
 
     def mouse_rig_rage_stacks():
         """Rage buff - each stack multiplies speed by 1.2 (max 5 stacks)"""
         rig = actions.user.mouse_rig()
-        rig.effect("rage").speed.mul(1.2).on_repeat("stack", 5)
+        rig.tag("rage").speed.mul(1.2).on_repeat("stack", 5)
 
     def mouse_rig_drift_extend():
         """Drift that extends duration on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(15).hold(2000).on_repeat("extend")
+        rig.tag("drift").direction.add(15).hold(2000).on_repeat("extend")
 
     def mouse_rig_invuln():
         """Invulnerability - ignores new calls while active"""
         rig = actions.user.mouse_rig()
-        rig.effect("invuln").speed.mul(0).hold(2000).on_repeat("ignore")
+        rig.tag("invuln").speed.mul(0).hold(2000).on_repeat("ignore")
 
     def mouse_rig_dash_throttle():
         """Dash with rate limiting (max 1 per 500ms)"""
         rig = actions.user.mouse_rig()
-        rig.effect("dash").speed.add(20).hold(200).on_repeat("throttle", 500)
+        rig.tag("dash").speed.add(20).hold(200).on_repeat("throttle", 500)
 
     # =========================================================================
     # EFFECT SYSTEM - DIRECTION (Rotation)
@@ -201,17 +201,17 @@ class Actions:
     def mouse_rig_drift_on():
         """Drift right by 15 degrees"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(90)
+        rig.tag("drift").direction.add(90)
 
     def mouse_rig_drift_off():
         """Stop drift"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").revert(1000)
+        rig.tag("drift").revert(1000)
 
     def mouse_rig_drift_smooth():
         """Smooth drift with lifecycle"""
         rig = actions.user.mouse_rig()
-        rig.effect("drift").direction.add(30)\
+        rig.tag("drift").direction.add(30)\
             .over(500)\
             .then(lambda: print("over"))\
             .hold(2000)\
@@ -274,7 +274,7 @@ class Actions:
     def mouse_rig_turn_right():
         """Smooth 90° turn right"""
         rig = actions.user.mouse_rig()
-        rig.direction.by(90).over(500, "ease_in_out")
+        rig.tag("d").queue.direction.by(90).over(500, "ease_in_out")
 
     def mouse_rig_turn_left():
         """Smooth 90° turn left"""

@@ -115,15 +115,14 @@ class Rig:
     # SPECIAL OPERATIONS
     # ========================================================================
 
-    def stop(self, ms: Optional[float] = None) -> RigBuilder:
-        """Stop movement (speed to 0)"""
-        builder = RigBuilder(self._state)
-        builder.config.property = "speed"
-        builder.config.operator = "to"
-        builder.config.value = 0
-        if ms is not None:
-            builder.over(ms)
-        return builder
+    def stop(self, ms: Optional[float] = None, easing: str = "linear"):
+        """Stop everything: bake all effects, clear builders, decelerate to 0
+
+        Args:
+            ms: Optional duration to decelerate over. If None, stops immediately.
+            easing: Easing function for gradual deceleration
+        """
+        self._state.stop(ms, easing)
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
         """Reverse direction (180° turn)"""

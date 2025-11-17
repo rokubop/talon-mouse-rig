@@ -14,6 +14,28 @@ if TYPE_CHECKING:
     from .state import RigState
 
 
+class BehaviorProxy:
+    """Proxy that allows both .queue and .queue() syntax"""
+
+    def __init__(self, builder: 'RigBuilder', behavior_name: str, has_args: bool = False):
+        self.builder = builder
+        self.behavior_name = behavior_name
+        self.has_args = has_args
+
+    def __call__(self, *args):
+        """Handle .queue() syntax"""
+        method = getattr(self.builder, f'_set_{self.behavior_name}')
+        return method(*args)
+
+    def __getattr__(self, name):
+        """Handle .queue.direction syntax (property chaining)"""
+        # Auto-apply the behavior first
+        method = getattr(self.builder, f'_set_{self.behavior_name}')
+        method()  # Call with no args for property-style access
+        # Then forward to the builder
+        return getattr(self.builder, name)
+
+
 class RigBuilder:
     """Universal builder for all mouse rig operations
 
@@ -120,35 +142,65 @@ class RigBuilder:
     # BEHAVIOR METHODS
     # ========================================================================
 
-    def stack(self, max_count: Optional[int] = None) -> 'RigBuilder':
-        """Stack behavior (unlimited or max)"""
+    @property
+    def stack(self) -> BehaviorProxy:
+        """Stack behavior (unlimited or max) - use .stack or .stack(max)"""
+        return BehaviorProxy(self, 'stack', has_args=True)
+
+    def _set_stack(self, max_count: Optional[int] = None) -> 'RigBuilder':
+        """Internal: Set stack behavior"""
         self.config.behavior = "stack"
         self.config.behavior_args = (max_count,) if max_count is not None else ()
         return self
 
-    def replace(self) -> 'RigBuilder':
-        """Replace behavior (cancel previous)"""
+    @property
+    def replace(self) -> BehaviorProxy:
+        """Replace behavior (cancel previous) - use .replace or .replace()"""
+        return BehaviorProxy(self, 'replace')
+
+    def _set_replace(self) -> 'RigBuilder':
+        """Internal: Set replace behavior"""
         self.config.behavior = "replace"
         return self
 
-    def queue(self) -> 'RigBuilder':
-        """Queue behavior (wait for current)"""
+    @property
+    def queue(self) -> BehaviorProxy:
+        """Queue behavior (wait for current) - use .queue or .queue()"""
+        return BehaviorProxy(self, 'queue')
+
+    def _set_queue(self) -> 'RigBuilder':
+        """Internal: Set queue behavior"""
         self.config.behavior = "queue"
         return self
 
-    def extend(self) -> 'RigBuilder':
-        """Extend hold duration"""
+    @property
+    def extend(self) -> BehaviorProxy:
+        """Extend hold duration - use .extend or .extend()"""
+        return BehaviorProxy(self, 'extend')
+
+    def _set_extend(self) -> 'RigBuilder':
+        """Internal: Set extend behavior"""
         self.config.behavior = "extend"
         return self
 
-    def throttle(self, ms: float) -> 'RigBuilder':
-        """Throttle behavior (rate limit)"""
+    @property
+    def throttle(self) -> BehaviorProxy:
+        """Throttle behavior (rate limit) - use .throttle(ms)"""
+        return BehaviorProxy(self, 'throttle', has_args=True)
+
+    def _set_throttle(self, ms: float) -> 'RigBuilder':
+        """Internal: Set throttle behavior"""
         self.config.behavior = "throttle"
         self.config.behavior_args = (ms,)
         return self
 
-    def ignore(self) -> 'RigBuilder':
-        """Ignore while active"""
+    @property
+    def ignore(self) -> BehaviorProxy:
+        """Ignore while active - use .ignore or .ignore()"""
+        return BehaviorProxy(self, 'ignore')
+
+    def _set_ignore(self) -> 'RigBuilder':
+        """Internal: Set ignore behavior"""
         self.config.behavior = "ignore"
         return self
 
@@ -174,9 +226,16 @@ class RigBuilder:
         """Validate and execute the builder"""
         self._executed = True
 
-        # Validation
-        if self.config.property is None or self.config.operator is None:
+
+        # Special case: revert-only call (no property/operator set)
+        if self.config.property is None and self.config.operator is None:
+            if self.config.revert_ms is not None:
+                # This is a revert() call on an existing tagged builder
+                self.rig_state.trigger_revert(self.config.tag_name, self.config.revert_ms, self.config.revert_easing)
+                return
+
             # Incomplete builder, ignore
+            print(f"  Incomplete builder, ignoring")
             return
 
         # Calculate rate-based durations
@@ -184,6 +243,7 @@ class RigBuilder:
 
         # Create ActiveBuilder and add to state
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
+        print(f"  Adding ActiveBuilder to state")
         self.rig_state.add_builder(active)
 
     def _calculate_rate_durations(self):
@@ -378,7 +438,7 @@ class ActiveBuilder:
         self.tag = config.tag_name
 
         # Create lifecycle
-        self.lifecycle = Lifecycle()
+        self.lifecycle = Lifecycle(is_tagged=not is_anonymous)
         self.lifecycle.over_ms = config.over_ms
         self.lifecycle.over_easing = config.over_easing
         self.lifecycle.hold_ms = config.hold_ms
@@ -389,10 +449,14 @@ class ActiveBuilder:
         for stage, callback in config.then_callbacks:
             self.lifecycle.add_callback(stage, callback)
 
-        # Calculate values - use computed current state for 'to' operator
+        # Calculate values - use computed current state for certain operations
         if config.operator == "to" and config.property in ("speed", "accel"):
             # For 'to' operations, we need the current computed value
             self.base_value = getattr(rig_state, config.property)
+        elif config.property == "direction" and config.operator in ("add", "by"):
+            # For direction rotations, use current computed direction (not base)
+            # This allows queued rotations to stack properly
+            self.base_value = rig_state.direction
         else:
             # For other operations, use base state
             self.base_value = self._get_base_value()
@@ -456,14 +520,12 @@ class ActiveBuilder:
         """Update this builder.
 
         Returns:
-            True if still active, False if complete
+            True if still active, False if should be removed and garbage collected
         """
         phase, progress = self.lifecycle.update(dt)
 
-        if self.lifecycle.is_complete():
-            return False
-
-        return True
+        # Tagged builders persist forever, anonymous builders removed when complete
+        return not self.lifecycle.should_be_garbage_collected()
 
     def get_current_value(self) -> Any:
         """Get current animated value"""

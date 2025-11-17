@@ -108,7 +108,10 @@ class BuilderConfig:
         """Get behavior with defaults applied"""
         if self.behavior is not None:
             return self.behavior
-        # Default: stack unlimited
+        # Direction rotations default to queue (sequential turns)
+        # All other properties default to stack
+        if self.property == "direction" and self.operator in ("add", "by", "sub"):
+            return "queue"
         return "stack"
 
     def get_effective_bake(self) -> bool:
@@ -116,4 +119,5 @@ class BuilderConfig:
         if self.bake_value is not None:
             return self.bake_value
         # Default: anonymous bakes, tagged doesn't
+        # Tagged builders must be explicitly reverted or baked
         return self.is_anonymous()
