@@ -45,7 +45,7 @@ class Actions:
         """Move left at normal speed"""
         rig = actions.user.mouse_rig()
         rig.direction(-1, 0)
-        rig.speed(rig.state.speed or 3)
+        rig.speed(3)
 
     def mouse_rig_go_up():
         """Move up at normal speed"""

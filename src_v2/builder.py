@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 class RigBuilder:
     """Universal builder for all mouse rig operations
-    
+
     This is the ONLY builder type. All methods return self for chaining.
     Execution happens when the Python object is garbage collected (__del__).
     """
@@ -24,7 +24,7 @@ class RigBuilder:
     def __init__(self, rig_state: 'RigState', tag: Optional[str] = None):
         self.rig_state = rig_state
         self.config = BuilderConfig()
-        
+
         # Auto-generate tag if anonymous
         if tag is None:
             self.config.tag_name = rig_state.generate_anonymous_tag()
@@ -82,7 +82,7 @@ class RigBuilder:
         else:
             self.config.over_ms = ms if ms is not None else 0
             self.config.over_easing = easing
-        
+
         self._lifecycle_stage = LifecyclePhase.OVER
         return self
 
@@ -106,7 +106,7 @@ class RigBuilder:
         else:
             self.config.revert_ms = ms if ms is not None else 0
             self.config.revert_easing = easing
-        
+
         self._lifecycle_stage = LifecyclePhase.REVERT
         return self
 
@@ -293,7 +293,7 @@ class RigBuilder:
                 return current * value
             elif operator == "div":
                 return current / value if value != 0 else current
-        
+
         elif self.config.property == "direction":
             if operator == "to":
                 return Vec2.from_tuple(value).normalized()
@@ -306,7 +306,7 @@ class RigBuilder:
                 new_x = current.x * cos_a - current.y * sin_a
                 new_y = current.x * sin_a + current.y * cos_a
                 return Vec2(new_x, new_y).normalized()
-        
+
         elif self.config.property == "pos":
             if operator == "to":
                 return Vec2.from_tuple(value)
@@ -322,7 +322,7 @@ class PropertyBuilder:
     def __init__(self, rig_builder: RigBuilder, property_name: str):
         self.rig_builder = rig_builder
         self.property_name = property_name
-        
+
         # Set property on builder
         self.rig_builder.config.property = property_name
 
@@ -396,7 +396,7 @@ class ActiveBuilder:
         else:
             # For other operations, use base state
             self.base_value = self._get_base_value()
-        
+
         self.target_value = self._calculate_target_value()
 
     def _get_base_value(self) -> Any:
@@ -428,7 +428,7 @@ class ActiveBuilder:
                 return value  # Return the multiplier
             elif operator == "div":
                 return value  # Return the divisor
-        
+
         elif self.config.property == "direction":
             if operator == "to":
                 return Vec2.from_tuple(value).normalized()
@@ -441,7 +441,7 @@ class ActiveBuilder:
                 new_x = current.x * cos_a - current.y * sin_a
                 new_y = current.x * sin_a + current.y * cos_a
                 return Vec2(new_x, new_y).normalized()
-        
+
         elif self.config.property == "pos":
             if operator == "to":
                 # Return offset from current position

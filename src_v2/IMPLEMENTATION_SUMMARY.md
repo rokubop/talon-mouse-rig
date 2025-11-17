@@ -262,15 +262,15 @@ V2 is NOT backward compatible with V1. Key migration steps:
 
 All PRD10 success criteria met:
 
-✅ Single unified builder type (RigBuilder)  
-✅ No distinction between "effects" and "base rig" in API  
-✅ Order-agnostic fluent API (except lifecycle order)  
-✅ Clean execution model (del-based)  
-✅ Simple state management (base + active builders)  
-✅ Behavior system works for all builders  
-✅ Bake system provides control over persistence  
-✅ All examples from current system work in new system  
-✅ Leverage V1's proven movement implementation  
+✅ Single unified builder type (RigBuilder)
+✅ No distinction between "effects" and "base rig" in API
+✅ Order-agnostic fluent API (except lifecycle order)
+✅ Clean execution model (del-based)
+✅ Simple state management (base + active builders)
+✅ Behavior system works for all builders
+✅ Bake system provides control over persistence
+✅ All examples from current system work in new system
+✅ Leverage V1's proven movement implementation
 
 ## Lines of Code
 

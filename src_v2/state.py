@@ -123,6 +123,12 @@ class RigState:
         # Update throttle time
         self._throttle_times[tag] = time.perf_counter()
 
+        # Check if this builder completes instantly (no lifecycle)
+        if builder.lifecycle.is_complete():
+            # Instant completion - bake immediately if anonymous
+            self.remove_builder(tag)
+            return
+
         # Start frame loop if not running
         self._ensure_frame_loop_running()
 
@@ -146,8 +152,8 @@ class RigState:
             # Notify queue system
             self._queue_manager.on_builder_complete(tag)
 
-        # Stop frame loop if no active builders
-        if len(self._active_builders) == 0:
+        # Stop frame loop if no active builders AND no movement
+        if len(self._active_builders) == 0 and not self._has_movement():
             self._stop_frame_loop()
 
     def _bake_builder(self, builder: 'ActiveBuilder'):
@@ -166,6 +172,10 @@ class RigState:
             # Position is more complex - update base position
             offset = builder.get_current_value()
             self._base_pos = self._base_pos + offset
+
+        # Ensure frame loop is running if there's movement
+        if self._has_movement():
+            self._ensure_frame_loop_running()
 
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2, float]:
         """Compute current state by applying all active builders to base.
@@ -243,15 +253,15 @@ class RigState:
         # Compute current state
         pos, speed, direction, accel = self._compute_current_state()
 
-        # Apply acceleration to speed
+        # Apply acceleration to speed (accel is per frame)
         if accel != 0:
-            speed += accel * dt
+            speed += accel
 
-        # Calculate movement
+        # Calculate movement (speed is pixels per frame, not per second)
         if speed != 0:
             velocity = direction * speed
-            dx = velocity.x * dt
-            dy = velocity.y * dt
+            dx = velocity.x
+            dy = velocity.y
 
             # Apply subpixel adjustment
             dx_int, dy_int = self._subpixel_adjuster.adjust(dx, dy)
@@ -276,6 +286,10 @@ class RigState:
             self._cron_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
+
+    def _has_movement(self) -> bool:
+        """Check if there's any movement happening (base speed or accel non-zero)"""
+        return self._base_speed != 0 or self._base_accel != 0
 
     # Public API for reading state
     @property

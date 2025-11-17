@@ -198,13 +198,13 @@ def with_callbacks():
     """Execute callbacks at each lifecycle stage"""
     def on_ramp():
         print("Ramped up!")
-    
+
     def on_hold():
         print("Holding...")
-    
+
     def on_complete():
         print("Complete!")
-    
+
     r = rig()
     r.speed.add(10)\
         .over(300).then(on_ramp)\
@@ -246,15 +246,15 @@ def bake_all():
 
 def order_agnostic():
     """All these are equivalent (except lifecycle must be ordered)"""
-    
+
     # Standard order
     r = rig()
     r.speed.add(5).over(300).hold(1000)
-    
+
     # Different order
     r = rig()
     r.tag("x").over(300).speed.add(5).hold(1000)
-    
+
     # Another order
     r = rig()
     r.stack().over(300).speed.add(5).tag("y")
@@ -285,12 +285,12 @@ def behavior_method():
 def read_state():
     """Access current computed state"""
     r = rig()
-    
+
     # Current state (base + all active builders)
     current_speed = r.state.speed
     current_pos = r.state.pos
     current_direction = r.state.direction
-    
+
     # Base state only (baked values)
     base_speed = r.base.speed
     base_pos = r.base.pos
@@ -303,14 +303,14 @@ def read_state():
 def advanced_movement():
     """Complex movement with multiple effects"""
     r = rig()
-    
+
     # Base movement
     r.direction(1, 0)
     r.speed(10)
-    
+
     # Temporary boost
     r.tag("boost").speed.mul(2).hold(3000)
-    
+
     # Dodge movement
     r.tag("dodge").pos.by(0, -50).over(200).revert(200)
 
@@ -318,7 +318,7 @@ def advanced_movement():
 def combo_system():
     """Chain multiple operations in sequence"""
     r = rig()
-    
+
     # Each queued operation waits for previous
     r.tag("combo").pos.by(100, 0).queue().over(300)
     r.tag("combo").pos.by(0, 100).queue().over(300)
@@ -329,7 +329,7 @@ def combo_system():
 def dynamic_difficulty():
     """Speed scales with stacks"""
     r = rig()
-    
+
     # Each kill adds a speed boost (max 5)
     r.tag("difficulty").speed.add(2).stack(5).hold(10000)
 

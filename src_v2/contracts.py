@@ -101,8 +101,8 @@ class BuilderConfig:
         self.bake_value: Optional[bool] = None
 
     def is_anonymous(self) -> bool:
-        """Check if this builder has no tag"""
-        return self.tag_name is None
+        """Check if this builder is anonymous (auto-generated tag)"""
+        return self.tag_name is not None and self.tag_name.startswith("__anon_")
 
     def get_effective_behavior(self) -> str:
         """Get behavior with defaults applied"""

@@ -359,14 +359,14 @@ V2 is NOT backward compatible. Key differences:
 
 ## Success Criteria
 
-✅ Single unified builder type (`RigBuilder`)  
-✅ No distinction between "effects" and "base rig" in API  
-✅ Order-agnostic fluent API (except lifecycle)  
-✅ Clean execution model (del-based)  
-✅ Simple state management (base + active builders)  
-✅ Behavior system works for all builders  
-✅ Bake system provides persistence control  
-✅ Reuses proven V1 utilities (SubpixelAdjuster, Vec2, easing)  
+✅ Single unified builder type (`RigBuilder`)
+✅ No distinction between "effects" and "base rig" in API
+✅ Order-agnostic fluent API (except lifecycle)
+✅ Clean execution model (del-based)
+✅ Simple state management (base + active builders)
+✅ Behavior system works for all builders
+✅ Bake system provides persistence control
+✅ Reuses proven V1 utilities (SubpixelAdjuster, Vec2, easing)
 
 ## Performance
 

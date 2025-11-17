@@ -1,14 +1,14 @@
 """
-Talon Mouse Rig - Continuous motion-based mouse control system (PRD 8)
+Talon Mouse Rig V2 - Unified continuous motion-based mouse control (PRD10)
 
-A fluent, stateful mouse control API with:
-- Named effects with strict syntax (.effect())
-- Independent force entities (.force())
-- Direct mathematical operations (.to(), .mul(), .add(), .sub(), .div())
-- Smooth transitions with easing
-- Temporary effects with lifecycle (.over()/.hold()/.revert())
-- On-repeat strategies for effect behavior
-- State management and baking
+A fluent, stateful mouse control API with unified builder pattern:
+- Single builder type (RigBuilder) for all operations
+- Order-agnostic fluent API
+- Tagged and anonymous builders
+- Smooth transitions with lifecycle (over/hold/revert)
+- Behavior modes (stack, replace, queue, extend, throttle, ignore)
+- Bake control for persistence
+- Rate-based and time-based transitions
 
 Core Properties:
     rig.speed      # Speed scalar
@@ -22,165 +22,193 @@ Basic Usage:
     rig.speed(10)                # Set base speed
     rig.speed.to(20).over(500)   # Ramp to 20 over 500ms
 
-Explicit Entity API (PRD 8):
-    rig.effect("name")   # Named effect (modifies base properties) - STRICT syntax
-    rig.force("name")    # Named force (independent entity) - loose syntax
+Operators:
+    .to(value)       # Set absolute value
+    .add(value)      # Add delta
+    .by(value)       # Alias for add
+    .sub(value)      # Subtract delta
+    .mul(value)      # Multiply
+    .div(value)      # Divide
 
-Effects (modify base properties with explicit operations - STRICT mode):
-    Absolute value:
-        rig.effect("boost").speed.to(10)            # Set speed to 10
+    Shorthand (anonymous only):
+        rig.speed(10)        # Shorthand for .to(10)
+        rig.direction(1, 0)  # Shorthand for .to(1, 0)
 
-    Multiplicative:
-        rig.effect("sprint").speed.mul(2)           # Multiply speed by 2
-        rig.effect("sprint").speed.div(2)           # Divide speed by 2
-
-    Additive:
-        rig.effect("boost").speed.add(10)           # Add 10 to speed
-        rig.effect("boost").speed.by(10)            # Alias for add
-        rig.effect("boost").speed.sub(5)            # Subtract 5 from speed
-
-    On-Repeat Strategies:
-        rig.effect("boost").speed.add(10).on_repeat("stack")          # Unlimited stacking
-        rig.effect("boost").speed.add(10).on_repeat("stack", 3)       # Max 3 stacks
-        rig.effect("boost").speed.add(10).on_repeat("replace")        # Default - replace existing
-        rig.effect("boost").speed.add(10).on_repeat("extend")         # Extend duration
-        rig.effect("boost").speed.add(10).on_repeat("queue")          # Queue effects
-        rig.effect("boost").speed.add(10).on_repeat("ignore")         # Ignore new calls
-        rig.effect("boost").speed.add(10).on_repeat("throttle", 500)  # Rate limit (ms)
-
-    Stop:
-        rig.effect("sprint").revert()               # Immediate revert
-        rig.effect("sprint").revert(500)            # Fade out over 500ms
-
-Forces (independent entities with their own state - LOOSE mode):
-    Direct setters (shorthand for .to()):
-        rig.force("gravity").direction(0, 1)        # Set direction
-        rig.force("gravity").accel(9.8)             # Set acceleration
-        rig.force("wind").velocity(5, 0)            # Set velocity directly
-        rig.force("wind").speed(5)                  # Set speed
-
-    Or explicit .to():
-        rig.force("wind").speed.to(5)               # Same as .speed(5)
-        rig.force("wind").direction.to(1, 0)        # Same as .direction(1, 0)
-
-    Modifications:
-        rig.force("wind").speed.add(2)              # Add to force's speed
-        rig.force("wind").speed.mul(1.5)            # Scale force's speed
-
-    Stop:
-        rig.force("wind").stop(500)                 # Fade out
-
-Composition Pipeline:
-    base → effects (.mul then .add, in creation order) → forces (vector addition)
-
-Direct Temporary Effects (anonymous, no naming needed):
-    rig.speed.by(10).hold(1000).revert(500)     # Temporary speed boost
-    rig.speed.by(10).over(300).revert(300)      # Fade in/out
-
-Timing:
+Lifecycle (optional):
     Time-based:
-        .over(duration, easing?)  # Animate over fixed duration
-        .revert(duration?, easing?)  # Revert with options
-        .stop(duration?, easing?)  # Stop with options
+        .over(ms, easing?)           # Transition duration
+        .hold(ms)                     # Hold duration
+        .revert(ms?, easing?)         # Revert duration
+        .then(callback)               # Execute callback after stage
 
-    Rate-based (no easing, constant rate):
-        .rate(value)              # Context-aware rate
+    Rate-based:
+        .over(rate=X)                 # Transition at rate (units/sec, degrees/sec, pixels/sec)
+        .revert(rate=X)               # Revert at rate
 
-Lifecycle:
-    .over(duration)                # Fade in over duration
-    .hold(duration)                # Maintain for duration
-    .revert(duration?, easing?)    # Revert to original
+    Examples:
+        rig.speed.to(20).over(500)                    # Time-based
+        rig.speed.to(20).over(rate=10)                # Rate-based (10 units/sec)
+        rig.direction.by(90).over(rate=45)            # 45 degrees/sec
+        rig.pos.to(960, 540).over(rate=200)           # 200 pixels/sec
 
-State Management:
-    rig.state.speed       # Computed speed (base + effects + forces)
+        rig.speed.add(10).over(300).hold(2000).revert(500)  # Full lifecycle
+        rig.speed.add(10)\
+            .over(300).then(lambda: print("ramped"))\
+            .hold(2000).then(lambda: print("holding"))\
+            .revert(500).then(lambda: print("done"))
+
+Behavior Modes (what happens on repeat):
+    .stack(max?)         # Stack effects (unlimited or max count)
+    .replace()           # Cancel previous, start new
+    .queue()             # Wait for current to finish
+    .extend()            # Extend hold duration
+    .throttle(ms)        # Rate limit
+    .ignore()            # Ignore while active
+
+    Can use as property or method:
+        rig.stack.speed.add(5)           # Property
+        rig.stack(3).speed.add(5)        # Method with max
+
+    Defaults:
+        Anonymous (no tag): stack() unlimited
+        Tagged: stack() unlimited
+
+Tagged vs Anonymous:
+    # Anonymous (auto-bakes when complete)
+    rig.speed.add(5)
+
+    # Tagged (can be controlled/reverted)
+    rig.tag("sprint").speed.mul(2)
+    rig.tag("sprint").revert(500)        # Cancel it later
+
+    Examples:
+        rig.tag("boost").speed.add(10).stack(3).hold(2000)
+        rig.tag("sprint").speed.mul(2).replace()
+        rig.tag("dash").speed.add(20).throttle(500)
+
+Bake Control:
+    .bake(true/false)    # Control whether changes persist to base
+
+    Defaults:
+        Anonymous: bake=true (changes become permanent)
+        Tagged: bake=false (changes are reversible)
+
+    Examples:
+        rig.speed.add(5)                           # Anonymous - bakes
+        rig.speed.add(5).bake(false)               # Anonymous - reversible
+        rig.tag("boost").speed.add(10)             # Tagged - reversible
+        rig.tag("boost").speed.add(10).bake(true)  # Tagged - permanent
+
+State Access:
+    rig.state.speed       # Computed speed (base + all active builders)
     rig.state.accel       # Computed acceleration
     rig.state.direction   # Current direction
     rig.state.pos         # Current position
-    rig.state.velocity    # Total velocity vector
 
-    rig.base.speed        # Base speed only
+    rig.base.speed        # Base speed only (baked values)
     rig.base.accel        # Base acceleration only
     rig.base.direction    # Base direction only
+    rig.base.pos          # Base position only
 
-Baking & Stopping:
-    rig.bake()                      # Flatten effects into base, clear all
-    rig.stop()                      # Bake, clear, speed=0 (instant)
-    rig.stop(500, "ease_out")       # Bake, clear, decelerate over 500ms
+Special Operations:
+    rig.stop()            # Speed to 0 (instant)
+    rig.stop(1000)        # Speed to 0 over 1 second
+    rig.reverse()         # 180° turn (instant)
+    rig.reverse(1000)     # 180° turn over 1 second
+    rig.bake()            # Commit all active builders to base
 
 Direction:
-    rig.direction(1, 0)              # Right
-    rig.direction(0, 1)              # Down
-    rig.direction(-1, -1)            # Up-left diagonal
-    rig.direction(1, 0).over(500)    # Smooth direction change
-    rig.direction(1, 0).rate(90)     # Rotate at 90°/sec
-    rig.reverse()                    # 180° turn
+    rig.direction(1, 0)                   # Set direction (right)
+    rig.direction.to(0, 1)                # Set direction (down)
+    rig.direction.by(90)                  # Rotate 90° clockwise
+    rig.direction.by(-90)                 # Rotate 90° counter-clockwise
+    rig.direction.to(1, 0).over(500)      # Smooth rotation
+    rig.direction.by(180).over(rate=90)   # Rotate at 90°/sec
 
 Position:
-    rig.pos.to(100, 200)             # Instant move
-    rig.pos.to(100, 200).over(1000)  # Glide over 1s
-    rig.pos.by(50, 0)                # Move by offset
+    rig.pos.to(960, 540)                  # Move to position (instant)
+    rig.pos.to(960, 540).over(1000)       # Glide over 1 second
+    rig.pos.by(50, 0)                     # Move by offset
+    rig.pos.by(50, 0).over(rate=100)      # Move at 100 pixels/sec
 
 Complete Examples:
-    # WASD with sprint
-    rig.direction(1, 0).speed(10)                       # Move right
-    rig.effect("sprint").speed.mul(2)                   # Hold shift to sprint
-    rig.effect("sprint").stop()                         # Release shift
-
-    # Stacking boost pads
-    rig.effect("boost").speed.add(5).max.stacks(3)      # Hit pad (stacks up to 3)
-
-    # Gravity + wind
-    rig.force("gravity").direction(0, 1).accel(9.8)     # Always pulls down
-    rig.force("wind").velocity(5, 0).hold(3000).revert(1000)  # Temporary gust
+    # Basic movement
+    rig.direction(1, 0)
+    rig.speed(10)
 
     # Temporary speed boost (anonymous)
-    rig.speed.by(10).hold(2000).revert(1000)
+    rig.speed.add(10).hold(2000)
+
+    # Sprint (tagged, can cancel)
+    rig.tag("sprint").speed.mul(2).over(500).hold(3000).revert(500)
+    rig.tag("sprint").revert()            # Cancel early
+
+    # Stacking boosts (max 3)
+    rig.tag("rage").speed.add(5).stack(3).hold(2000)
+
+    # Queued combo
+    rig.tag("combo").pos.by(100, 0).queue().over(500)
+    rig.tag("combo").pos.by(0, 100).queue().over(500)
+
+    # Throttled ability
+    rig.tag("dash").speed.add(20).throttle(500).hold(1000)
+
+    # Order-agnostic
+    rig.speed.add(5).over(300).tag("x")
+    rig.tag("x").over(300).speed.add(5)   # Equivalent
 """
 
 from talon import Module, actions, settings
 
-# Import from refactored modules using relative imports
+# Import V2 implementation
 from .settings import mod
-from .src.state import RigState, get_rig
-from .src.core import _windows_raw_available
+from .src_v2 import rig as get_rig_v2
+from .src_v2.core import _windows_raw_available
 
 
 @mod.action_class
 class Actions:
-    def mouse_rig() -> RigState:
-        """Get the mouse rig instance
+    def mouse_rig():
+        """Get the mouse rig V2 instance
 
         Example:
             rig = actions.user.mouse_rig()
-            rig.direction((1, 0))
+            rig.direction(1, 0)
             rig.speed(10)
         """
-        return get_rig()
+        return get_rig_v2()
 
     def mouse_rig_state() -> dict:
-        """Get the current state of the mouse rig
+        """Get the current state of the mouse rig V2
 
         Returns a dictionary with current rig state including:
         - position: Current mouse position (x, y)
         - direction: Direction vector (x, y)
-        - direction_cardinal: Cardinal direction name ("right", "left", "up", "down", etc.)
-        - speed: Current cruise speed
-        - cruise_velocity: Cruise velocity (x, y)
-        - total_velocity: Total velocity including overlays (x, y)
-        - Active overlays/transitions counts
-        - is_ticking: Whether the rig is actively running
+        - speed: Current computed speed
+        - accel: Current computed acceleration
+        - base_speed: Base speed (baked values only)
+        - base_direction: Base direction (baked values only)
+        - active_builders: Count of active builders
 
         Example:
             state = actions.user.mouse_rig_state()
             print(f"Speed: {state['speed']}")
-            print(f"Direction: {state['direction_cardinal']}")
+            print(f"Direction: {state['direction']}")
         """
-        rig = get_rig()
-        return rig.state_dict
+        rig = get_rig_v2()
+        return {
+            'position': rig.state.pos.to_tuple(),
+            'direction': rig.state.direction.to_tuple(),
+            'speed': rig.state.speed,
+            'accel': rig.state.accel,
+            'base_speed': rig.base.speed,
+            'base_direction': rig.base.direction.to_tuple(),
+            'active_builders': len(rig._state._active_builders),
+        }
 
     def mouse_rig_stop() -> None:
-        """Stop the mouse rig frame loop"""
-        rig = get_rig()
+        """Stop the mouse rig (speed to 0)"""
+        rig = get_rig_v2()
         rig.stop()
 
     def mouse_rig_set_type_talon() -> None:
@@ -201,3 +229,17 @@ class Actions:
             scale: Scale factor (1.0 = normal, 2.0 = double, 0.5 = half)
         """
         settings.set("user.mouse_rig_scale", scale)
+
+    def mouse_rig_bake() -> None:
+        """Bake all active builders to base state"""
+        rig = get_rig_v2()
+        rig.bake()
+
+    def mouse_rig_reverse(ms: float = None) -> None:
+        """Reverse direction (180° turn)
+
+        Args:
+            ms: Optional transition duration in milliseconds
+        """
+        rig = get_rig_v2()
+        rig.reverse(ms)

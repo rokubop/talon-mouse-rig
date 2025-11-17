@@ -38,7 +38,7 @@ def _get_global_state() -> RigState:
 
 class Rig:
     """Main entry point for mouse rig operations
-    
+
     All property accesses and methods return RigBuilder for fluent chaining.
     """
 
@@ -200,10 +200,10 @@ class _BehaviorAccessor:
 # Main entry point function
 def rig() -> Rig:
     """Get a new Rig instance
-    
+
     Returns:
         Rig instance for fluent API calls
-    
+
     Example:
         rig = actions.user.mouse_rig()
         rig.speed.to(10)
