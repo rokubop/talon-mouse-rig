@@ -537,21 +537,24 @@ class ActiveBuilder:
                 self.target_value,
                 phase,
                 progress,
-                self.config.operator
+                self.config.operator,
+                self.lifecycle.has_reverted()
             )
         elif self.config.property == "direction":
             return PropertyAnimator.animate_direction(
                 self.base_value,
                 self.target_value,
                 phase,
-                progress
+                progress,
+                self.lifecycle.has_reverted()
             )
         elif self.config.property == "pos":
             return PropertyAnimator.animate_position(
                 self.base_value,
                 self.target_value,
                 phase,
-                progress
+                progress,
+                self.lifecycle.has_reverted()
             )
 
         return self.target_value

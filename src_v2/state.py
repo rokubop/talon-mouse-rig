@@ -59,21 +59,25 @@ class RigState:
         """Add an active builder to state"""
         tag = builder.tag
 
-        # Handle behavior modes
-        behavior = builder.config.get_effective_behavior()
-
-        if behavior == "replace":
-            # For tagged builders with delta operators (add/by/mul/div), accumulate instead
-            if (not builder.is_anonymous and
-                tag in self._active_builders and
-                builder.config.operator in ("add", "by", "mul", "div", "sub")):
-                # Accumulate the delta into the existing builder
+        # Tagged builders always have at most one instance per tag
+        # Delta operators (add/by/mul/div/sub) accumulate into existing builder
+        # Absolute operators (to) replace existing builder
+        if not builder.is_anonymous and tag in self._active_builders:
+            if builder.config.operator in ("add", "by", "mul", "div", "sub"):
+                # Accumulate into existing builder
                 existing = self._active_builders[tag]
                 self._accumulate_delta(existing, builder)
                 return
             else:
-                # Cancel existing builder with same tag
+                # Replace existing builder (for 'to' operator)
                 self.remove_builder(tag)
+
+        # Handle behavior modes (mainly for anonymous builders)
+        behavior = builder.config.get_effective_behavior()
+
+        if behavior == "replace":
+            # Cancel existing builder with same tag
+            self.remove_builder(tag)
 
         elif behavior == "queue":
             # For anonymous builders, queue by property/operator (e.g., all direction.by() calls queue together)
@@ -511,6 +515,12 @@ class RigState:
         """Trigger early revert on an existing active builder"""
         if tag in self._active_builders:
             builder = self._active_builders[tag]
+
+            # Capture current animated value before reverting
+            # This ensures we revert from wherever we are now, not from target_value
+            current_value = builder.get_current_value()
+            builder.target_value = current_value
+
             # Set the builder to start reverting
             builder.lifecycle.revert_ms = revert_ms if revert_ms is not None else 0
             builder.lifecycle.revert_easing = easing

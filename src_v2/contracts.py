@@ -108,10 +108,7 @@ class BuilderConfig:
         """Get behavior with defaults applied"""
         if self.behavior is not None:
             return self.behavior
-        # Direction rotations default to queue (sequential turns)
-        # All other properties default to stack
-        if self.property == "direction" and self.operator in ("add", "by", "sub"):
-            return "queue"
+        # Default to stack for all properties
         return "stack"
 
     def get_effective_bake(self) -> bool:

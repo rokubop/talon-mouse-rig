@@ -201,7 +201,7 @@ class Actions:
     def mouse_rig_drift_on():
         """Drift right by 15 degrees"""
         rig = actions.user.mouse_rig()
-        rig.tag("drift").direction.add(90)
+        rig.tag("drift").direction.add(30).over(1000)
 
     def mouse_rig_drift_off():
         """Stop drift"""

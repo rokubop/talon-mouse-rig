@@ -195,13 +195,25 @@ class Lifecycle:
     def should_be_garbage_collected(self) -> bool:
         """Check if builder should be removed and garbage collected
 
-        Tagged builders persist in active_builders forever (until manually reverted/baked)
-        Anonymous builders are removed from active_builders when lifecycle completes (then GC'd)
+        Builders are removed when:
+        - Anonymous builders complete their lifecycle
+        - Any builder (tagged or anonymous) completes via revert
+
+        Tagged builders without revert persist until manually removed.
         """
         if not self.is_complete():
             return False
-        # Only remove anonymous builders from active state
-        return not self.is_tagged
+
+        # Remove if anonymous (lifecycle complete)
+        if not self.is_tagged:
+            return True
+
+        # Remove if reverted (no longer has any effect)
+        if self.has_reverted():
+            return True
+
+        # Tagged builders without revert stay active
+        return False
 
 
 class PropertyAnimator:
@@ -213,7 +225,8 @@ class PropertyAnimator:
         target_value: float,
         phase: Optional[str],
         progress: float,
-        operator: str
+        operator: str,
+        has_reverted: bool = False
     ) -> float:
         """Animate a scalar property value.
 
@@ -223,12 +236,22 @@ class PropertyAnimator:
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
             operator: The operator used (to, add, mul, etc.)
+            has_reverted: Whether this lifecycle completed via revert
 
         Returns:
             Current animated value (returns delta for add/sub, multiplier for mul/div, absolute for to)
         """
         if phase is None:
-            # Instant application
+            # Lifecycle complete - return appropriate value
+            if has_reverted:
+                # Revert complete - return neutral value
+                if operator in ("mul", "div"):
+                    return 1  # Multiplicative neutral
+                elif operator in ("add", "by", "sub"):
+                    return 0  # Additive neutral
+                else:  # "to"
+                    return base_value  # Return to original
+            # Instant application or hold complete
             return target_value
 
         # Determine neutral value based on operator
@@ -263,7 +286,8 @@ class PropertyAnimator:
         base_dir: Vec2,
         target_dir: Vec2,
         phase: Optional[str],
-        progress: float
+        progress: float,
+        has_reverted: bool = False
     ) -> Vec2:
         """Animate a direction vector using slerp.
 
@@ -272,11 +296,16 @@ class PropertyAnimator:
             target_dir: The target direction vector (normalized)
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
+            has_reverted: Whether this lifecycle completed via revert
 
         Returns:
             Current animated direction vector
         """
         if phase is None:
+            # Lifecycle complete
+            if has_reverted:
+                # Revert complete - return to base direction
+                return base_dir
             return target_dir
 
         if phase == LifecyclePhase.OVER:
@@ -293,7 +322,8 @@ class PropertyAnimator:
         base_pos: Vec2,
         target_offset: Vec2,
         phase: Optional[str],
-        progress: float
+        progress: float,
+        has_reverted: bool = False
     ) -> Vec2:
         """Animate a position offset.
 
@@ -302,11 +332,16 @@ class PropertyAnimator:
             target_offset: The target offset from base
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
+            has_reverted: Whether this lifecycle completed via revert
 
         Returns:
             Current offset to apply
         """
         if phase is None:
+            # Lifecycle complete
+            if has_reverted:
+                # Revert complete - return zero offset (back to base)
+                return Vec2(0, 0)
             return target_offset
 
         if phase == LifecyclePhase.OVER:
