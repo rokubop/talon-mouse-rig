@@ -429,13 +429,25 @@ class PropertyBuilder:
 
 
 class ActiveBuilder:
-    """An active builder being executed in the state manager"""
+    """An active builder being executed in the state manager
+
+    Every builder has a children list that starts with [self].
+    This provides uniform handling for single builders and groups.
+    """
 
     def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_anonymous: bool):
         self.config = config
         self.rig_state = rig_state
         self.is_anonymous = is_anonymous
         self.tag = config.tag_name
+
+        # Children list - starts empty, only actual children added
+        self.children: list['ActiveBuilder'] = []
+
+        # Group lifecycle for coordinated operations (like revert)
+        self.group_lifecycle: Optional[Lifecycle] = None
+        self.group_base_value: Optional[Any] = None
+        self.group_target_value: Optional[Any] = None
 
         # Create lifecycle
         self.lifecycle = Lifecycle(is_tagged=not is_anonymous)
@@ -516,19 +528,52 @@ class ActiveBuilder:
 
         return current
 
+    def add_child(self, child: 'ActiveBuilder'):
+        """Add a child builder to this parent
+
+        The child is appended to the children list for aggregation.
+        Different behavior modes are handled by the caller (state.py).
+        """
+        self.children.append(child)
+
     def update(self, dt: float) -> bool:
-        """Update this builder.
+        """Update this builder and all children.
 
         Returns:
             True if still active, False if should be removed and garbage collected
         """
-        phase, progress = self.lifecycle.update(dt)
+        # Update group lifecycle if active (for coordinated revert)
+        if self.group_lifecycle:
+            self.group_lifecycle.update(dt)
+            if self.group_lifecycle.is_complete():
+                self.group_lifecycle = None
 
-        # Tagged builders persist forever, anonymous builders removed when complete
-        return not self.lifecycle.should_be_garbage_collected()
+        # Update own lifecycle
+        self.lifecycle.update(dt)
 
-    def get_current_value(self) -> Any:
-        """Get current animated value"""
+        # Update children, remove completed ones
+        active_children = []
+        for child in self.children:
+            child.lifecycle.update(dt)
+            if not child.lifecycle.should_be_garbage_collected():
+                active_children.append(child)
+            else:
+                print(f"  Child {child.tag} garbage collected")
+
+        if len(active_children) != len(self.children):
+            print(f"  Children reduced from {len(self.children)} to {len(active_children)}")
+
+        self.children = active_children
+
+        # Still active if own lifecycle is active OR has children OR group lifecycle active
+        own_active = not self.lifecycle.should_be_garbage_collected()
+        return own_active or len(self.children) > 0 or self.group_lifecycle is not None
+
+    def _get_own_value(self) -> Any:
+        """Get just this builder's own value (not including children)
+
+        Used for aggregation where each child contributes its own value.
+        """
         phase, progress = self.lifecycle.update(0)
 
         if self.config.property in ("speed", "accel"):
@@ -558,3 +603,78 @@ class ActiveBuilder:
             )
 
         return self.target_value
+
+    def get_current_value(self) -> Any:
+        """Get aggregated current value from all children
+
+        If group lifecycle is active (coordinated revert), use that.
+        Otherwise aggregate all children's individual values.
+        """
+        # Use group lifecycle if active (coordinated revert)
+        if self.group_lifecycle and not self.group_lifecycle.is_complete():
+            phase, progress = self.group_lifecycle.update(0)
+
+            # Determine property type from stored values
+            if self.children:
+                property_type = self.children[0].config.property
+            else:
+                # No children but group lifecycle active - use first child that was cleared
+                # We can infer from group_target_value type
+                if isinstance(self.group_target_value, Vec2):
+                    property_type = "pos" if hasattr(self.group_base_value, 'x') else "direction"
+                else:
+                    property_type = "speed"  # or accel, doesn't matter for scalar
+
+            # Animate from target back to base during revert
+            if property_type in ("speed", "accel"):
+                return PropertyAnimator.animate_scalar(
+                    self.group_base_value,
+                    self.group_target_value,
+                    phase,
+                    progress,
+                    "to",  # Group revert is always absolute
+                    self.group_lifecycle.has_reverted()
+                )
+            elif property_type == "direction":
+                return PropertyAnimator.animate_direction(
+                    self.group_base_value,
+                    self.group_target_value,
+                    phase,
+                    progress,
+                    self.group_lifecycle.has_reverted()
+                )
+            elif property_type == "pos":
+                return PropertyAnimator.animate_position(
+                    self.group_base_value,
+                    self.group_target_value,
+                    phase,
+                    progress,
+                    self.group_lifecycle.has_reverted()
+                )
+
+        # Aggregate own value plus all children values
+        property_type = self.config.property
+
+        if property_type in ("speed", "accel"):
+            # Start with own value, then add children
+            total = self._get_own_value()
+            for child in self.children:
+                if child.config.property == property_type:
+                    total += child._get_own_value()
+            return total
+
+        elif property_type == "direction":
+            # For now, return own value
+            # TODO: Properly accumulate rotation angles with children
+            return self._get_own_value()
+
+        elif property_type == "pos":
+            # Start with own offset, then add children
+            total_offset = self._get_own_value()
+            for child in self.children:
+                if child.config.property == "pos":
+                    total_offset = total_offset + child._get_own_value()
+            return total_offset
+
+        # Fallback
+        return self._get_own_value()
