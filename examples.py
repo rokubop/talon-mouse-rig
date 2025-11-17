@@ -167,7 +167,7 @@ class Actions:
     def mouse_rig_boost_pad_max():
         """Boost pad with max 3 stacks (max +30)"""
         rig = actions.user.mouse_rig()
-        rig.tag("boost_pad").speed.add(10).on_repeat("stack", 3)
+        rig.tag("boost_pad").stack(3).speed.add(10)
 
     def mouse_rig_boost_pad_with_timeout():
         """Boost pad that fades in/out with unlimited stacks"""
@@ -177,22 +177,22 @@ class Actions:
     def mouse_rig_rage_stacks():
         """Rage buff - each stack multiplies speed by 1.2 (max 5 stacks)"""
         rig = actions.user.mouse_rig()
-        rig.tag("rage").speed.mul(1.2).on_repeat("stack", 5)
+        rig.tag("rage").speed.mul(1.2).stack(5)
 
     def mouse_rig_drift_extend():
         """Drift that extends duration on repeated calls"""
         rig = actions.user.mouse_rig()
-        rig.tag("drift").direction.add(15).hold(2000).on_repeat("extend")
+        rig.tag("drift").extend.direction.add(15).hold(2000)
 
     def mouse_rig_invuln():
         """Invulnerability - ignores new calls while active"""
         rig = actions.user.mouse_rig()
-        rig.tag("invuln").speed.mul(0).hold(2000).on_repeat("ignore")
+        rig.tag("invuln").ignore.speed.mul(0).hold(2000)
 
     def mouse_rig_dash_throttle():
         """Dash with rate limiting (max 1 per 500ms)"""
         rig = actions.user.mouse_rig()
-        rig.tag("dash").speed.add(20).hold(200).on_repeat("throttle", 500)
+        rig.tag("dash").throttle(500).speed.add(20).hold(200)
 
     # =========================================================================
     # EFFECT SYSTEM - DIRECTION (Rotation)
