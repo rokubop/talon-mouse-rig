@@ -55,6 +55,15 @@ class RigState:
         self._tag_counter += 1
         return f"__anon_{self._tag_counter}"
 
+    def time_alive(self, tag: str) -> Optional[float]:
+        """Get time in seconds since builder was created
+
+        Returns None if tag doesn't exist
+        """
+        if tag in self._active_builders:
+            return self._active_builders[tag].time_alive()
+        return None
+
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add an active builder to state
 
@@ -493,6 +502,24 @@ class RigState:
         def accel(self) -> Optional[float]:
             """Acceleration value if this tag affects accel, else None"""
             return self.value if self.prop == 'accel' else None
+
+        def time_alive(self) -> float:
+            """Get time in seconds since this builder was created"""
+            return self._builder.time_alive()
+
+        def revert(self, ms: Optional[float] = None, easing: str = "linear"):
+            """Trigger a revert on this tagged builder
+
+            Args:
+                ms: Duration in milliseconds for the revert
+                easing: Easing function for the revert
+            """
+            from .builder import RigBuilder
+            # Create a revert-only builder that will trigger the revert
+            builder = RigBuilder(self._builder.rig_state, self._builder.config.tag_name)
+            builder.revert(ms, easing)
+            # Force immediate execution (since it won't have __del__ called naturally)
+            builder._execute()
 
     def tag(self, tag: str) -> Optional['RigState.TagState']:
         """Get state information for a specific tag

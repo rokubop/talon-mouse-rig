@@ -453,10 +453,13 @@ class ActiveBuilder:
     """
 
     def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_anonymous: bool):
+        import time
+
         self.config = config
         self.rig_state = rig_state
         self.is_anonymous = is_anonymous
         self.tag = config.tag_name
+        self.creation_time = time.perf_counter()
 
         # Children list - starts empty, only actual children added
         self.children: list['ActiveBuilder'] = []
@@ -488,6 +491,11 @@ class ActiveBuilder:
             self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
+
+    def time_alive(self) -> float:
+        """Get time in seconds since this builder was created"""
+        import time
+        return time.perf_counter() - self.creation_time
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
@@ -565,8 +573,9 @@ class ActiveBuilder:
                 if self.group_lifecycle.has_reverted():
                     group_reverted = True
                 self.group_lifecycle = None
+                return False  # Remove immediately when group revert completes
 
-        # Update own lifecycle
+        # Update own lifecycle (only if no group lifecycle is active)
         self.lifecycle.update(dt)
 
         # Update children, remove completed ones
@@ -578,12 +587,7 @@ class ActiveBuilder:
 
         self.children = active_children
 
-        # Should be removed if:
-        # 1. Group lifecycle reverted (coordinated revert finished)
-        # 2. Own lifecycle says garbage collect AND no children
-        if group_reverted:
-            return False
-
+        # Should be removed if own lifecycle says garbage collect AND no children
         own_active = not self.lifecycle.should_be_garbage_collected()
         return own_active or len(self.children) > 0
 
