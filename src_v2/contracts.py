@@ -27,7 +27,8 @@ class LifecycleMethods(Protocol):
         ms: Optional[float] = None,
         easing: str = "linear",
         *,
-        rate: Optional[float] = None
+        rate: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> 'RigBuilder': ...
 
     def hold(self, ms: float) -> 'RigBuilder': ...
@@ -37,7 +38,8 @@ class LifecycleMethods(Protocol):
         ms: Optional[float] = None,
         easing: str = "linear",
         *,
-        rate: Optional[float] = None
+        rate: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> 'RigBuilder': ...
 
     def then(self, callback: Callable) -> 'RigBuilder': ...
@@ -87,12 +89,14 @@ class BuilderConfig:
         self.over_ms: Optional[float] = None
         self.over_easing: str = "linear"
         self.over_rate: Optional[float] = None
+        self.over_interpolation: str = "lerp"
 
         self.hold_ms: Optional[float] = None
 
         self.revert_ms: Optional[float] = None
         self.revert_easing: str = "linear"
         self.revert_rate: Optional[float] = None
+        self.revert_interpolation: str = "lerp"
 
         # Callbacks (stage -> callback)
         self.then_callbacks: list[tuple[str, Callable]] = []

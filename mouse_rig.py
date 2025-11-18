@@ -162,7 +162,7 @@ from talon import Module, actions, settings
 
 # Import V2 implementation
 from .settings import mod
-from .src_v2 import rig as get_rig_v2
+from .src_v2 import rig as get_rig_v2, reload_rig
 from .src_v2.core import _windows_raw_available
 
 
@@ -177,34 +177,6 @@ class Actions:
             rig.speed(10)
         """
         return get_rig_v2()
-
-    def mouse_rig_state() -> dict:
-        """Get the current state of the mouse rig V2
-
-        Returns a dictionary with current rig state including:
-        - position: Current mouse position (x, y)
-        - direction: Direction vector (x, y)
-        - speed: Current computed speed
-        - accel: Current computed acceleration
-        - base_speed: Base speed (baked values only)
-        - base_direction: Base direction (baked values only)
-        - active_builders: Count of active builders
-
-        Example:
-            state = actions.user.mouse_rig_state()
-            print(f"Speed: {state['speed']}")
-            print(f"Direction: {state['direction']}")
-        """
-        rig = get_rig_v2()
-        return {
-            'position': rig.state.pos.to_tuple(),
-            'direction': rig.state.direction.to_tuple(),
-            'speed': rig.state.speed,
-            'accel': rig.state.accel,
-            'base_speed': rig.base.speed,
-            'base_direction': rig.base.direction.to_tuple(),
-            'active_builders': len(rig._state._active_builders),
-        }
 
     def mouse_rig_stop() -> None:
         """Stop the mouse rig (speed to 0)"""
@@ -243,3 +215,10 @@ class Actions:
         """
         rig = get_rig_v2()
         rig.reverse(ms)
+
+    def mouse_rig_reload() -> None:
+        """Reload rig modules to pick up code changes
+
+        Use this instead of restarting Talon when developing.
+        """
+        reload_rig()

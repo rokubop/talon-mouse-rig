@@ -180,7 +180,6 @@ class RigState:
         """Remove an active builder"""
         if tag in self._active_builders:
             builder = self._active_builders[tag]
-            print(f"  remove_builder({tag}), children count: {len(builder.children)}")
 
             # If bake=true, merge values into base
             if builder.config.get_effective_bake():
@@ -208,7 +207,6 @@ class RigState:
         """Merge builder's final aggregated value into base state"""
         # If builder has reverted, don't bake (it's already back to base)
         if builder.lifecycle.has_reverted():
-            print(f"  Skipping bake - builder has reverted")
             return
 
         # Get aggregated value (includes own value + children)
@@ -217,8 +215,6 @@ class RigState:
         # Get property and operator from builder config (not children)
         prop = builder.config.property
         operator = builder.config.operator
-
-        print(f"  Baking {prop}.{operator} = {current_value}")
 
         if prop == "speed":
             if operator == "to":
@@ -325,7 +321,6 @@ class RigState:
         completed = []
         for tag, builder in list(self._active_builders.items()):
             if not builder.update(dt):
-                print(f"  Builder {tag} completed in frame loop")
                 completed.append(tag)
 
         for tag in completed:
@@ -372,6 +367,43 @@ class RigState:
         """Check if there's any movement happening (base speed or accel non-zero)"""
         return self._base_speed != 0 or self._base_accel != 0
 
+    def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
+        """Get cardinal/intercardinal direction name from direction vector
+
+        Returns one of: "right", "left", "up", "down",
+                       "up_right", "up_left", "down_right", "down_left"
+        or None if direction is zero vector.
+        """
+        x, y = direction.x, direction.y
+
+        # Handle zero vector
+        if x == 0 and y == 0:
+            return None
+
+        # Threshold for pure cardinal vs intercardinal
+        # tan(67.5°) ≈ 2.414, which is halfway between pure cardinal (90°) and diagonal (45°)
+        # This means directions within ±22.5° of an axis are considered pure cardinal
+        threshold = 2.414
+
+        # Pure cardinal directions (within 22.5° of axis)
+        if abs(x) > abs(y) * threshold:
+            return "right" if x > 0 else "left"
+        if abs(y) > abs(x) * threshold:
+            return "up" if y < 0 else "down"
+
+        # Intercardinal/diagonal directions
+        if x > 0 and y < 0:
+            return "up_right"
+        elif x < 0 and y < 0:
+            return "up_left"
+        elif x > 0 and y > 0:
+            return "down_right"
+        elif x < 0 and y > 0:
+            return "down_left"
+
+        # Fallback (shouldn't happen with normalized vectors)
+        return "right"
+
     # Public API for reading state
     @property
     def pos(self) -> Vec2:
@@ -392,6 +424,92 @@ class RigState:
     def accel(self) -> float:
         """Current computed acceleration"""
         return self._compute_current_state()[3]
+
+    @property
+    def direction_cardinal(self) -> Optional[str]:
+        """Current direction as cardinal/intercardinal string
+
+        Returns one of: "right", "left", "up", "down",
+                       "up_right", "up_left", "down_right", "down_left"
+        or None if direction is zero vector.
+        """
+        direction = self.direction
+        return self._get_cardinal_direction(direction)
+
+    @property
+    def tags(self) -> list[str]:
+        """List of active named tags (excludes anonymous builders)
+
+        Returns a list of tag names for currently active builders.
+        Anonymous builders (internal temporary effects) are excluded.
+
+        Example:
+            rig.state.tags  # ["sprint", "drift"]
+        """
+        return [tag for tag in self._tagged_tags if tag in self._active_builders]
+
+    # Tag state access
+    class TagState:
+        """State information for a specific tag"""
+        def __init__(self, builder: 'ActiveBuilder'):
+            self._builder = builder
+
+        @property
+        def prop(self) -> str:
+            """What property this tag is affecting: 'speed', 'direction', 'pos', 'accel'"""
+            return self._builder.config.property
+
+        @property
+        def operator(self) -> str:
+            """Operation type: 'to', 'add', 'by', 'mul', 'div', 'sub'"""
+            return self._builder.config.operator
+
+        @property
+        def value(self):
+            """Current aggregated value (includes children)"""
+            return self._builder.get_current_value()
+
+        @property
+        def phase(self) -> Optional[str]:
+            """Current lifecycle phase: 'over', 'hold', 'revert', or None"""
+            return self._builder.lifecycle.phase.value if self._builder.lifecycle else None
+
+        @property
+        def speed(self) -> Optional[float]:
+            """Speed value if this tag affects speed, else None"""
+            return self.value if self.prop == 'speed' else None
+
+        @property
+        def direction(self) -> Optional[Vec2]:
+            """Direction value if this tag affects direction, else None"""
+            return self.value if self.prop == 'direction' else None
+
+        @property
+        def pos(self) -> Optional[Vec2]:
+            """Position offset if this tag affects position, else None"""
+            return self.value if self.prop == 'pos' else None
+
+        @property
+        def accel(self) -> Optional[float]:
+            """Acceleration value if this tag affects accel, else None"""
+            return self.value if self.prop == 'accel' else None
+
+    def tag(self, tag: str) -> Optional['RigState.TagState']:
+        """Get state information for a specific tag
+
+        Returns a TagState object with the tag's current state, or None if not active.
+
+        Example:
+            sprint = rig.state.tag("sprint")
+            if sprint:
+                print(f"Sprint speed: {sprint.speed}")
+                print(f"Phase: {sprint.phase}")
+        """
+        if tag not in self._active_builders:
+            return None
+
+        builder = self._active_builders[tag]
+        return RigState.TagState(builder)
 
     # Base state access
     class BaseState:
@@ -486,11 +604,12 @@ class RigState:
             current_value = builder.get_current_value()
 
             # Get base value (neutral/zero for the property type)
-            if builder.children and builder.children[0].config.property in ("speed", "accel"):
+            # Use builder's own config since children might be empty after first revert
+            if builder.config.property in ("speed", "accel"):
                 base_value = 0
-            elif builder.children and builder.children[0].config.property == "direction":
-                base_value = builder.children[0].base_value  # Original direction
-            elif builder.children and builder.children[0].config.property == "pos":
+            elif builder.config.property == "direction":
+                base_value = builder.base_value  # Original direction
+            elif builder.config.property == "pos":
                 base_value = Vec2(0, 0)  # Zero offset
             else:
                 base_value = 0
@@ -510,5 +629,3 @@ class RigState:
 
             # Clear all children - we'll revert as a single coordinated unit
             builder.children = []
-        else:
-            print(f"  Builder {tag} not found")

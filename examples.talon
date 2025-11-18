@@ -112,3 +112,5 @@ rig state: user.mouse_rig_show_state()
 
 rig test: user.mouse_rig_test()
 rig test two: user.mouse_rig_test_two()
+
+rig reload: user.mouse_rig_reload()

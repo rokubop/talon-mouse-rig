@@ -287,9 +287,10 @@ class PropertyAnimator:
         target_dir: Vec2,
         phase: Optional[str],
         progress: float,
-        has_reverted: bool = False
+        has_reverted: bool = False,
+        interpolation: str = "lerp"
     ) -> Vec2:
-        """Animate a direction vector using slerp.
+        """Animate a direction vector using lerp or slerp.
 
         Args:
             base_dir: The base direction vector (normalized)
@@ -297,6 +298,7 @@ class PropertyAnimator:
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
             has_reverted: Whether this lifecycle completed via revert
+            interpolation: "lerp" for linear interpolation or "slerp" for spherical
 
         Returns:
             Current animated direction vector
@@ -309,11 +311,17 @@ class PropertyAnimator:
             return target_dir
 
         if phase == LifecyclePhase.OVER:
-            return _slerp(base_dir, target_dir, progress)
+            if interpolation == "slerp":
+                return _slerp(base_dir, target_dir, progress)
+            else:
+                return _lerp_direction(base_dir, target_dir, progress)
         elif phase == LifecyclePhase.HOLD:
             return target_dir
         elif phase == LifecyclePhase.REVERT:
-            return _slerp(target_dir, base_dir, progress)
+            if interpolation == "slerp":
+                return _slerp(target_dir, base_dir, progress)
+            else:
+                return _lerp_direction(target_dir, base_dir, progress)
 
         return target_dir
 
@@ -352,6 +360,13 @@ class PropertyAnimator:
             return target_offset * (1.0 - progress)
 
         return target_offset
+
+
+def _lerp_direction(v1: Vec2, v2: Vec2, t: float) -> Vec2:
+    """Linear interpolation between two direction vectors"""
+    x = v1.x + (v2.x - v1.x) * t
+    y = v1.y + (v2.y - v1.y) * t
+    return Vec2(x, y).normalized()
 
 
 def _slerp(v1: Vec2, v2: Vec2, t: float) -> Vec2:

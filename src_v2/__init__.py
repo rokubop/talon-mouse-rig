@@ -20,12 +20,30 @@ Example usage:
 """
 
 from typing import Optional
+import os
 from .state import RigState
 from .builder import RigBuilder
 
 
 # Global singleton state
 _global_state: Optional[RigState] = None
+
+
+# Auto-reload: watch for file changes and clear state
+try:
+    from talon import fs
+
+    def _on_file_change(path, flags):
+        """Clear state when source files change"""
+        if path.endswith('.py') and 'src_v2' in path:
+            reload_rig()
+
+    # Watch the src_v2 directory
+    _src_dir = os.path.dirname(__file__)
+    fs.watch(_src_dir, _on_file_change)
+except Exception as e:
+    # If talon.fs not available (running outside Talon), skip auto-reload
+    print(f"Auto-reload disabled: {e}")
 
 
 def _get_global_state() -> RigState:
@@ -36,6 +54,24 @@ def _get_global_state() -> RigState:
     return _global_state
 
 
+def reload_rig():
+    """Clear the rig state to pick up code changes
+
+    Talon auto-reloads Python files when you save them.
+    This just clears the cached state so the next rig() call
+    will create a fresh instance with the new code.
+    """
+    global _global_state
+
+    if _global_state is not None:
+        # Stop any active movements
+        try:
+            _global_state._stop_frame_loop()
+        except Exception as e:
+            print(f"Error stopping frame loop: {e}")
+        _global_state = None
+
+    print("✓ Rig state cleared - next rig() call will use reloaded code")
 class Rig:
     """Main entry point for mouse rig operations
 
@@ -212,4 +248,4 @@ def rig() -> Rig:
 
 
 # Export public API
-__all__ = ['rig', 'Rig', 'RigBuilder', 'RigState']
+__all__ = ['rig', 'Rig', 'RigBuilder', 'RigState', 'reload_rig']

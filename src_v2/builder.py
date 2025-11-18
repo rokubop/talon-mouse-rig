@@ -94,9 +94,17 @@ class RigBuilder:
         ms: Optional[float] = None,
         easing: str = "linear",
         *,
-        rate: Optional[float] = None
+        rate: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> 'RigBuilder':
-        """Set transition duration or rate"""
+        """Set transition duration or rate
+
+        Args:
+            ms: Duration in milliseconds
+            easing: Easing function ("linear", "ease_in", "ease_out", "ease_in_out")
+            rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
+            interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
+        """
         if rate is not None:
             # Rate-based, duration will be calculated later
             self.config.over_rate = rate
@@ -105,6 +113,7 @@ class RigBuilder:
             self.config.over_ms = ms if ms is not None else 0
             self.config.over_easing = easing
 
+        self.config.over_interpolation = interpolation
         self._lifecycle_stage = LifecyclePhase.OVER
         return self
 
@@ -119,15 +128,25 @@ class RigBuilder:
         ms: Optional[float] = None,
         easing: str = "linear",
         *,
-        rate: Optional[float] = None
+        rate: Optional[float] = None,
+        interpolation: str = "lerp"
     ) -> 'RigBuilder':
-        """Set revert duration or rate"""
+        """Set revert duration or rate
+
+        Args:
+            ms: Duration in milliseconds
+            easing: Easing function ("linear", "ease_in", "ease_out", "ease_in_out")
+            rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
+            interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
+        """
         if rate is not None:
             self.config.revert_rate = rate
             self.config.revert_easing = easing
         else:
             self.config.revert_ms = ms if ms is not None else 0
             self.config.revert_easing = easing
+
+        self.config.revert_interpolation = interpolation
 
         self._lifecycle_stage = LifecyclePhase.REVERT
         return self
@@ -235,7 +254,6 @@ class RigBuilder:
                 return
 
             # Incomplete builder, ignore
-            print(f"  Incomplete builder, ignoring")
             return
 
         # Calculate rate-based durations
@@ -243,7 +261,6 @@ class RigBuilder:
 
         # Create ActiveBuilder and add to state
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
-        print(f"  Adding ActiveBuilder to state")
         self.rig_state.add_builder(active)
 
     def _calculate_rate_durations(self):
@@ -465,12 +482,9 @@ class ActiveBuilder:
         if config.operator == "to" and config.property in ("speed", "accel"):
             # For 'to' operations, we need the current computed value
             self.base_value = getattr(rig_state, config.property)
-        elif config.property == "direction" and config.operator in ("add", "by"):
-            # For direction rotations, use current computed direction (not base)
-            # This allows queued rotations to stack properly
-            self.base_value = rig_state.direction
         else:
-            # For other operations, use base state
+            # For all other operations (including direction.add), use base state
+            # This ensures stacked rotations all rotate from the same base
             self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
@@ -543,9 +557,13 @@ class ActiveBuilder:
             True if still active, False if should be removed and garbage collected
         """
         # Update group lifecycle if active (for coordinated revert)
+        group_reverted = False
         if self.group_lifecycle:
             self.group_lifecycle.update(dt)
             if self.group_lifecycle.is_complete():
+                # Check if it completed via revert
+                if self.group_lifecycle.has_reverted():
+                    group_reverted = True
                 self.group_lifecycle = None
 
         # Update own lifecycle
@@ -557,17 +575,17 @@ class ActiveBuilder:
             child.lifecycle.update(dt)
             if not child.lifecycle.should_be_garbage_collected():
                 active_children.append(child)
-            else:
-                print(f"  Child {child.tag} garbage collected")
-
-        if len(active_children) != len(self.children):
-            print(f"  Children reduced from {len(self.children)} to {len(active_children)}")
 
         self.children = active_children
 
-        # Still active if own lifecycle is active OR has children OR group lifecycle active
+        # Should be removed if:
+        # 1. Group lifecycle reverted (coordinated revert finished)
+        # 2. Own lifecycle says garbage collect AND no children
+        if group_reverted:
+            return False
+
         own_active = not self.lifecycle.should_be_garbage_collected()
-        return own_active or len(self.children) > 0 or self.group_lifecycle is not None
+        return own_active or len(self.children) > 0
 
     def _get_own_value(self) -> Any:
         """Get just this builder's own value (not including children)
@@ -586,12 +604,18 @@ class ActiveBuilder:
                 self.lifecycle.has_reverted()
             )
         elif self.config.property == "direction":
+            # Determine which interpolation to use (over or revert)
+            interpolation = self.config.over_interpolation
+            if phase == LifecyclePhase.REVERT:
+                interpolation = self.config.revert_interpolation
+
             return PropertyAnimator.animate_direction(
                 self.base_value,
                 self.target_value,
                 phase,
                 progress,
-                self.lifecycle.has_reverted()
+                self.lifecycle.has_reverted(),
+                interpolation
             )
         elif self.config.property == "pos":
             return PropertyAnimator.animate_position(
@@ -614,16 +638,8 @@ class ActiveBuilder:
         if self.group_lifecycle and not self.group_lifecycle.is_complete():
             phase, progress = self.group_lifecycle.update(0)
 
-            # Determine property type from stored values
-            if self.children:
-                property_type = self.children[0].config.property
-            else:
-                # No children but group lifecycle active - use first child that was cleared
-                # We can infer from group_target_value type
-                if isinstance(self.group_target_value, Vec2):
-                    property_type = "pos" if hasattr(self.group_base_value, 'x') else "direction"
-                else:
-                    property_type = "speed"  # or accel, doesn't matter for scalar
+            # Use builder's own property type (not children, which are cleared during revert)
+            property_type = self.config.property
 
             # Animate from target back to base during revert
             if property_type in ("speed", "accel"):
@@ -636,12 +652,15 @@ class ActiveBuilder:
                     self.group_lifecycle.has_reverted()
                 )
             elif property_type == "direction":
+                # Group revert uses revert interpolation setting
+                interpolation = self.config.revert_interpolation
                 return PropertyAnimator.animate_direction(
                     self.group_base_value,
                     self.group_target_value,
                     phase,
                     progress,
-                    self.group_lifecycle.has_reverted()
+                    self.group_lifecycle.has_reverted(),
+                    interpolation
                 )
             elif property_type == "pos":
                 return PropertyAnimator.animate_position(
@@ -664,9 +683,38 @@ class ActiveBuilder:
             return total
 
         elif property_type == "direction":
-            # For now, return own value
-            # TODO: Properly accumulate rotation angles with children
-            return self._get_own_value()
+            # Compose rotations: apply own rotation, then each child's rotation
+            current = self._get_own_value()
+
+            # Each child rotation is relative to the result so far
+            for child in self.children:
+                if child.config.property == "direction":
+                    # Get child's CURRENT animated rotation (not target)
+                    child_current = child._get_own_value()
+
+                    # For 'add/by' operations, we need to compose the rotations
+                    # Extract the rotation from base to current animated position
+                    if child.config.operator in ("add", "by"):
+                        # Calculate the rotation angle from child's base to current animated value
+                        import math
+                        child_base = child.base_value
+
+                        # Get angle between base and current animated rotation
+                        dot = child_base.x * child_current.x + child_base.y * child_current.y
+                        cross = child_base.x * child_current.y - child_base.y * child_current.x
+                        angle = math.atan2(cross, dot)
+
+                        # Apply this rotation to current direction
+                        cos_a = math.cos(angle)
+                        sin_a = math.sin(angle)
+                        new_x = current.x * cos_a - current.y * sin_a
+                        new_y = current.x * sin_a + current.y * cos_a
+                        current = Vec2(new_x, new_y).normalized()
+                    else:
+                        # For 'to' operations, just use the current value directly
+                        current = child_current
+
+            return current
 
         elif property_type == "pos":
             # Start with own offset, then add children
