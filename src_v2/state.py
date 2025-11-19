@@ -248,6 +248,7 @@ class RigState:
             elif operator == "div":
                 self._base_accel /= current_value if current_value != 0 else 1
         elif prop == "direction":
+            # current_value is already the final direction (operation already applied in target_value)
             self._base_direction = current_value
         elif prop == "pos":
             # Position is more complex - update base position
@@ -305,10 +306,15 @@ class RigState:
                 elif operator == "div":
                     accel /= current_value if current_value != 0 else 1
             elif prop == "direction":
-                # Direction always uses absolute values (animate_direction handles rotation)
-                # Even for add/by operators, the builder has already calculated the rotated target
-                # and animate_direction returns the interpolated absolute direction
-                direction = current_value
+                if operator == "to":
+                    # Direction 'to' replaces current value
+                    direction = current_value
+                elif operator in ("add", "by"):
+                    # Direction add/by contributes to current value
+                    direction = (direction + current_value).normalized()
+                elif operator == "sub":
+                    # Direction sub subtracts from current value
+                    direction = (direction - current_value).normalized()
             elif prop == "pos":
                 # Position builders return offsets
                 pos = pos + current_value

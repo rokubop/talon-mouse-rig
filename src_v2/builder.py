@@ -531,14 +531,34 @@ class ActiveBuilder:
             if operator == "to":
                 return Vec2.from_tuple(value).normalized()
             elif operator in ("by", "add"):
-                # Rotation by degrees
-                angle_deg = value[0] if isinstance(value, tuple) else value
-                angle_rad = math.radians(angle_deg)
-                cos_a = math.cos(angle_rad)
-                sin_a = math.sin(angle_rad)
-                new_x = current.x * cos_a - current.y * sin_a
-                new_y = current.x * sin_a + current.y * cos_a
-                return Vec2(new_x, new_y).normalized()
+                # Support both rotation by degrees and vector addition
+                if isinstance(value, tuple) and len(value) == 2:
+                    # Vector addition: add delta vector to current direction
+                    delta = Vec2.from_tuple(value)
+                    return (current + delta).normalized()
+                else:
+                    # Rotation by degrees (single value)
+                    angle_deg = value[0] if isinstance(value, tuple) else value
+                    angle_rad = math.radians(angle_deg)
+                    cos_a = math.cos(angle_rad)
+                    sin_a = math.sin(angle_rad)
+                    new_x = current.x * cos_a - current.y * sin_a
+                    new_y = current.x * sin_a + current.y * cos_a
+                    return Vec2(new_x, new_y).normalized()
+            elif operator == "sub":
+                # Vector subtraction: subtract delta vector from current direction
+                if isinstance(value, tuple) and len(value) == 2:
+                    delta = Vec2.from_tuple(value)
+                    return (current - delta).normalized()
+                else:
+                    # Rotation by negative degrees (single value)
+                    angle_deg = value[0] if isinstance(value, tuple) else value
+                    angle_rad = math.radians(-angle_deg)  # Negative for subtraction
+                    cos_a = math.cos(angle_rad)
+                    sin_a = math.sin(angle_rad)
+                    new_x = current.x * cos_a - current.y * sin_a
+                    new_y = current.x * sin_a + current.y * cos_a
+                    return Vec2(new_x, new_y).normalized()
 
         elif self.config.property == "pos":
             if operator == "to":
