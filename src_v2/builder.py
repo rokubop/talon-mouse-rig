@@ -481,9 +481,10 @@ class ActiveBuilder:
         for stage, callback in config.then_callbacks:
             self.lifecycle.add_callback(stage, callback)
 
-        # Calculate values - use computed current state for certain operations
-        if config.operator == "to" and config.property in ("speed", "accel"):
+        # Calculate values - use computed current state for 'to' operations
+        if config.operator == "to":
             # For 'to' operations, we need the current computed value
+            # This "bakes" the current state before transitioning to new target
             self.base_value = getattr(rig_state, config.property)
         else:
             # For all other operations (including direction.add), use base state
