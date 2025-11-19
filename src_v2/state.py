@@ -72,6 +72,11 @@ class RigState:
         """
         tag = builder.tag
 
+        # Handle bake operation immediately
+        if builder.config.operator == "bake":
+            self._bake_property(builder.config.property, tag if not builder.is_anonymous else None)
+            return
+
         # Handle behavior modes
         behavior = builder.config.get_effective_behavior()
 
@@ -273,6 +278,48 @@ class RigState:
         # Ensure frame loop is running if there's movement
         if self._has_movement():
             self._ensure_frame_loop_running()
+
+    def _bake_property(self, property_name: str, tag: Optional[str] = None):
+        """Bake current computed value of a property into base state
+        
+        Args:
+            property_name: The property to bake ("speed", "direction", "accel", "pos")
+            tag: Optional tag to bake from a specific builder. If None, bakes computed state.
+        """
+        if tag:
+            # Bake from a specific tagged builder - remove it and bake its value
+            if tag in self._active_builders:
+                builder = self._active_builders[tag]
+                if builder.config.property == property_name:
+                    # Force bake this builder
+                    self._bake_builder(builder)
+                    # Remove the builder
+                    del self._active_builders[tag]
+                    if tag in self._tagged_tags:
+                        self._tagged_tags.remove(tag)
+        else:
+            # Bake current computed value for this property
+            current_value = getattr(self, property_name)
+            
+            if property_name == "speed":
+                self._base_speed = current_value
+            elif property_name == "accel":
+                self._base_accel = current_value
+            elif property_name == "direction":
+                self._base_direction = current_value
+            elif property_name == "pos":
+                self._base_pos = current_value
+            
+            # Remove all anonymous builders affecting this property
+            tags_to_remove = [
+                t for t, b in self._active_builders.items()
+                if b.is_anonymous and b.config.property == property_name
+            ]
+            for t in tags_to_remove:
+                if t in self._active_builders:
+                    del self._active_builders[t]
+                if t in self._anonymous_tags:
+                    self._anonymous_tags.remove(t)
 
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2, float]:
         """Compute current state by applying all active builders to base.

@@ -437,6 +437,17 @@ class PropertyBuilder:
         self.rig_builder.config.value = value
         return self.rig_builder
 
+    def bake(self) -> RigBuilder:
+        """Bake current computed value into base state
+        
+        Examples:
+            rig.direction.bake()  # Bakes current direction to base
+            rig.tag("boost").speed.bake()  # Bakes boost's speed to base
+        """
+        self.rig_builder.config.operator = "bake"
+        self.rig_builder.config.value = None
+        return self.rig_builder
+
     # Shorthand for anonymous only
     def __call__(self, *args) -> RigBuilder:
         """Shorthand: rig.speed(5) -> rig.speed.to(5)"""
@@ -515,6 +526,11 @@ class ActiveBuilder:
         operator = self.config.operator
         value = self.config.value
         current = self.base_value
+
+        # Bake operation: immediately set base to current computed value
+        if operator == "bake":
+            # Return None - bake is handled immediately in state manager
+            return None
 
         if self.config.property in ("speed", "accel"):
             if operator == "to":
