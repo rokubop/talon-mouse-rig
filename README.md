@@ -1,160 +1,248 @@
 # Talon Mouse Rig
 
-Continuous motion-based mouse control system for Talon voice commands.
+All purpose mouse rig for Talon with a fluent API for position, speed, direction, acceleration, tags, callbacks, durations, easing, and reverts.
 
-## Features
+## Examples
 
-### Base Movement
-- **Direction**: Set movement direction as a vector
-- **Speed**: Control base speed (pixels per frame)
-- **Acceleration**: Continuous acceleration over time
-- **Position**: Absolute positioning and relative offsets
+### Position
 
-### Named Effects
-Effects modify base properties with explicit operations and support lifecycle management:
+```python
+rig = actions.user.mouse_rig()
+rig.pos(960, 540)
+rig.pos.to(960, 540).over(400)
+rig.pos.to(960, 540).over(400, "ease_in_out")
+rig.pos.by(10, 0)
+rig.pos.by(10, 0).over(200).then(lambda: print("Moved mouse"))
+```
 
-**Operations**:
+### Speed
+
+```python
+rig = actions.user.mouse_rig()
+rig.direction(1, 0)
+rig.speed(8)
+rig.speed.to(8).over(500)
+rig.speed.to(8).over(500).revert(500)
+rig.stop()
+rig.stop(1000)
+```
+
+### Direction
+
+```python
+rig = actions.user.mouse_rig()
+rig.direction.to(0, 1)
+rig.speed(2)
+rig.direction.by(90)
+rig.direction.by(90).over(500) # rotate
+rig.direction.by(90).over(rate=45) # rotate
+```
+
+### Revert and callbacks
+
+```python
+rig = actions.user.mouse_rig()
+rig.speed.add(10).over(300).hold(2000).revert(300)
+rig.tag("boost").speed.add(10).over(300).hold(2000).revert(300)
+rig.speed.add(10).over(300) \
+    .then(lambda: print("Speed boost applied")) \
+    .hold(2000) \
+    .then(lambda: print("Holding speed boost")) \
+    .revert(300) \
+    .then(lambda: print("Speed boost reverted"))
+```
+
+### Tags for namespace you can revert later
+
+```python
+rig = actions.user.mouse_rig()
+rig.tag("boost").speed.mul(4).over(1000)
+rig.tag("boost").revert(500)
+```
+
+<details>
+<summary>Read more...</summary>
+
+## Installation
+
+### Prerequisites
+- [Talon](https://talonvoice.com/)
+
+### Install
+Clone into your Talon user directory:
+
+```sh
+# mac/linux
+cd ~/.talon/user
+
+# windows
+cd ~/AppData/Roaming/talon/user
+
+git clone https://github.com/rokubop/talon-mouse-rig.git
+```
+
+## More Examples
+
+### 1. Jump to a position smoothly
+
+```python
+rig = actions.user.mouse_rig()
+rig.pos.to(960, 540).over(400, "ease_in_out")
+```
+
+**Variations:**
+```python
+rig.pos.to(100, 100).over(300)
+rig.pos.to(1200, 600).over(500, "ease_out")
+rig.pos.by(50, -30).over(200)
+```
+
+### 2. Game-style camera control
+
+```python
+rig = actions.user.mouse_rig()
+rig.direction(1, 0)
+rig.speed(8)
+```
+
+**Variations:**
+```python
+rig.direction(-1, 0)
+rig.direction(0, -1)
+rig.direction(0.707, 0.707)
+rig.speed.mul(2)
+rig.speed.div(2)
+rig.stop(500)
+```
+
+### 3. Temporary speed boost
+
+```python
+rig = actions.user.mouse_rig()
+rig.tag("boost").speed.add(10).over(300).hold(2000).revert(300)
+```
+
+**Variations:**
+```python
+rig.tag("sprint").speed.mul(2)
+rig.tag("sprint").revert(500)
+
+rig.tag("boost").speed.add(15).hold(1500)
+rig.tag("boost").revert()
+```
+
+## API Reference
+
+### Directional Movement
+
+```python
+rig.direction(1, 0)
+rig.direction(-1, 0)
+rig.direction(0, -1)
+rig.direction(0, 1)
+rig.direction(0.707, 0.707)
+rig.direction.by(90).over(500)
+```
+
+### Speed Control
+
+```python
+rig.speed(3)
+rig.speed(10)
+rig.speed.mul(2)
+rig.speed.div(2)
+rig.speed.add(5)
+rig.speed.to(10).over(1000)
+```
+
+### Position Control
+
+```python
+rig.pos.to(960, 540).over(350, "ease_in_out")
+rig.pos.by(50, 0).over(200)
+rig.pos.add(-20, 10)
+```
+
+### Effects & Lifecycle
+
+```python
+rig.speed.add(10).hold(2000)
+rig.speed.by(20).over(500).hold(1500).revert(500)
+rig.tag("sprint").speed.mul(2)
+rig.tag("sprint").revert(500)
+```
+
+### Acceleration
+
+```python
+rig.accel(5)
+rig.tag("boost").accel.add(10).hold(2000)
+```
+
+### Stacking Effects
+
+```python
+rig.tag("boost_pad").speed.add(10)
+rig.tag("boost_pad").stack(3).speed.add(10)
+rig.tag("rage").speed.mul(1.2).stack(5)
+```
+
+</details>
+
+## Reference
+
+### Properties
+
+- `pos` - Position (x, y coordinates)
+- `speed` - Movement speed magnitude
+- `direction` - Direction vector or angle
+- `accel` - Acceleration magnitude
+
+### Operators
+
 - `.to(value)` - Set absolute value
-- `.add(value)` / `.by(value)` - Add delta
+- `.add(value)` / `.by(value)` - Add delta (aliases)
 - `.sub(value)` - Subtract
 - `.mul(value)` - Multiply
 - `.div(value)` - Divide
 
-**On-Repeat Strategies**:
-- `stack` (default) - Unlimited stacking
-- `stack(n)` - Max n stacks
-- `replace` - New call replaces existing
-- `extend` - Extend duration
-- `queue` - Queue sequential effects
-- `ignore` - Ignore new calls while active
-- `throttle(ms)` - Rate limit calls
+### Lifecycle Methods
 
-### Forces
-Independent velocity sources with their own speed, direction, and acceleration. Forces combine with base movement via vector addition.
+- `.over(ms, easing?)` - Transition duration with optional easing
+- `.over(rate=X)` - Rate-based transition (e.g., 5 units/sec)
+- `.hold(ms)` - Sustain duration
+- `.revert(ms?, easing?)` - Fade out duration
+- `.then(callback)` - Execute callback after stage completes
 
-### Transitions & Timing
-- **Time-based**: `.over(duration_ms, easing?)`
-- **Rate-based**: `.over(rate_speed=x)` or `.over(rate_rotation=x)`
-- **Easing**: `linear`, `ease_in`, `ease_out`, `ease_in_out`, `smoothstep`
+### Behavior Modes
 
-### Lifecycle Management
-- `.over(duration)` - Fade in over time
-- `.hold(duration)` - Maintain for duration
-- `.revert(duration?, easing?)` - Fade out and revert
+- `.stack(max?)` - Stack effects (default: unlimited)
+- `.replace()` - Replace previous effect
+- `.queue()` - Queue until current finishes
+- `.extend()` - Extend hold duration
+- `.throttle(ms)` - Rate limit calls
+- `.ignore()` - Ignore while active
 
-### State Access
-- `rig.state.speed` - Computed speed (base + effects + forces)
-- `rig.state.accel` - Computed acceleration
-- `rig.state.direction` - Current direction
-- `rig.state.velocity` - Total velocity vector
-- `rig.base.speed` - Base speed only (no modifiers)
+### Easing Functions
 
-## Usage Examples
+`linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_in_2`, `ease_out_2`, `ease_in_out_2`, `ease_in_3`, `ease_out_3`, `ease_in_out_3`, `ease_in_4`, `ease_out_4`, `ease_in_out_4`
 
-### Basic Movement
+### Shortcuts
+
 ```python
-rig = actions.user.mouse_rig()
-
-# Set direction and speed
-rig.direction(1, 0)  # Move right
-rig.speed(10)        # Set speed
-
-# Smooth transitions
-rig.speed.to(20).over(500)           # Ramp to 20 over 500ms
-rig.direction(0, 1).over(500, "ease_out")  # Turn smoothly
-```
-
-### Named Effects (Strict Syntax)
-```python
-# Sprint effect (2x speed multiplier)
-rig.effect("sprint").speed.mul(2)
-rig.effect("sprint").revert(500)  # Stop sprinting
-
-# Speed boost with stacking
-rig.effect("boost").speed.add(10)  # Unlimited (default)
-rig.effect("boost").speed.add(10).on_repeat("stack", 3)  # Max 3
-
-# Drift (rotate direction)
-rig.effect("drift").direction.add(15)  # Rotate 15 degrees
-rig.effect("drift").revert(500)
-
-# Throttled dash
-rig.effect("dash").speed.add(20).hold(200).on_repeat("throttle", 500)
-```
-
-### Forces (Loose Syntax)
-```python
-# Gravity force
-rig.force("gravity").direction(0, 1).accel(9.8)
-rig.force("gravity").stop(500)
-
-# Wind force with smooth fade
-rig.force("wind").direction(1, 0).speed(10).over(500).hold(3000).revert(1000)
-```
-
-### Temporary Effects (Anonymous)
-```python
-# Quick speed boost
-rig.speed.add(10).hold(1000).revert(500)
-
-# Smooth boost with easing
-rig.speed.add(20).over(500, "ease_in_out").hold(1500).revert(500)
-```
-
-### Position Control
-```python
-# Jump to screen center
-rig.pos.to(960, 540).over(350, "ease_in_out")
-
-# Nudge position
-rig.pos.by(50, 0).over(200)  # Nudge right
-
-# Position with lifecycle
-rig.pos.by(100, 0).over(300).hold(1000).revert(300)
-```
-
-### Rotation
-```python
-# Smooth turn
-rig.direction.by(90).over(500, "ease_in_out")  # Turn 90° right
-
-# 180° reverse
-rig.reverse().over(500)
-
-# Rate-based rotation
-rig.direction(0, 1).over(rate_rotation=90)  # Rotate at 90°/s
-```
-
-### State Management
-```python
-# Stop movement
-rig.stop()  # Immediate
-rig.stop(1000, "ease_out")  # Smooth deceleration
-
-# Bake effects into base state
+rig.stop(ms?)
+rig.reverse(ms?)
 rig.bake()
-
-# Access computed state
-current_speed = rig.state.speed
-current_direction = rig.state.direction
-total_velocity = rig.state.velocity
-
-# Access base values
-base_speed = rig.base.speed
 ```
 
-## Composition Pipeline
+## License
 
-Effects and forces are applied in this order:
-1. **Base properties** (speed, accel, direction)
-2. **Effect stacks** (multiplicative → additive, in creation order)
-3. **Forces** (independent velocity vectors, summed)
+MIT
 
-## Settings
+## Contributing
 
-Configure via Talon settings:
-- `user.mouse_rig_frame_interval` - Frame interval in ms (default: 16ms ≈ 60fps)
-- `user.mouse_rig_max_speed` - Max speed limit (default: 15.0)
-- `user.mouse_rig_movement_type` - `"talon"` or `"windows_raw"`
-- `user.mouse_rig_scale` - Movement scale multiplier (default: 1.0)
-- `user.mouse_rig_default_turn_rate` - Default rotation rate in deg/s (default: 180.0)
+Contributions welcome! Open an issue or PR on GitHub.
+
+## Support
+
+For issues or questions, please open an issue on GitHub.

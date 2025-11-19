@@ -3,7 +3,7 @@
 This is the main entry point for the mouse rig system.
 
 Example usage:
-    from .src_v2 import rig
+    from .src import rig
 
     def my_action():
         r = rig()
@@ -35,10 +35,10 @@ try:
 
     def _on_file_change(path, flags):
         """Clear state when source files change"""
-        if path.endswith('.py') and 'src_v2' in path:
+        if path.endswith('.py') and 'src' in path:
             reload_rig()
 
-    # Watch the src_v2 directory
+    # Watch the src directory
     _src_dir = os.path.dirname(__file__)
     fs.watch(_src_dir, _on_file_change)
 except Exception as e:

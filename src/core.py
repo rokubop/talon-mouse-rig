@@ -8,7 +8,6 @@ This module contains low-level utilities that are proven and stable:
 """
 
 import math
-import time
 import platform
 from typing import Tuple, Union, Optional, Callable
 from dataclasses import dataclass

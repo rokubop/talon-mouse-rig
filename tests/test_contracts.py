@@ -16,7 +16,7 @@ sys.modules['talon.fs'] = MagicMock()
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src_v2.contracts import (
+from src.contracts import (
     METHOD_SIGNATURES,
     VALID_RIG_METHODS,
     VALID_RIG_PROPERTIES,
@@ -26,9 +26,9 @@ from src_v2.contracts import (
     VALID_EASINGS,
     VALID_INTERPOLATIONS,
 )
-from src_v2.builder import RigBuilder
-from src_v2 import Rig
-from src_v2.core import EASING_FUNCTIONS
+from src.builder import RigBuilder
+from src import Rig
+from src.core import EASING_FUNCTIONS
 
 
 def test_method_signatures_match_rigbuilder():
@@ -92,7 +92,7 @@ def test_builder_methods_exist():
 def test_property_operators_complete():
     """Ensure VALID_OPERATORS covers all VALID_PROPERTIES"""
 
-    from src_v2.builder import PropertyBuilder
+    from src.builder import PropertyBuilder
 
     # Valid operators that should exist as methods
     valid_operator_methods = ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake']

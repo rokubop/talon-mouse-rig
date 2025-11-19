@@ -162,8 +162,8 @@ from talon import Module, actions, settings
 
 # Import V2 implementation
 from .settings import mod
-from .src_v2 import rig as get_rig_v2, reload_rig
-from .src_v2.core import _windows_raw_available
+from .src import rig as get_rig_v2, reload_rig
+from .src.core import _windows_raw_available
 
 
 @mod.action_class

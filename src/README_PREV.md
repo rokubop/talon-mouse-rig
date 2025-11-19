@@ -35,7 +35,7 @@ Everything architectural:
 ## Quick Start
 
 ```python
-from src_v2 import rig
+from src import rig
 
 # Basic movement
 r = rig()
@@ -308,7 +308,7 @@ base_pos = r.base.pos
 ### File Structure
 
 ```
-src_v2/
+src/
   __init__.py        # Main API entry point
   contracts.py       # All interfaces/protocols
   core.py           # Reused utilities (Vec2, easing, mouse, subpixel)
