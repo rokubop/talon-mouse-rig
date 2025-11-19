@@ -234,13 +234,20 @@ class RigBuilder:
 
     @property
     def throttle(self) -> BehaviorProxy:
-        """Throttle behavior (rate limit) - use .throttle(ms)"""
-        return BehaviorProxy(self, 'throttle', has_args=True)
+        """Throttle behavior (rate limit) - use .throttle or .throttle() to ignore while active, or .throttle(ms) to rate limit"""
+        return BehaviorProxy(self, 'throttle', has_args=False)
 
-    def _set_throttle(self, ms: float) -> 'RigBuilder':
-        """Internal: Set throttle behavior"""
-        self.config.behavior = "throttle"
-        self.config.behavior_args = (ms,)
+    def _set_throttle(self, ms: Optional[float] = None) -> 'RigBuilder':
+        """Internal: Set throttle behavior
+
+        If ms is None, sets behavior to 'ignore' (ignore while active)
+        If ms is provided, sets behavior to 'throttle' with rate limiting
+        """
+        if ms is None:
+            self.config.behavior = "ignore"
+        else:
+            self.config.behavior = "throttle"
+            self.config.behavior_args = (ms,)
         return self
 
     @property

@@ -62,9 +62,8 @@ rig.tag("boost").queue.speed.add(10) # Queue instead of stack
 rig.tag("boost").queue().speed.add(10) # Queue until finished
 rig.tag("boost").extend.speed.add(10) # Extend hold time
 rig.tag("boost").replace.speed.add(10) # Replace instead of stack
-rig.tag("boost").throttle.speed.add(10) # Throttle calls
+rig.tag("boost").throttle.speed.add(10) # Ignore while active
 rig.tag("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
-rig.tag("boost").ignore.speed.add(10) # Ignore while active
 ```
 
 
@@ -133,8 +132,8 @@ Done! 🎉
 - `.replace()` - Replace previous effect
 - `.queue()` - Queue until current finishes
 - `.extend()` - Extend hold duration
-- `.throttle(ms)` - Rate limit calls
-- `.ignore()` - Ignore while active
+- `.throttle()` - Ignore while active (same as calling without args)
+- `.throttle(ms)` - Rate limit calls to once per ms
 
 ### Easing Functions
 
