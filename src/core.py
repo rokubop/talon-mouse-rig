@@ -3,44 +3,20 @@
 This module contains low-level utilities that are proven and stable:
 - Vec2 class for 2D vectors
 - Easing functions
-- Mouse movement API (Talon vs Windows raw input)
+- Mouse movement API
 - SubpixelAdjuster for smooth movement
 """
 
 import math
-import platform
 from typing import Tuple, Union, Optional, Callable
 from dataclasses import dataclass
-from talon import ctrl, app, settings
+from talon import app
+from .mouse_api import get_mouse_move_function
 
 
 # ============================================================================
-# MOUSE MOVEMENT API SETUP
+# MOUSE MOVEMENT API
 # ============================================================================
-
-_windows_raw_available = False
-if platform.system() == "Windows":
-    try:
-        import win32api, win32con
-        _windows_raw_available = True
-    except ImportError:
-        pass
-
-
-def _make_talon_mouse_move():
-    def move(x: float, y: float) -> None:
-        ctrl.mouse_move(int(x), int(y))
-    return move
-
-
-def _make_windows_raw_mouse_move():
-    def move(x: float, y: float) -> None:
-        current_x, current_y = ctrl.mouse_pos()
-        dx = int(x - current_x)
-        dy = int(y - current_y)
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, dy)
-    return move
-
 
 # Mouse move function - initialized after Talon is ready
 _mouse_move = None
@@ -48,11 +24,7 @@ _mouse_move = None
 
 def _initialize_mouse_move():
     global _mouse_move
-    movement_type = settings.get("user.mouse_rig_movement_type", "talon")
-    if movement_type == "windows_raw" and _windows_raw_available:
-        _mouse_move = _make_windows_raw_mouse_move()
-    else:
-        _mouse_move = _make_talon_mouse_move()
+    _mouse_move = get_mouse_move_function()
 
 
 app.register("ready", _initialize_mouse_move)

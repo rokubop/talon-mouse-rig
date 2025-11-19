@@ -30,10 +30,10 @@ mod.setting(
     desc="Default turn rate in degrees per second (used with .rate() without args)"
 )
 mod.setting(
-    "mouse_rig_movement_type",
+    "mouse_rig_api",
     type=str,
     default="talon",
-    desc="Mouse movement type: 'talon' (ctrl.mouse_move) or 'windows_raw' (win32api.mouse_event)"
+    desc="Mouse API: 'talon' (ctrl.mouse_move) or 'windows_raw' (win32api.mouse_event)"
 )
 mod.setting(
     "mouse_rig_scale",
