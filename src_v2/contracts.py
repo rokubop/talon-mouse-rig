@@ -112,7 +112,11 @@ class BuilderConfig:
         """Get behavior with defaults applied"""
         if self.behavior is not None:
             return self.behavior
-        # Default to stack for all properties
+        # Default based on operator semantics:
+        # .to() = absolute value, should replace
+        # .add()/.by()/.sub()/.mul()/.div() = relative, should stack
+        if self.operator == "to":
+            return "replace"
         return "stack"
 
     def get_effective_bake(self) -> bool:

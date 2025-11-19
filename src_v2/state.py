@@ -102,13 +102,28 @@ class RigState:
                 return
             else:
                 # Stack/queue: add as child
+                # If this child has operator='to', remove existing children with same property
+                if builder.config.operator == "to" and builder.config.property:
+                    existing.children = [
+                        child for child in existing.children
+                        if child.config.property != builder.config.property
+                    ]
                 existing.add_child(builder)
                 return
 
         # Anonymous builders: behavior modes control creation
         if behavior == "replace":
-            # Cancel existing builder with same tag (shouldn't happen for anonymous)
-            self.remove_builder(tag)
+            # For .to() operator, cancel all anonymous builders with same property
+            if builder.config.operator == "to" and builder.config.property:
+                tags_to_remove = [
+                    t for t, b in self._active_builders.items()
+                    if b.is_anonymous and b.config.property == builder.config.property
+                ]
+                for t in tags_to_remove:
+                    self.remove_builder(t)
+            else:
+                # For other operators with explicit .replace(), remove by tag
+                self.remove_builder(tag)
 
         elif behavior == "queue":
             # For anonymous builders, queue by property/operator
