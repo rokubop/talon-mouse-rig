@@ -38,6 +38,36 @@ rig.direction.by(90).over(500) # rotate
 rig.direction.by(90).over(rate=45) # rotate
 ```
 
+### Tags
+
+Tags are a namespace for temporary state you can revert later.
+Tags are calculated AFTER the base values.
+
+```python
+rig = actions.user.mouse_rig()
+rig.tag("boost").speed.mul(4).over(1000)
+rig.tag("boost").revert(1000)
+
+# Bake current state into base values
+rig.tag("boost").bake()
+```
+
+#### Repeat behaviors
+```python
+rig = actions.user.mouse_rig()
+rig.tag("boost").speed.add(10)
+rig.tag("boost").stack.speed.add(10) # Default behavior stacks
+rig.tag("boost").stack(3).speed.add(10) # Max 3 stacks
+rig.tag("boost").queue.speed.add(10) # Queue instead of stack
+rig.tag("boost").queue().speed.add(10) # Queue until finished
+rig.tag("boost").extend.speed.add(10) # Extend hold time
+rig.tag("boost").replace.speed.add(10) # Replace instead of stack
+rig.tag("boost").throttle.speed.add(10) # Throttle calls
+rig.tag("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
+rig.tag("boost").ignore.speed.add(10) # Ignore while active
+```
+
+
 ### Revert and callbacks
 
 ```python
@@ -51,17 +81,6 @@ rig.speed.add(10).over(300) \
     .revert(300) \
     .then(lambda: print("Speed boost reverted"))
 ```
-
-### Tags for namespace you can revert later
-
-```python
-rig = actions.user.mouse_rig()
-rig.tag("boost").speed.mul(4).over(1000)
-rig.tag("boost").revert(500)
-```
-
-<details>
-<summary>Read more...</summary>
 
 ## Installation
 
@@ -81,113 +100,7 @@ cd ~/AppData/Roaming/talon/user
 git clone https://github.com/rokubop/talon-mouse-rig.git
 ```
 
-## More Examples
-
-### 1. Jump to a position smoothly
-
-```python
-rig = actions.user.mouse_rig()
-rig.pos.to(960, 540).over(400, "ease_in_out")
-```
-
-**Variations:**
-```python
-rig.pos.to(100, 100).over(300)
-rig.pos.to(1200, 600).over(500, "ease_out")
-rig.pos.by(50, -30).over(200)
-```
-
-### 2. Game-style camera control
-
-```python
-rig = actions.user.mouse_rig()
-rig.direction(1, 0)
-rig.speed(8)
-```
-
-**Variations:**
-```python
-rig.direction(-1, 0)
-rig.direction(0, -1)
-rig.direction(0.707, 0.707)
-rig.speed.mul(2)
-rig.speed.div(2)
-rig.stop(500)
-```
-
-### 3. Temporary speed boost
-
-```python
-rig = actions.user.mouse_rig()
-rig.tag("boost").speed.add(10).over(300).hold(2000).revert(300)
-```
-
-**Variations:**
-```python
-rig.tag("sprint").speed.mul(2)
-rig.tag("sprint").revert(500)
-
-rig.tag("boost").speed.add(15).hold(1500)
-rig.tag("boost").revert()
-```
-
-## API Reference
-
-### Directional Movement
-
-```python
-rig.direction(1, 0)
-rig.direction(-1, 0)
-rig.direction(0, -1)
-rig.direction(0, 1)
-rig.direction(0.707, 0.707)
-rig.direction.by(90).over(500)
-```
-
-### Speed Control
-
-```python
-rig.speed(3)
-rig.speed(10)
-rig.speed.mul(2)
-rig.speed.div(2)
-rig.speed.add(5)
-rig.speed.to(10).over(1000)
-```
-
-### Position Control
-
-```python
-rig.pos.to(960, 540).over(350, "ease_in_out")
-rig.pos.by(50, 0).over(200)
-rig.pos.add(-20, 10)
-```
-
-### Effects & Lifecycle
-
-```python
-rig.speed.add(10).hold(2000)
-rig.speed.by(20).over(500).hold(1500).revert(500)
-rig.tag("sprint").speed.mul(2)
-rig.tag("sprint").revert(500)
-```
-
-### Acceleration
-
-```python
-rig.accel(5)
-rig.tag("boost").accel.add(10).hold(2000)
-```
-
-### Stacking Effects
-
-```python
-rig.tag("boost_pad").speed.add(10)
-rig.tag("boost_pad").stack(3).speed.add(10)
-rig.tag("rage").speed.mul(1.2).stack(5)
-```
-
-</details>
+Done! 🎉
 
 ## Reference
 
