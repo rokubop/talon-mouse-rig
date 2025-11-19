@@ -5,7 +5,7 @@ This directory contains tests to ensure the mouse rig implementation stays in sy
 ## Running Tests
 
 ```bash
-python tests/test_contracts.py
+python .tests/test_contracts.py
 ```
 
 ## Test Files

@@ -8,10 +8,16 @@ import sys
 import os
 from unittest.mock import MagicMock
 
-sys.modules['talon'] = MagicMock()
-sys.modules['talon.cron'] = MagicMock()
-sys.modules['talon.ctrl'] = MagicMock()
-sys.modules['talon.fs'] = MagicMock()
+# Create properly configured mocks
+talon_mock = MagicMock(__name__='talon')
+talon_cron_mock = MagicMock(__name__='talon.cron')
+talon_ctrl_mock = MagicMock(__name__='talon.ctrl')
+talon_fs_mock = MagicMock(__name__='talon.fs')
+
+sys.modules['talon'] = talon_mock
+sys.modules['talon.cron'] = talon_cron_mock
+sys.modules['talon.ctrl'] = talon_ctrl_mock
+sys.modules['talon.fs'] = talon_fs_mock
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
