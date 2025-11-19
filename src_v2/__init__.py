@@ -188,6 +188,25 @@ class Rig:
         """Access to base (baked) state"""
         return self._state.base
 
+    def __getattr__(self, name: str):
+        """Handle unknown attributes with helpful error messages"""
+        from .contracts import RigAttributeError, find_closest_match, VALID_RIG_METHODS, VALID_RIG_PROPERTIES
+
+        # Combine all valid options
+        all_valid = VALID_RIG_METHODS + VALID_RIG_PROPERTIES
+
+        # Find closest match
+        suggestion = find_closest_match(name, all_valid)
+
+        msg = f"Rig has no attribute '{name}'"
+        if suggestion:
+            msg += f"\n\nDid you mean: '{suggestion}'?"
+        else:
+            msg += f"\n\nAvailable properties: {', '.join(VALID_RIG_PROPERTIES)}"
+            msg += f"\nAvailable methods: {', '.join(VALID_RIG_METHODS)}"
+
+        raise RigAttributeError(msg)
+
 
 class _BehaviorAccessor:
     """Helper to allow behavior to be used as property or method"""

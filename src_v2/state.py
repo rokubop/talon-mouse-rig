@@ -281,7 +281,7 @@ class RigState:
 
     def _bake_property(self, property_name: str, tag: Optional[str] = None):
         """Bake current computed value of a property into base state
-        
+
         Args:
             property_name: The property to bake ("speed", "direction", "accel", "pos")
             tag: Optional tag to bake from a specific builder. If None, bakes computed state.
@@ -300,7 +300,7 @@ class RigState:
         else:
             # Bake current computed value for this property
             current_value = getattr(self, property_name)
-            
+
             if property_name == "speed":
                 self._base_speed = current_value
             elif property_name == "accel":
@@ -309,7 +309,7 @@ class RigState:
                 self._base_direction = current_value
             elif property_name == "pos":
                 self._base_pos = current_value
-            
+
             # Remove all anonymous builders affecting this property
             tags_to_remove = [
                 t for t, b in self._active_builders.items()
@@ -632,7 +632,7 @@ class RigState:
         """Access to base (baked) state only"""
         return RigState.BaseState(self)
 
-    def stop(self, transition_ms: Optional[float] = None, easing: str = "linear"):
+    def stop(self, transition_ms: Optional[float] = None, easing: str = "linear", **kwargs):
         """Stop everything: bake state, clear effects, decelerate to 0
 
         This matches v1 behavior:
@@ -640,6 +640,12 @@ class RigState:
         2. Clear all active builders (effects)
         3. Set speed to 0 (with optional smooth deceleration)
         """
+        # Validate arguments
+        from .contracts import BuilderConfig, ConfigError
+        config = BuilderConfig()
+        all_kwargs = {'easing': easing, **kwargs}
+        config.validate_method_kwargs('stop', **all_kwargs)
+
         # 1. Bake all active builders into base
         for tag in list(self._active_builders.keys()):
             builder = self._active_builders[tag]
@@ -658,7 +664,7 @@ class RigState:
             self._base_accel = 0.0
         else:
             # Smooth deceleration - create anonymous builder
-            from .builder import RigBuilder, ActiveBuilder
+            from .builder import ActiveBuilder
             from .contracts import BuilderConfig
 
             config = BuilderConfig()

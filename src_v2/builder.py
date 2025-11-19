@@ -85,6 +85,26 @@ class RigBuilder:
         """Acceleration property accessor"""
         return PropertyBuilder(self, "accel")
 
+    def __getattr__(self, name: str):
+        """Handle unknown attributes with helpful error messages"""
+        from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS
+
+        # Valid properties are handled above
+        valid_properties = ['pos', 'speed', 'direction', 'accel']
+        all_valid = valid_properties + VALID_BUILDER_METHODS
+
+        # Find closest match
+        suggestion = find_closest_match(name, all_valid)
+
+        msg = f"RigBuilder has no attribute '{name}'"
+        if suggestion:
+            msg += f"\n\nDid you mean: '{suggestion}'?"
+        else:
+            msg += f"\n\nAvailable properties: {', '.join(valid_properties)}"
+            msg += f"\nAvailable methods: {', '.join(VALID_BUILDER_METHODS)}"
+
+        raise RigAttributeError(msg)
+
     # ========================================================================
     # LIFECYCLE METHODS
     # ========================================================================
@@ -95,7 +115,8 @@ class RigBuilder:
         easing: str = "linear",
         *,
         rate: Optional[float] = None,
-        interpolation: str = "lerp"
+        interpolation: str = "lerp",
+        **kwargs
     ) -> 'RigBuilder':
         """Set transition duration or rate
 
@@ -105,6 +126,10 @@ class RigBuilder:
             rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
+        # Validate using contract
+        all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
+        self.config.validate_method_kwargs('over', **all_kwargs)
+
         if rate is not None:
             # Rate-based, duration will be calculated later
             self.config.over_rate = rate
@@ -129,7 +154,8 @@ class RigBuilder:
         easing: str = "linear",
         *,
         rate: Optional[float] = None,
-        interpolation: str = "lerp"
+        interpolation: str = "lerp",
+        **kwargs
     ) -> 'RigBuilder':
         """Set revert duration or rate
 
@@ -139,6 +165,10 @@ class RigBuilder:
             rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
+        # Validate using contract
+        all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
+        self.config.validate_method_kwargs('revert', **all_kwargs)
+
         if rate is not None:
             self.config.revert_rate = rate
             self.config.revert_easing = easing
@@ -407,12 +437,15 @@ class PropertyBuilder:
         """Set absolute value"""
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
+        # Validate property + operator combination
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
         """Add delta"""
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def by(self, *args) -> RigBuilder:
@@ -423,29 +456,33 @@ class PropertyBuilder:
         """Subtract delta"""
         self.rig_builder.config.operator = "sub"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
         """Multiply"""
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
         """Divide"""
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def bake(self) -> RigBuilder:
         """Bake current computed value into base state
-        
+
         Examples:
             rig.direction.bake()  # Bakes current direction to base
             rig.tag("boost").speed.bake()  # Bakes boost's speed to base
         """
         self.rig_builder.config.operator = "bake"
         self.rig_builder.config.value = None
+        self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     # Shorthand for anonymous only
