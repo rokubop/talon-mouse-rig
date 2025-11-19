@@ -80,17 +80,12 @@ class RigBuilder:
         """Direction property accessor"""
         return PropertyBuilder(self, "direction")
 
-    @property
-    def accel(self) -> 'PropertyBuilder':
-        """Acceleration property accessor"""
-        return PropertyBuilder(self, "accel")
-
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
         from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS
 
         # Valid properties are handled above
-        valid_properties = ['pos', 'speed', 'direction', 'accel']
+        valid_properties = ['pos', 'speed', 'direction']
         all_valid = valid_properties + VALID_BUILDER_METHODS
 
         # Find closest match
@@ -315,10 +310,6 @@ class RigBuilder:
                 self.config.over_ms = rate_utils.calculate_speed_duration(
                     current_value, target_value, self.config.over_rate
                 )
-            elif self.config.property == "accel":
-                self.config.over_ms = rate_utils.calculate_accel_duration(
-                    current_value, target_value, self.config.over_rate
-                )
             elif self.config.property == "direction":
                 if self.config.operator == "to":
                     current_dir = self.rig_state.base.direction
@@ -350,10 +341,6 @@ class RigBuilder:
                 self.config.revert_ms = rate_utils.calculate_speed_duration(
                     target_value, current_value, self.config.revert_rate
                 )
-            elif self.config.property == "accel":
-                self.config.revert_ms = rate_utils.calculate_accel_duration(
-                    target_value, current_value, self.config.revert_rate
-                )
             elif self.config.property == "direction":
                 if self.config.operator == "to":
                     current_dir = self.rig_state.base.direction
@@ -383,8 +370,6 @@ class RigBuilder:
         """Get current base value for this property"""
         if self.config.property == "speed":
             return self.rig_state.base.speed
-        elif self.config.property == "accel":
-            return self.rig_state.base.accel
         elif self.config.property == "direction":
             return self.rig_state.base.direction
         elif self.config.property == "pos":
@@ -396,7 +381,7 @@ class RigBuilder:
         operator = self.config.operator
         value = self.config.value
 
-        if self.config.property in ("speed", "accel"):
+        if self.config.property == "speed":
             if operator == "to":
                 return value
             elif operator in ("by", "add"):
@@ -557,8 +542,6 @@ class ActiveBuilder:
         """Get current base value for this property"""
         if self.config.property == "speed":
             return self.rig_state.base.speed
-        elif self.config.property == "accel":
-            return self.rig_state.base.accel
         elif self.config.property == "direction":
             return self.rig_state.base.direction
         elif self.config.property == "pos":
@@ -576,7 +559,7 @@ class ActiveBuilder:
             # Return None - bake is handled immediately in state manager
             return None
 
-        if self.config.property in ("speed", "accel"):
+        if self.config.property == "speed":
             if operator == "to":
                 return value
             elif operator in ("by", "add"):
@@ -679,7 +662,7 @@ class ActiveBuilder:
         """
         phase, progress = self.lifecycle.update(0)
 
-        if self.config.property in ("speed", "accel"):
+        if self.config.property == "speed":
             return PropertyAnimator.animate_scalar(
                 self.base_value,
                 self.target_value,
@@ -727,7 +710,7 @@ class ActiveBuilder:
             property_type = self.config.property
 
             # Animate from target back to base during revert
-            if property_type in ("speed", "accel"):
+            if property_type == "speed":
                 return PropertyAnimator.animate_scalar(
                     self.group_base_value,
                     self.group_target_value,
@@ -759,7 +742,7 @@ class ActiveBuilder:
         # Aggregate own value plus all children values
         property_type = self.config.property
 
-        if property_type in ("speed", "accel"):
+        if property_type == "speed":
             # Start with own value, then add children
             total = self._get_own_value()
             for child in self.children:

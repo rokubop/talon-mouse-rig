@@ -49,25 +49,6 @@ def calculate_speed_duration(
     return calculate_duration_from_rate(delta, rate)
 
 
-def calculate_accel_duration(
-    current: float,
-    target: float,
-    rate: float
-) -> float:
-    """Calculate duration for acceleration transition based on rate.
-
-    Args:
-        current: Current acceleration value
-        target: Target acceleration value
-        rate: Acceleration rate in units/second²
-
-    Returns:
-        Duration in milliseconds
-    """
-    delta = abs(target - current)
-    return calculate_duration_from_rate(delta, rate)
-
-
 def calculate_direction_duration(
     current: Vec2,
     target: Vec2,

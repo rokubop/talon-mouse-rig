@@ -1,6 +1,6 @@
 # Talon Mouse Rig
 
-All purpose mouse rig for Talon with a fluent API for position, speed, direction, acceleration, tags, callbacks, durations, easing, and reverts.
+All purpose mouse rig for Talon with a fluent API for position, speed, direction, tags, callbacks, durations, easing, and reverts.
 
 ## Examples
 
@@ -108,7 +108,6 @@ Done! 🎉
 - `pos` - Position (x, y coordinates)
 - `speed` - Movement speed magnitude
 - `direction` - Direction vector or angle
-- `accel` - Acceleration magnitude
 
 ### Operators
 
@@ -155,7 +154,6 @@ Access current computed state (base + all active effects):
 rig.state.pos
 rig.state.speed
 rig.state.direction
-rig.state.accel
 ```
 
 Access base state only:
@@ -164,7 +162,6 @@ Access base state only:
 rig.state.base.pos
 rig.state.base.speed
 rig.state.base.direction
-rig.state.base.accel
 ```
 
 List active tags:
@@ -180,7 +177,7 @@ sprint = rig.state.tag("sprint")
 if sprint:
     print(sprint.speed)
     print(sprint.phase)  # 'over', 'hold', 'revert', or None
-    print(sprint.prop)   # 'speed', 'direction', 'pos', 'accel'
+    print(sprint.prop)   # 'speed', 'direction', 'pos'
     print(sprint.operator)  # 'to', 'add', 'mul', etc.
 ```
 

@@ -100,11 +100,6 @@ class Rig:
         """Direction property accessor"""
         return RigBuilder(self._state).direction
 
-    @property
-    def accel(self):
-        """Acceleration property accessor"""
-        return RigBuilder(self._state).accel
-
     # ========================================================================
     # TAG ACCESSOR
     # ========================================================================
@@ -242,13 +237,6 @@ class _BehaviorAccessor:
         builder = RigBuilder(self._state)
         builder.config.behavior = self._behavior
         return builder.direction
-
-    @property
-    def accel(self):
-        """Property access: rig.stack.accel"""
-        builder = RigBuilder(self._state)
-        builder.config.behavior = self._behavior
-        return builder.accel
 
 
 # Main entry point function

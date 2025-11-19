@@ -1,8 +1,7 @@
-"""
-Mouse Rig Examples - Comprehensive Feature Showcase
+"""Mouse Rig Examples - Comprehensive Feature Showcase
 
 Demonstrates all core mouse rig features:
-- Basic movement (direction, speed, acceleration)
+- Basic movement (direction, speed)
 - Effect system with strict syntax:
   * Effects use strict syntax: .speed.to(10), .speed.add(10), etc.
   * Shorthand like .speed(10) raises error for effects
@@ -226,7 +225,7 @@ class Actions:
     def mouse_rig_gravity_on():
         """Enable gravity force"""
         rig = actions.user.mouse_rig()
-        rig.force("gravity").direction(0, 1).accel(9.8)
+        rig.force("gravity").direction(0, 1).speed(9.8)
 
     def mouse_rig_gravity_off():
         """Disable gravity"""
@@ -242,30 +241,6 @@ class Actions:
         """Wind with smooth fade"""
         rig = actions.user.mouse_rig()
         rig.force("wind").direction(1, 0).speed(8).over(500).hold(3000).revert(1000)
-
-    # =========================================================================
-    # ACCELERATION
-    # =========================================================================
-
-    def mouse_rig_accel_on():
-        """Enable constant acceleration"""
-        rig = actions.user.mouse_rig()
-        rig.accel(5)
-
-    def mouse_rig_accel_off():
-        """Disable acceleration"""
-        rig = actions.user.mouse_rig()
-        rig.accel(0)
-
-    def mouse_rig_accel_burst():
-        """Temporary acceleration boost"""
-        rig = actions.user.mouse_rig()
-        rig.pos.by(10, 10).over(400)\
-            .then(lambda: print("over"))\
-            .hold(10000)\
-            .then(lambda: print("hold"))\
-            .revert(1000)\
-            .then(lambda: print("revert"))
 
     # =========================================================================
     # SMOOTH TURNS

@@ -77,14 +77,6 @@ rig wind: user.mouse_rig_wind_on()
 rig wind smooth: user.mouse_rig_wind_smooth()
 
 # =============================================================================
-# ACCELERATION
-# =============================================================================
-
-rig accel: user.mouse_rig_accel_on()
-rig decel: user.mouse_rig_accel_off()
-rig accel burst: user.mouse_rig_accel_burst()
-
-# =============================================================================
 # SMOOTH TURNS
 # =============================================================================
 

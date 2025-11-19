@@ -14,13 +14,12 @@ if TYPE_CHECKING:
 # VALIDATION SCHEMAS - Single source of truth for what's valid
 # ============================================================================
 
-VALID_PROPERTIES = ['pos', 'speed', 'direction', 'accel']
+VALID_PROPERTIES = ['pos', 'speed', 'direction']
 
 VALID_OPERATORS = {
     'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
-    'pos': ['to', 'add', 'by', 'sub', 'bake'],
-    'accel': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake']
+    'pos': ['to', 'add', 'by', 'sub', 'bake']
 }
 
 VALID_EASINGS = [
@@ -112,7 +111,7 @@ VALID_RIG_METHODS = [
 ]
 
 VALID_RIG_PROPERTIES = [
-    'pos', 'speed', 'direction', 'accel',
+    'pos', 'speed', 'direction',
     'state', 'base',
     'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
 ]
@@ -326,7 +325,7 @@ class BuilderConfig:
     """Configuration collected by RigBuilder during fluent API calls"""
     def __init__(self):
         # Property and operation
-        self.property: Optional[str] = None  # pos, speed, direction, accel
+        self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div
         self.value: Any = None
 

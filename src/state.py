@@ -26,7 +26,6 @@ class RigState:
         self._base_pos: Vec2 = Vec2(*ctrl.mouse_pos())
         self._base_speed: float = 0.0
         self._base_direction: Vec2 = Vec2(1, 0)
-        self._base_accel: float = 0.0
 
         # Active builders (tag -> ActiveBuilder)
         # Anonymous builders get unique generated tags
@@ -256,17 +255,6 @@ class RigState:
                 self._base_speed *= current_value
             elif operator == "div":
                 self._base_speed /= current_value if current_value != 0 else 1
-        elif prop == "accel":
-            if operator == "to":
-                self._base_accel = current_value
-            elif operator in ("add", "by"):
-                self._base_accel += current_value
-            elif operator == "sub":
-                self._base_accel -= current_value
-            elif operator == "mul":
-                self._base_accel *= current_value
-            elif operator == "div":
-                self._base_accel /= current_value if current_value != 0 else 1
         elif prop == "direction":
             # current_value is already the final direction (operation already applied in target_value)
             self._base_direction = current_value
@@ -283,7 +271,7 @@ class RigState:
         """Bake current computed value of a property into base state
 
         Args:
-            property_name: The property to bake ("speed", "direction", "accel", "pos")
+            property_name: The property to bake ("speed", "direction", "pos")
             tag: Optional tag to bake from a specific builder. If None, bakes computed state.
         """
         if tag:
@@ -303,8 +291,6 @@ class RigState:
 
             if property_name == "speed":
                 self._base_speed = current_value
-            elif property_name == "accel":
-                self._base_accel = current_value
             elif property_name == "direction":
                 self._base_direction = current_value
             elif property_name == "pos":
@@ -321,17 +307,16 @@ class RigState:
                 if t in self._anonymous_tags:
                     self._anonymous_tags.remove(t)
 
-    def _compute_current_state(self) -> tuple[Vec2, float, Vec2, float]:
+    def _compute_current_state(self) -> tuple[Vec2, float, Vec2]:
         """Compute current state by applying all active builders to base.
 
         Returns:
-            (position, speed, direction, accel)
+            (position, speed, direction)
         """
         # Start with base
         pos = Vec2(self._base_pos.x, self._base_pos.y)
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
-        accel = self._base_accel
 
         # Apply builders in order: anonymous first, then tagged
         ordered_tags = self._anonymous_tags + self._tagged_tags
@@ -356,17 +341,6 @@ class RigState:
                     speed *= current_value
                 elif operator == "div":
                     speed /= current_value if current_value != 0 else 1
-            elif prop == "accel":
-                if operator == "to":
-                    accel = current_value
-                elif operator in ("add", "by"):
-                    accel += current_value
-                elif operator == "sub":
-                    accel -= current_value
-                elif operator == "mul":
-                    accel *= current_value
-                elif operator == "div":
-                    accel /= current_value if current_value != 0 else 1
             elif prop == "direction":
                 if operator == "to":
                     # Direction 'to' replaces current value
@@ -381,7 +355,7 @@ class RigState:
                 # Position builders return offsets
                 pos = pos + current_value
 
-        return (pos, speed, direction, accel)
+        return (pos, speed, direction)
 
     def _update_frame(self):
         """Update all active builders and move mouse"""
@@ -404,11 +378,7 @@ class RigState:
             self.remove_builder(tag)
 
         # Compute current state
-        pos, speed, direction, accel = self._compute_current_state()
-
-        # Apply acceleration to speed (accel is per frame)
-        if accel != 0:
-            speed += accel
+        pos, speed, direction = self._compute_current_state()
 
         # Calculate movement (speed is pixels per frame, not per second)
         if speed != 0:
@@ -441,8 +411,8 @@ class RigState:
             self._subpixel_adjuster.reset()
 
     def _has_movement(self) -> bool:
-        """Check if there's any movement happening (base speed or accel non-zero)"""
-        return self._base_speed != 0 or self._base_accel != 0
+        """Check if there's any movement happening (base speed non-zero)"""
+        return self._base_speed != 0
 
     def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
         """Get cardinal/intercardinal direction name from direction vector
@@ -498,11 +468,6 @@ class RigState:
         return self._compute_current_state()[2]
 
     @property
-    def accel(self) -> float:
-        """Current computed acceleration"""
-        return self._compute_current_state()[3]
-
-    @property
     def direction_cardinal(self) -> Optional[str]:
         """Current direction as cardinal/intercardinal string
 
@@ -533,7 +498,7 @@ class RigState:
 
         @property
         def prop(self) -> str:
-            """What property this tag is affecting: 'speed', 'direction', 'pos', 'accel'"""
+            """What property this tag is affecting: 'speed', 'direction', 'pos'"""
             return self._builder.config.property
 
         @property
@@ -565,11 +530,6 @@ class RigState:
         def pos(self) -> Optional[Vec2]:
             """Position offset if this tag affects position, else None"""
             return self.value if self.prop == 'pos' else None
-
-        @property
-        def accel(self) -> Optional[float]:
-            """Acceleration value if this tag affects accel, else None"""
-            return self.value if self.prop == 'accel' else None
 
         def time_alive(self) -> float:
             """Get time in seconds since this builder was created"""
@@ -623,10 +583,6 @@ class RigState:
         def direction(self) -> Vec2:
             return self._rig_state._base_direction
 
-        @property
-        def accel(self) -> float:
-            return self._rig_state._base_accel
-
     @property
     def base(self) -> 'RigState.BaseState':
         """Access to base (baked) state only"""
@@ -661,7 +617,6 @@ class RigState:
         if transition_ms is None or transition_ms == 0:
             # Immediate stop
             self._base_speed = 0.0
-            self._base_accel = 0.0
         else:
             # Smooth deceleration - create anonymous builder
             from .builder import ActiveBuilder
@@ -706,7 +661,7 @@ class RigState:
 
             # Get base value (neutral/zero for the property type)
             # Use builder's own config since children might be empty after first revert
-            if builder.config.property in ("speed", "accel"):
+            if builder.config.property == "speed":
                 base_value = 0
             elif builder.config.property == "direction":
                 base_value = builder.base_value  # Original direction
