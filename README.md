@@ -148,6 +148,72 @@ rig.reverse(ms?)
 rig.bake()
 ```
 
+### State
+
+Access current computed state (base + all active effects):
+
+```python
+rig.state.pos
+rig.state.speed
+rig.state.direction
+rig.state.accel
+```
+
+Access base state only:
+
+```python
+rig.state.base.pos
+rig.state.base.speed
+rig.state.base.direction
+rig.state.base.accel
+```
+
+List active tags:
+
+```python
+rig.state.tags  # ["sprint", "drift"]
+```
+
+Get info about a specific tag:
+
+```python
+sprint = rig.state.tag("sprint")
+if sprint:
+    print(sprint.speed)
+    print(sprint.phase)  # 'over', 'hold', 'revert', or None
+    print(sprint.prop)   # 'speed', 'direction', 'pos', 'accel'
+    print(sprint.operator)  # 'to', 'add', 'mul', etc.
+```
+
+### Tags
+
+Use `.tag(name)` to create named effects that can be reverted later.
+
+### Interpolation
+
+Direction interpolation modes for `.over()` and `.revert()`:
+- `interpolation='lerp'` - Linear interpolation (default)
+- `interpolation='slerp'` - Spherical interpolation (smooth rotation along arc)
+
+```python
+rig.direction.by(90).over(500, interpolation='slerp')
+```
+
+### Helpers
+
+Direction helpers:
+
+```python
+# Convert direction to cardinal string
+cardinal = rig.state.direction.to_cardinal()
+# Returns: "right", "left", "up", "down",
+#          "up_right", "up_left", "down_right", "down_left"
+
+# Vector operations
+rig.state.direction.magnitude()
+rig.state.direction.normalized()
+```
+
 ## License
 
 MIT
