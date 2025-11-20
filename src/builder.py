@@ -482,6 +482,18 @@ class PropertyBuilder:
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
+    def revert(self, ms: Optional[float] = None, easing: str = "linear", **kwargs) -> RigBuilder:
+        """Revert this property/tag
+
+        For anonymous builders, reverts all anonymous builders affecting this property.
+        For tagged builders, reverts the entire tag (same as tag.revert()).
+
+        Examples:
+            rig.speed.revert(500)  # Revert all anonymous speed changes
+            tag("boost").speed.revert(500)  # Revert boost tag
+        """
+        return self.rig_builder.revert(ms, easing, **kwargs)
+
     # Shorthand for anonymous only
     def __call__(self, *args) -> RigBuilder:
         """Shorthand: rig.speed(5) -> rig.speed.to(5)"""
