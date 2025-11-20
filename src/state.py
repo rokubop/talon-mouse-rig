@@ -49,10 +49,55 @@ class RigState:
         # Throttle tracking (tag -> last execution time)
         self._throttle_times: dict[str, float] = {}
 
+        # Operation category tracking (tag -> "additive" or "multiplicative")
+        self._tag_operation_categories: dict[str, str] = {}
+
     def generate_anonymous_tag(self) -> str:
         """Generate a unique tag for anonymous builders"""
         self._tag_counter += 1
         return f"__anon_{self._tag_counter}"
+
+    def _get_operation_category(self, operator: str) -> str:
+        """Get operation category for an operator"""
+        if operator in ("add", "by", "sub"):
+            return "additive"
+        elif operator in ("mul", "div"):
+            return "multiplicative"
+        else:
+            # "to" and "bake" don't have categories
+            return "other"
+
+    def _validate_operation_category(self, tag: str, new_operator: str):
+        """Validate that new operator matches existing tag's category"""
+        if tag not in self._tag_operation_categories:
+            return  # First operation on this tag
+
+        existing_category = self._tag_operation_categories[tag]
+        new_category = self._get_operation_category(new_operator)
+
+        # Skip validation for special operators
+        if new_category == "other" or existing_category == "other":
+            return
+
+        if existing_category != new_category:
+            existing_builder = self._active_builders[tag]
+            existing_op = existing_builder.config.operator
+
+            # Build helpful error message
+            if existing_category == "additive":
+                allowed = "add(), by(), sub()"
+                not_allowed = "mul(), div()"
+            else:  # multiplicative
+                allowed = "mul(), div()"
+                not_allowed = "add(), by(), sub()"
+
+            raise ValueError(
+                f"Cannot mix operation types on tag '{tag}'. "
+                f"Tag '{tag}' uses .{existing_op}() ({existing_category}), "
+                f"but you tried to use .{new_operator}() ({new_category}).\n\n"
+                f"A tag can only use {allowed} operations, not {not_allowed}.\n"
+                f"Use a different tag name or .replace to change the operation type."
+            )
 
     def time_alive(self, tag: str) -> Optional[float]:
         """Get time in seconds since builder was created
@@ -83,6 +128,9 @@ class RigState:
         if not builder.is_anonymous and tag in self._active_builders:
             existing = self._active_builders[tag]
 
+            # Validate operation category consistency
+            self._validate_operation_category(tag, builder.config.operator)
+
             if behavior == "replace":
                 # Replace entire builder
                 self.remove_builder(tag)
@@ -106,12 +154,6 @@ class RigState:
                 return
             else:
                 # Stack/queue: add as child
-                # If this child has operator='to', remove existing children with same property
-                if builder.config.operator == "to" and builder.config.property:
-                    existing.children = [
-                        child for child in existing.children
-                        if child.config.property != builder.config.property
-                    ]
                 existing.add_child(builder)
                 return
 
@@ -176,6 +218,11 @@ class RigState:
         # Add builder to active set
         self._active_builders[tag] = builder
 
+        # Track operation category for tagged builders
+        if not builder.is_anonymous:
+            category = self._get_operation_category(builder.config.operator)
+            self._tag_operation_categories[tag] = category
+
         # Track execution order
         if builder.is_anonymous:
             self._anonymous_tags.append(tag)
@@ -220,6 +267,10 @@ class RigState:
                 self._anonymous_tags.remove(tag)
             if tag in self._tagged_tags:
                 self._tagged_tags.remove(tag)
+
+            # Remove operation category tracking
+            if tag in self._tag_operation_categories:
+                del self._tag_operation_categories[tag]
 
             # Notify queue system (using same queue key logic as add_builder)
             queue_key = tag

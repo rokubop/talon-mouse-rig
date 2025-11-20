@@ -43,9 +43,16 @@ rig.direction.by(90).over(rate=45) # rotate
 Tags are a namespace for temporary state you can revert later.
 Tags are calculated AFTER the base values.
 
+**Tags support two operation categories** (but not mixed on same tag):
+- **Additive**: `.add()`, `.by()`, `.sub()` - stack by adding/subtracting
+- **Multiplicative**: `.mul()`, `.div()` - stack by multiplying/dividing
+
+Use `.revert()` to remove a tag's effect, or anonymous builders for absolute positioning with `.to()`.
+
 ```python
 rig = actions.user.mouse_rig()
-rig.tag("boost").speed.mul(4).over(1000)
+rig.tag("boost").speed.add(10).over(1000)  # Additive
+rig.tag("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
 rig.tag("boost").revert(1000)
 
 # Bake current state into base values
@@ -111,9 +118,13 @@ Done! 🎉
 
 ### Operators
 
-- `.to(value)` - Set absolute value
+- `.to(value)` - Set absolute value (anonymous builders only)
+
+**Additive (can be mixed on same tag):**
 - `.add(value)` / `.by(value)` - Add delta (aliases)
 - `.sub(value)` - Subtract
+
+**Multiplicative (can be mixed on same tag, but not with additive):**
 - `.mul(value)` - Multiply
 - `.div(value)` - Divide
 
@@ -178,7 +189,7 @@ if sprint:
     print(sprint.speed)
     print(sprint.phase)  # 'over', 'hold', 'revert', or None
     print(sprint.prop)   # 'speed', 'direction', 'pos'
-    print(sprint.operator)  # 'to', 'add', 'mul', etc.
+    print(sprint.operator)  # 'add', 'mul', 'sub', etc.
 ```
 
 ### Tags

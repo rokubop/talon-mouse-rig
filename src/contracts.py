@@ -364,7 +364,7 @@ class BuilderConfig:
         if self.behavior is not None:
             return self.behavior
         # Default based on operator semantics:
-        # .to() = absolute value, should replace
+        # .to() = absolute value, should replace (anonymous only)
         # .add()/.by()/.sub()/.mul()/.div() = relative, should stack
         if self.operator == "to":
             return "replace"

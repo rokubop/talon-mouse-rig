@@ -426,7 +426,12 @@ class PropertyBuilder:
         self.rig_builder.config.property = property_name
 
     def to(self, *args) -> RigBuilder:
-        """Set absolute value"""
+        """Set absolute value (anonymous builders only)"""
+        if not self.rig_builder.is_anonymous:
+            raise ValueError(
+                "Tagged operations cannot use .to() - use delta operations (.add(), .sub(), .by(), .mul(), .div()) "
+                "or use .revert() to remove the tag's effect"
+            )
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         # Validate property + operator combination
@@ -481,7 +486,10 @@ class PropertyBuilder:
     def __call__(self, *args) -> RigBuilder:
         """Shorthand: rig.speed(5) -> rig.speed.to(5)"""
         if not self.rig_builder.is_anonymous:
-            raise ValueError("Shorthand syntax only allowed for anonymous builders")
+            raise ValueError(
+                "Tagged operations cannot use call syntax - use delta operations (.add(), .sub(), .by(), .mul(), .div()) "
+                "or use .revert() to remove the tag's effect"
+            )
         return self.to(*args)
 
 
