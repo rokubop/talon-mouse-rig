@@ -158,28 +158,12 @@ class Lifecycle:
                 print(f"Error in lifecycle callback: {e}")
 
     def is_complete(self) -> bool:
-        """Check if lifecycle is complete (or will be instantly complete)
+        if not self.has_any_lifecycle():
+            return True
 
-        Returns True if:
-        - Already started and completed (started=True, phase=None)
-        - OR has no lifecycle phases (will complete instantly when started)
-
-        Named layers with no lifecycle never complete (stay active forever).
-        """
-        # Named layers with no lifecycle stay active until manually reverted
-        if self.is_named and not self.has_any_lifecycle():
-            return False
-
-        # If already started, check if phase is None (completed)
-        if self.started:
-            return self.phase is None
-
-        # Not started yet - will it complete instantly?
-        # (i.e., has no lifecycle phases)
-        return not self.has_any_lifecycle()
+        return self.started and self.phase is None
 
     def has_any_lifecycle(self) -> bool:
-        """Check if this lifecycle has any phases defined"""
         return (
             (self.over_ms is not None and self.over_ms > 0) or
             (self.hold_ms is not None and self.hold_ms > 0) or
@@ -187,7 +171,6 @@ class Lifecycle:
         )
 
     def is_reverting(self) -> bool:
-        """Check if currently in revert phase"""
         return self.phase == LifecyclePhase.REVERT
 
     def has_reverted(self) -> bool:
@@ -204,26 +187,32 @@ class Lifecycle:
         )
 
     def should_be_garbage_collected(self) -> bool:
-        """Check if builder should be removed and garbage collected
+        """Check if builder should be removed from active builders.
 
-        Builders are removed when:
-        - Anonymous builders complete their lifecycle
-        - Any builder (is_named_layer or anonymous) completes via revert
+        Garbage collection rules:
+        - Anonymous builders: removed when lifecycle completes
+        - Named builders: removed only when explicitly reverted
+        - Any builder: removed if reverted (regardless of named/anonymous)
 
-        is_named_layer builders without revert persist until manually removed.
+        This ensures:
+        - Anonymous builders don't persist after completion
+        - Named builders without lifecycle stay active indefinitely
+        - Named builders with lifecycle (but no revert) stay active after completion
+        - Any builder that reverts gets cleaned up
         """
+        # Not complete yet - keep it
         if not self.is_complete():
             return False
 
-        # Remove if anonymous (lifecycle complete)
-        if not self.is_user_layer:
-            return True
-
-        # Remove if reverted (no longer has any effect)
+        # Reverted - always remove (named or anonymous)
         if self.has_reverted():
             return True
 
-        # is_named_layer builders without revert stay active
+        # Anonymous and complete (no revert) - remove it
+        if not self.is_user_layer:
+            return True
+
+        # Named, complete, not reverted - keep it active
         return False
 
 

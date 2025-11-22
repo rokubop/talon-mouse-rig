@@ -46,6 +46,7 @@ class RigState:
         self._cron_job: Optional[cron.CronJob] = None
         self._last_frame_time: Optional[float] = None
         self._subpixel_adjuster = SubpixelAdjuster()
+        self._last_position_offset: Vec2 = Vec2(0, 0)
 
         # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
@@ -108,6 +109,8 @@ class RigState:
                     elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
                     if elapsed < throttle_ms:
                         return  # Ignore this call
+                # Update throttle time
+                self._throttle_times[layer] = time.perf_counter()
                 # Add as child
                 existing.add_child(builder)
                 return
@@ -137,16 +140,15 @@ class RigState:
                 elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
                 if elapsed < throttle_ms:
                     return  # Ignore this call
+            # Update throttle time
+            self._throttle_times[layer] = time.perf_counter()
 
         # Add builder to active set
-        self._active_builders[layer] = builder
+        self._active_builders[layer]= builder
 
         # Track order if provided
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
-
-        # Update throttle time
-        self._throttle_times[layer] = time.perf_counter()
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
@@ -158,6 +160,9 @@ class RigState:
                     self._bake_builder(builder)
                 # Remove from active set (it was added on line 134)
                 del self._active_builders[layer]
+                # Clean up throttle tracking
+                if layer in self._throttle_times:
+                    del self._throttle_times[layer]
             else:
                 # User/final layers without lifecycle should stay active
                 pass
@@ -183,6 +188,10 @@ class RigState:
             # Remove order tracking
             if layer in self._layer_orders:
                 del self._layer_orders[layer]
+
+            # Clean up throttle tracking
+            if layer in self._throttle_times:
+                del self._throttle_times[layer]
 
             # Notify queue system
             queue_key = layer
@@ -395,10 +404,11 @@ class RigState:
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
 
         elif prop == "pos":
-            if operator in ("add", "by"):
-                pos = pos + current_value
-            elif operator == "to":
-                pos = current_value if isinstance(current_value, Vec2) else Vec2.from_tuple(current_value)
+            # For position, both "to" and "add/by" work with offsets from base
+            # position.to() stores target_value as offset from base
+            # position.by() stores target_value as offset from base
+            # So both are applied by adding the offset
+            pos = pos + current_value
 
         return (pos, speed, direction)
 
@@ -425,20 +435,28 @@ class RigState:
         # Compute current state
         pos, speed, direction = self._compute_current_state()
 
-        # Calculate movement (speed is pixels per frame, not per second)
-        if speed != 0:
-            velocity = direction * speed
-            dx = velocity.x
-            dy = velocity.y
+        # Calculate velocity-based movement delta
+        velocity = direction * speed
+        position_delta = Vec2(velocity.x, velocity.y)
 
-            # Apply subpixel adjustment
-            dx_int, dy_int = self._subpixel_adjuster.adjust(dx, dy)
+        # Apply subpixel adjustment
+        dx_int, dy_int = self._subpixel_adjuster.adjust(position_delta.x, position_delta.y)
 
-            if dx_int != 0 or dy_int != 0:
-                current_x, current_y = ctrl.mouse_pos()
-                new_x = current_x + dx_int
-                new_y = current_y + dy_int
-                mouse_move(new_x, new_y)
+        # Get current mouse position
+        current_x, current_y = ctrl.mouse_pos()
+        new_x = current_x + dx_int
+        new_y = current_y + dy_int
+
+        # Apply position offset (only the CHANGE since last frame)
+        position_offset = pos - self._base_pos
+        offset_delta = position_offset - self._last_position_offset
+        new_x += int(round(offset_delta.x))
+        new_y += int(round(offset_delta.y))
+        self._last_position_offset = position_offset
+
+        # Move cursor if position changed
+        if new_x != current_x or new_y != current_y:
+            mouse_move(new_x, new_y)
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
@@ -664,6 +682,9 @@ class RigState:
         if transition_ms is None or transition_ms == 0:
             # Immediate stop
             self._base_speed = 0.0
+            # Stop frame loop if no active builders
+            if len(self._active_builders) == 0:
+                self._stop_frame_loop()
         else:
             # Smooth deceleration - create base layer builder
             from .builder import ActiveBuilder

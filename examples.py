@@ -34,7 +34,7 @@ class Actions:
         """Basic right movement - base layer"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed(5).over(1000).revert(1000)
+        rig.speed(5)
         # rig.layer("hello").direction(1, 0)
         # rig.layer("hello").speed(5)
 
@@ -65,8 +65,8 @@ class Actions:
     def test_direction_rotate():
         """Rotate by degrees (add)"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)  # Start right
-        rig.speed(5)
+        # rig.direction(1, 0)  # Start right
+        # rig.speed(5)
         rig.direction.by(90)  # Rotate 90° clockwise
 
     def test_reverse():
@@ -346,9 +346,7 @@ class Actions:
     def test_state_read():
         """Read current state"""
         rig = actions.user.mouse_rig()
-        current_speed = rig.state.speed or 3
-        rig.direction(1, 0)
-        rig.speed(current_speed * 2)
+        print(vars(rig.state))
 
     def test_bake():
         """Bake current values"""
@@ -431,3 +429,8 @@ class Actions:
         rig.layer("sprint", order=1).incoming.speed.mul(2)
         rig.layer("precision", order=2).incoming.speed.mul(0.5)
         rig.final.scale(1.2)  # Final 20% boost
+
+    def mouse_rig_pos_center():
+        """Legacy: Move to center of screen"""
+        rig = actions.user.mouse_rig()
+        rig.pos.to(960, 540).over(1000)
