@@ -22,6 +22,7 @@ class RigState:
     """Core state manager for the mouse rig"""
 
     def __init__(self):
+        print(f"DEBUG: Creating NEW RigState instance")
         # Base state (baked values)
         self._base_pos: Vec2 = Vec2(*ctrl.mouse_pos())
         self._base_speed: float = 0.0
@@ -51,11 +52,17 @@ class RigState:
 
         # Base layer counter for unique base layer names
         self._base_counter: int = 0
+        self._final_counter: int = 0
 
     def _generate_base_layer_name(self) -> str:
         """Generate unique base layer name for base operations"""
         self._base_counter += 1
         return f"__base_{self._base_counter}"
+
+    def _generate_final_layer_name(self) -> str:
+        """Generate unique final layer name for final operations"""
+        self._final_counter += 1
+        return f"__final_{self._final_counter}"
 
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
@@ -143,12 +150,13 @@ class RigState:
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
+            print(f"DEBUG: Builder {layer} completes instantly, anonymous={builder.config.is_anonymous()}")
             # Instant completion - bake immediately for anonymous layers
             if builder.config.is_anonymous():
-                # Bake BEFORE removing
                 if builder.config.get_effective_bake():
+                    print(f"DEBUG: Baking {layer} immediately")
                     self._bake_builder(builder)
-                # Remove from active set
+                # Remove from active set (it was added on line 134)
                 del self._active_builders[layer]
             else:
                 # User/final layers without lifecycle should stay active
@@ -156,12 +164,15 @@ class RigState:
             return
 
         # Start frame loop if not running
+        print(f"DEBUG: Builder {layer} has lifecycle, starting frame loop. over_ms={builder.config.over_ms}, revert_ms={builder.config.revert_ms}")
         self._ensure_frame_loop_running()
 
     def remove_builder(self, layer: str):
         """Remove an active builder"""
         if layer in self._active_builders:
             builder = self._active_builders[layer]
+
+            print(f"DEBUG: Removing builder {layer}, has_reverted={builder.lifecycle.has_reverted()}, will_bake={builder.config.get_effective_bake()}")
 
             # If bake=true, merge values into base
             if builder.config.get_effective_bake():
@@ -187,7 +198,10 @@ class RigState:
         """Merge builder's final aggregated value into base state"""
         # If builder has reverted, don't bake (it's already back to base)
         if builder.lifecycle.has_reverted():
+            print(f"DEBUG: Builder has reverted, NOT baking")
             return
+
+        print(f"DEBUG: Baking builder - property={builder.config.property}, operator={builder.config.operator}")
 
         # Get aggregated value (includes own value + children)
         current_value = builder.get_current_value()
@@ -354,7 +368,7 @@ class RigState:
             elif operator == "sub":
                 speed -= current_value
             elif operator == "mul":
-                # mul on non-phased layers (base/final) is ordered operation
+                # mul on non-has_incoming_outgoing layers (base/final) is ordered operation
                 speed *= current_value
             elif operator == "div":
                 speed /= current_value if current_value != 0 else 1
@@ -375,7 +389,7 @@ class RigState:
                 # Apply rotation
                 direction = current_value  # Already computed as rotated direction
             elif operator == "mul":
-                # mul on non-phased layers (base/final) is ordered operation
+                # mul on non-has_incoming_outgoing layers (base/final) is ordered operation
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
             elif operator == "scale":
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
@@ -635,8 +649,8 @@ class RigState:
         config.validate_method_kwargs('stop', **all_kwargs)
 
         # 1. Bake all active builders into base
-        for tag in list(self._active_builders.keys()):
-            builder = self._active_builders[tag]
+        for layer in list(self._active_builders.keys()):
+            builder = self._active_builders[layer]
             if not builder.lifecycle.has_reverted():
                 self._bake_builder(builder)
 
@@ -703,7 +717,7 @@ class RigState:
                 base_value = 0
 
             # Create group lifecycle for coordinated revert
-            builder.group_lifecycle = Lifecycle(is_tagged=not builder.is_anonymous)
+            builder.group_lifecycle = Lifecycle(is_user_layer=not builder.is_anonymous)
             builder.group_lifecycle.over_ms = 0  # Skip over phase
             builder.group_lifecycle.hold_ms = 0  # Skip hold phase
             builder.group_lifecycle.revert_ms = revert_ms if revert_ms is not None else 0

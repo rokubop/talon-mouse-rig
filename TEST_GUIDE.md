@@ -161,7 +161,7 @@ Tests specifically demonstrating the new layer system:
 
 ## Notes
 
-- All tests use the new `layer()` API (not the old `tag()` API)
+- All tests use the new `layer()` API (not the old `layer()` API)
 - User layers must use `incoming`/`outgoing` for multiplicative operations
 - Base and final layers use ordered operations (no phase)
 - Layer execution order: base → user layers (by order) → final

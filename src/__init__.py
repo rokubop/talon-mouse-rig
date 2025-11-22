@@ -50,7 +50,10 @@ def _get_global_state() -> RigState:
     """Get or create the global rig state"""
     global _global_state
     if _global_state is None:
+        print("DEBUG: _global_state is None, creating new RigState")
         _global_state = RigState()
+    else:
+        print(f"DEBUG: Reusing existing _global_state, counter={_global_state._base_counter}, active_builders={len(_global_state._active_builders)}")
     return _global_state
 
 
@@ -107,7 +110,7 @@ class Rig:
     @property
     def final(self):
         """Final layer accessor - operations at the end of processing chain"""
-        return RigBuilder(self._state, layer="__final__")
+        return RigBuilder(self._state, layer=self._state._generate_final_layer_name())
 
     @property
     def override(self):

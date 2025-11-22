@@ -16,7 +16,7 @@ import math
 class Lifecycle:
     """Manages the over/hold/revert lifecycle for a builder"""
 
-    def __init__(self, is_tagged: bool = False):
+    def __init__(self, is_user_layer: bool = False):
         # Configuration
         self.over_ms: Optional[float] = None
         self.over_easing: str = "linear"
@@ -24,8 +24,8 @@ class Lifecycle:
         self.revert_ms: Optional[float] = None
         self.revert_easing: str = "linear"
 
-        # Whether this is for a tagged builder (affects completion logic)
-        self.is_tagged = is_tagged
+        # Whether this is for a is_named_layer builder (affects completion logic)
+        self.is_user_layer = is_user_layer
 
         # Callbacks per phase (phase -> list of callbacks)
         self.callbacks: dict[str, list[Callable]] = {
@@ -158,14 +158,25 @@ class Lifecycle:
                 print(f"Error in lifecycle callback: {e}")
 
     def is_complete(self) -> bool:
-        """Check if lifecycle is complete
+        """Check if lifecycle is complete (or will be instantly complete)
 
-        For tagged builders with no lifecycle, they never complete
-        (they stay active until manually reverted)
+        Returns True if:
+        - Already started and completed (started=True, phase=None)
+        - OR has no lifecycle phases (will complete instantly when started)
+
+        Named layers with no lifecycle never complete (stay active forever).
         """
-        if self.is_tagged and self.phase is None and not self.has_any_lifecycle():
-            return False  # Tagged builders with no lifecycle stay active forever
-        return self.started and self.phase is None
+        # Named layers with no lifecycle stay active until manually reverted
+        if self.is_named and not self.has_any_lifecycle():
+            return False
+
+        # If already started, check if phase is None (completed)
+        if self.started:
+            return self.phase is None
+
+        # Not started yet - will it complete instantly?
+        # (i.e., has no lifecycle phases)
+        return not self.has_any_lifecycle()
 
     def has_any_lifecycle(self) -> bool:
         """Check if this lifecycle has any phases defined"""
@@ -197,22 +208,22 @@ class Lifecycle:
 
         Builders are removed when:
         - Anonymous builders complete their lifecycle
-        - Any builder (tagged or anonymous) completes via revert
+        - Any builder (is_named_layer or anonymous) completes via revert
 
-        Tagged builders without revert persist until manually removed.
+        is_named_layer builders without revert persist until manually removed.
         """
         if not self.is_complete():
             return False
 
         # Remove if anonymous (lifecycle complete)
-        if not self.is_tagged:
+        if not self.is_user_layer:
             return True
 
         # Remove if reverted (no longer has any effect)
         if self.has_reverted():
             return True
 
-        # Tagged builders without revert stay active
+        # is_named_layer builders without revert stay active
         return False
 
 

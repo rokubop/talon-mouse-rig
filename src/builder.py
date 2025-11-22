@@ -96,14 +96,14 @@ class RigBuilder:
         # Auto-generate layer if anonymous (base layer)
         if layer is None:
             self.config.layer_name = rig_state._generate_base_layer_name()
-            self.config.is_phased = False
+            self.config.has_incoming_outgoing = False
         else:
             self.config.layer_name = layer
-            # Determine if phased based on layer type
+            # Determine if has_incoming_outgoing based on layer type
             if layer == "__base__" or layer == "__final__":
-                self.config.is_phased = False
+                self.config.has_incoming_outgoing = False
             else:
-                self.config.is_phased = True  # User layers are phased
+                self.config.has_incoming_outgoing = True  # User layers are has_incoming_outgoing
 
         # Set order if provided
         if order is not None:
@@ -129,7 +129,7 @@ class RigBuilder:
     @property
     def incoming(self) -> 'PhaseProxy':
         """Incoming phase accessor - pre-process operations on user layers"""
-        if not self.config.is_phased:
+        if not self.config.has_incoming_outgoing:
             from .contracts import ConfigError
             layer_type = "base" if self.config.is_base_layer() else "final"
             raise ConfigError(f"incoming phase not allowed on {layer_type} layer")
@@ -138,7 +138,7 @@ class RigBuilder:
     @property
     def outgoing(self) -> 'PhaseProxy':
         """Outgoing phase accessor - post-process operations on user layers"""
-        if not self.config.is_phased:
+        if not self.config.has_incoming_outgoing:
             from .contracts import ConfigError
             layer_type = "base" if self.config.is_base_layer() else "final"
             raise ConfigError(f"outgoing phase not allowed on {layer_type} layer")
@@ -364,7 +364,7 @@ class RigBuilder:
         # Special case: revert-only call (no property/operator set)
         if self.config.property is None and self.config.operator is None:
             if self.config.revert_ms is not None:
-                # This is a revert() call on an existing tagged builder
+                # This is a revert() call on an existing is_named_layer builder
                 self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return
 
@@ -581,14 +581,14 @@ class PropertyBuilder:
         return self.rig_builder
 
     def revert(self, ms: Optional[float] = None, easing: str = "linear", **kwargs) -> RigBuilder:
-        """Revert this property/tag
+        """Revert this property/layer
 
         For anonymous builders, reverts all anonymous builders affecting this property.
-        For tagged builders, reverts the entire tag (same as tag.revert()).
+        For is_named_layer builders, reverts the entire layer (same as layer.revert()).
 
         Examples:
             rig.speed.revert(500)  # Revert all anonymous speed changes
-            tag("boost").speed.revert(500)  # Revert boost tag
+            layer("boost").speed.revert(500)  # Revert boost layer
         """
         return self.rig_builder.revert(ms, easing, **kwargs)
 
@@ -626,7 +626,7 @@ class ActiveBuilder:
         self.group_target_value: Optional[Any] = None
 
         # Create lifecycle
-        self.lifecycle = Lifecycle(is_tagged=not is_anonymous)
+        self.lifecycle = Lifecycle(is_user_layer=not is_anonymous)
         self.lifecycle.over_ms = config.over_ms
         self.lifecycle.over_easing = config.over_easing
         self.lifecycle.hold_ms = config.hold_ms

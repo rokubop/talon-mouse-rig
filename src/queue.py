@@ -1,7 +1,7 @@
 """Queue system for behavior modes
 
 Handles queuing of builders when behavior is set to 'queue'.
-Each tag has its own queue.
+Each layer has its own queue.
 """
 
 from typing import Optional, Callable
@@ -9,7 +9,7 @@ from collections import deque
 
 
 class BuilderQueue:
-    """Queue for a specific tag"""
+    """Queue for a specific layer"""
 
     def __init__(self):
         self.queue: deque = deque()
@@ -49,31 +49,31 @@ class QueueManager:
     def __init__(self):
         self.queues: dict[str, BuilderQueue] = {}
 
-    def get_queue(self, tag: str) -> BuilderQueue:
-        """Get or create a queue for a tag"""
-        if tag not in self.queues:
-            self.queues[tag] = BuilderQueue()
-        return self.queues[tag]
+    def get_queue(self, layer: str) -> BuilderQueue:
+        """Get or create a queue for a layer"""
+        if layer not in self.queues:
+            self.queues[layer] = BuilderQueue()
+        return self.queues[layer]
 
-    def enqueue(self, tag: str, execution_callback: Callable):
-        """Enqueue a builder for a tag"""
-        queue = self.get_queue(tag)
+    def enqueue(self, layer: str, execution_callback: Callable):
+        """Enqueue a builder for a layer"""
+        queue = self.get_queue(layer)
         queue.enqueue(execution_callback)
 
-    def on_builder_complete(self, tag: str):
+    def on_builder_complete(self, layer: str):
         """Called when a builder completes, starts next in queue"""
-        if tag in self.queues:
-            queue = self.queues[tag]
+        if layer in self.queues:
+            queue = self.queues[layer]
             if not queue.start_next():
                 # Queue is empty, can remove it
-                del self.queues[tag]
+                del self.queues[layer]
 
-    def clear_queue(self, tag: str):
-        """Clear all queued items for a tag"""
-        if tag in self.queues:
-            self.queues[tag].clear()
-            del self.queues[tag]
+    def clear_queue(self, layer: str):
+        """Clear all queued items for a layer"""
+        if layer in self.queues:
+            self.queues[layer].clear()
+            del self.queues[layer]
 
-    def is_active(self, tag: str) -> bool:
-        """Check if a tag has an active builder or queued items"""
-        return tag in self.queues and not self.queues[tag].is_empty()
+    def is_active(self, layer: str) -> bool:
+        """Check if a layer has an active builder or queued items"""
+        return layer in self.queues and not self.queues[layer].is_empty()

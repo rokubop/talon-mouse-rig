@@ -26,13 +26,13 @@ VALID_OPERATORS = {
 VALID_SCOPES = ['override']
 
 # Valid phases (for mul operations on user layers)
-VALID_PHASES = ['incoming', 'outgoing']
+VALID_INCOMING_OUTGOING = ['incoming', 'outgoing']
 
 # Layer types
 LAYER_TYPES = {
-    '__base__': {'phased': False, 'order': float('-inf')},
-    '__final__': {'phased': False, 'order': float('inf')},
-    # User layers are phased=True by default
+    '__base__': {'has_incoming_outgoing': False, 'order': float('-inf')},
+    '__final__': {'has_incoming_outgoing': False, 'order': float('inf')},
+    # User layers are has_incoming_outgoing=True by default
 }
 
 VALID_EASINGS = [
@@ -348,7 +348,7 @@ class BuilderConfig:
 
         # Identity
         self.layer_name: Optional[str] = None  # Layer name (__base__, user name, __final__)
-        self.is_phased: bool = False  # True for user layers, False for base/final
+        self.has_incoming_outgoing: bool = False  # True for user layers, False for base/final
 
         # Behavior
         self.behavior: Optional[str] = None  # stack, replace, queue, extend, throttle, ignore
@@ -378,12 +378,16 @@ class BuilderConfig:
         return self.layer_name is not None and self.layer_name.startswith("__base_")
 
     def is_base_layer(self) -> bool:
-        """Check if this is a base layer (anonymous or __base__)"""
-        return self.is_anonymous() or self.layer_name == "__base__"
+        """Check if this is a base layer (anonymous)"""
+        return self.is_anonymous()
 
     def is_final_layer(self) -> bool:
         """Check if this is the final layer"""
-        return self.layer_name == "__final__"
+        return self.layer_name is not None and self.layer_name.startswith("__final_")
+
+    def is_user_layer(self) -> bool:
+        """Check if this is a user layer (named layer, not base or final)"""
+        return not self.is_base_layer() and not self.is_final_layer()
 
     def get_effective_behavior(self) -> str:
         """Get behavior with defaults applied"""
@@ -400,8 +404,8 @@ class BuilderConfig:
         """Get bake setting with defaults applied"""
         if self.bake_value is not None:
             return self.bake_value
-        # Default: anonymous bakes, tagged doesn't
-        # Tagged builders must be explicitly reverted or baked
+        # Default: anonymous bakes, is_named_layer doesn't
+        # is_named_layer builders must be explicitly reverted or baked
         return self.is_anonymous()
 
     def validate_method_kwargs(self, method: str, **kwargs) -> None:
@@ -472,8 +476,8 @@ class BuilderConfig:
         """Validate phase requirements based on layer type
 
         Rules:
-        - User layers (phased): mul REQUIRES incoming or outgoing
-        - Base/final (non-phased): incoming/outgoing ERROR
+        - User layers (has_incoming_outgoing): mul REQUIRES incoming or outgoing
+        - Base/final (non-has_incoming_outgoing): incoming/outgoing ERROR
         - Base/final: mul allowed without phase (ordered operations)
 
         Raises:
@@ -482,7 +486,7 @@ class BuilderConfig:
         if not self.operator:
             return
 
-        # Check if incoming/outgoing used on non-phased layers (base/final)
+        # Check if incoming/outgoing used on non-has_incoming_outgoing layers (base/final)
         if (self.is_base_layer() or self.is_final_layer()) and self.phase is not None:
             layer_type = "base" if self.is_base_layer() else "final"
             raise ConfigError(
@@ -492,7 +496,7 @@ class BuilderConfig:
             )
 
         # Check if mul on user layer requires phase
-        if self.is_phased and self.operator == 'mul' and self.scope != 'override' and self.phase is None:
+        if self.has_incoming_outgoing and self.operator == 'mul' and self.scope != 'override' and self.phase is None:
             raise ConfigError(
                 f"User layer operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
                 f"  rig.layer('{self.layer_name}').incoming.{self.property}.mul(...)  # Multiply input before layer's work\n"

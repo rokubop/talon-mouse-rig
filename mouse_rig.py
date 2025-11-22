@@ -22,7 +22,7 @@ class Actions:
         return get_rig()
 
     def mouse_rig_stop(ms: float = None, easing: str = None) -> None:
-        """Stop the mouse rig and remove all active tags"""
+        """Stop the mouse rig and remove all active layers"""
         rig = get_rig()
         rig.stop(ms, easing)
 

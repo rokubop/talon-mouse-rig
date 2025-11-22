@@ -1,6 +1,6 @@
 # Talon Mouse Rig
 
-All purpose mouse rig for Talon with a fluent API for position, speed, direction, tags, callbacks, durations, easing, and reverts.
+All purpose mouse rig for Talon with a fluent API for position, speed, direction, layers, callbacks, durations, easing, and reverts.
 
 ## Examples
 
@@ -38,41 +38,41 @@ rig.direction.by(90).over(500) # rotate
 rig.direction.by(90).over(rate=45) # rotate
 ```
 
-### Tags
+### layers
 
-Tags are a namespace for temporary state you can revert later.
-Tags are calculated AFTER the base values.
+layers are a namespace for temporary state you can revert later.
+layers are calculated AFTER the base values.
 
-**Tags support two operation categories** (but not mixed on same tag):
+**layers support two operation categories** (but not mixed on same layer):
 - **Additive**: `.add()`, `.by()`, `.sub()` - stack by adding/subtracting
 - **Multiplicative**: `.mul()`, `.div()` - stack by multiplying/dividing
 
-Use `.revert()` to remove a tag's effect, or anonymous builders for absolute positioning with `.to()`.
+Use `.revert()` to remove a layer's effect, or anonymous builders for absolute positioning with `.to()`.
 
 ```python
 rig = actions.user.mouse_rig()
-rig.tag("boost").speed.add(10).over(1000)  # Additive
-rig.tag("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
+rig.layer("boost").speed.add(10).over(1000)  # Additive
+rig.layer("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
 
-# Revert effect after 1 second and remove tag operations
-rig.tag("boost").revert(1000)
+# Revert effect after 1 second and remove layer operations
+rig.layer("boost").revert(1000)
 
-# Bake current state into base values and remove tag operations
-rig.tag("boost").bake()
+# Bake current state into base values and remove layer operations
+rig.layer("boost").bake()
 ```
 
 #### Repeat behaviors
 ```python
 rig = actions.user.mouse_rig()
-rig.tag("boost").speed.add(10)
-rig.tag("boost").stack.speed.add(10) # Default behavior stacks
-rig.tag("boost").stack(3).speed.add(10) # Max 3 stacks
-rig.tag("boost").queue.speed.add(10) # Queue instead of stack
-rig.tag("boost").queue().speed.add(10) # Queue until finished
-rig.tag("boost").extend.speed.add(10) # Extend hold time
-rig.tag("boost").replace.speed.add(10) # Replace instead of stack
-rig.tag("boost").throttle.speed.add(10) # Ignore while active
-rig.tag("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
+rig.layer("boost").speed.add(10)
+rig.layer("boost").stack.speed.add(10) # Default behavior stacks
+rig.layer("boost").stack(3).speed.add(10) # Max 3 stacks
+rig.layer("boost").queue.speed.add(10) # Queue instead of stack
+rig.layer("boost").queue().speed.add(10) # Queue until finished
+rig.layer("boost").extend.speed.add(10) # Extend hold time
+rig.layer("boost").replace.speed.add(10) # Replace instead of stack
+rig.layer("boost").throttle.speed.add(10) # Ignore while active
+rig.layer("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
 ```
 
 ### Revert and callbacks
@@ -80,7 +80,7 @@ rig.tag("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
 ```python
 rig = actions.user.mouse_rig()
 rig.speed.add(10).over(300).hold(2000).revert(300)
-rig.tag("boost").speed.add(10).over(300).hold(2000).revert(300)
+rig.layer("boost").speed.add(10).over(300).hold(2000).revert(300)
 rig.speed.add(10).over(300) \
     .then(lambda: print("Speed boost applied")) \
     .hold(2000) \
@@ -121,11 +121,11 @@ Done! 🎉
 
 - `.to(value)` - Set absolute value (anonymous builders only)
 
-**Additive (can be mixed on same tag):**
+**Additive (can be mixed on same layer):**
 - `.add(value)` / `.by(value)` - Add delta (aliases)
 - `.sub(value)` - Subtract
 
-**Multiplicative (can be mixed on same tag, but not with additive):**
+**Multiplicative (can be mixed on same layer, but not with additive):**
 - `.mul(value)` - Multiply
 - `.div(value)` - Divide
 
@@ -176,16 +176,16 @@ rig.state.base.speed
 rig.state.base.direction
 ```
 
-List active tags:
+List active layers:
 
 ```python
-rig.state.tags  # ["sprint", "drift"]
+rig.state.layers  # ["sprint", "drift"]
 ```
 
-Get info about a specific tag:
+Get info about a specific layer:
 
 ```python
-sprint = rig.state.tag("sprint")
+sprint = rig.state.layer("sprint")
 if sprint:
     print(sprint.speed)
     print(sprint.phase)  # 'over', 'hold', 'revert', or None
@@ -193,9 +193,9 @@ if sprint:
     print(sprint.operator)  # 'add', 'mul', 'sub', etc.
 ```
 
-### Tags
+### layers
 
-Use `.tag(name)` to create named effects that can be reverted later.
+Use `.layer(name)` to create named effects that can be reverted later.
 
 ### Interpolation
 

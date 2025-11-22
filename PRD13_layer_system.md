@@ -257,19 +257,19 @@ rig.final.speed.mul(2)                               # 57 × 2 = 114
 ### Operation Rules
 1. **`add`, `sub`, `by`, `to`** - Can be used directly on any layer (no phase needed)
 2. **`mul`** - Phase requirements vary by layer type:
-   - **Non-phased layers** (base, final): No phase needed - ordered operations
-   - **Phased layers** (user layers): MUST use `incoming` or `outgoing` for clarity when using mul
+   - **Non-has_incoming_outgoing layers** (base, final): No phase needed - ordered operations
+   - **has_incoming_outgoing layers** (user layers): MUST use `incoming` or `outgoing` for clarity when using mul
 3. **`scale`** - Retroactive multiplier applied to accumulated layer operations
 4. **No operation mode locking** - Layers can freely mix all operation types
 
 **Layer Classification:**
-- **Non-phased layers**: base (`__base__`), final (`__final__`) - use ordered operations
-- **Phased layers**: user layers (named) - require explicit phases for `mul`
+- **Non-has_incoming_outgoing layers**: base (`__base__`), final (`__final__`) - use ordered operations
+- **has_incoming_outgoing layers**: user layers (named) - require explicit phases for `mul`
 
 ### Phase Rules (incoming/outgoing)
-1. **Non-phased layers** (base, final): incoming/outgoing phases ERROR if used (for simplicity)
-2. **Phased layers** (user layers): `mul` MUST use incoming/outgoing phases
-3. Rationale: Non-phased use ordered operations; phased layers need explicit phases for `mul` clarity
+1. **Non-has_incoming_outgoing layers** (base, final): incoming/outgoing phases ERROR if used (for simplicity)
+2. **has_incoming_outgoing layers** (user layers): `mul` MUST use incoming/outgoing phases
+3. Rationale: Non-has_incoming_outgoing use ordered operations; has_incoming_outgoing layers need explicit phases for `mul` clarity
 
 ### Override Rules
 1. `override` scope ignores previous accumulated value
@@ -299,16 +299,16 @@ rig.final.speed.mul(2)                               # 57 × 2 = 114
 ### Internal Representation
 ```python
 # Internally, all use the same layer system:
-rig.speed.to(10)              # layer_name = "__base__", phased = False
-rig.layer("boost").speed.add(5)  # layer_name = "boost", phased = True
-rig.final.speed.add(10)       # layer_name = "__final__", phased = False
+rig.speed.to(10)              # layer_name = "__base__", has_incoming_outgoing = False
+rig.layer("boost").speed.add(5)  # layer_name = "boost", has_incoming_outgoing = True
+rig.final.speed.add(10)       # layer_name = "__final__", has_incoming_outgoing = False
 ```
 
 ### Layer Contract
 ```python
 class Layer:
     name: str                  # Layer name ("__base__", "boost", "__final__")
-    phased: bool               # True = user layer (requires phases for mul)
+    has_incoming_outgoing: bool               # True = user layer (requires phases for mul)
                                # False = base/final (ordered operations)
     incoming_operations: list  # Phase 1: Pre-process
     operations: list           # Phase 2: Main work
@@ -317,7 +317,7 @@ class Layer:
     order: int                 # Processing order
 
     def process(input_value):
-        # Phase 1: Incoming (only used if phased=True)
+        # Phase 1: Incoming (only used if has_incoming_outgoing=True)
         value = apply_operations(input_value, incoming_operations)
 
         # Phase 2: Main operations (with potential override)
@@ -326,7 +326,7 @@ class Layer:
         else:
             value = apply_operations(value, operations)
 
-        # Phase 3: Outgoing (only used if phased=True)
+        # Phase 3: Outgoing (only used if has_incoming_outgoing=True)
         value = apply_operations(value, outgoing_operations)
 
         return value
@@ -352,7 +352,7 @@ def compute_property(property_name):
 ### 1. Unified Layer Model
 **Before (PRD12):**
 - `local` vs `world` scopes (different behaviors)
-- Base rig vs tags vs world operations (three separate concepts)
+- Base rig vs layers vs world operations (three separate concepts)
 
 **After (PRD13):**
 - Everything is a layer (one unified concept)
@@ -361,8 +361,8 @@ def compute_property(property_name):
 ### 2. Cleaner API
 **Before (PRD12):**
 ```python
-rig.tag("boost").local.incoming.speed.mul(2)  # Redundant "local"
-rig.tag("boost").local.speed.add(10)          # Redundant "local"
+rig.layer("boost").local.incoming.speed.mul(2)  # Redundant "local"
+rig.layer("boost").local.speed.add(10)          # Redundant "local"
 rig.world.speed.add(5)                        # Different concept
 ```
 
@@ -396,15 +396,15 @@ rig.final.speed.mul(2).over(1000)  # Can animate too!
 ### Terminology Changes
 | PRD12 | PRD13 |
 |-------|-------|
-| `tag()` | `layer()` |
+| `layer()` | `layer()` |
 | `.local` | (removed, implicit) |
 | `.world` | `.final` or `.override` |
-| `rig.tag("x").local.speed.add(5)` | `rig.layer("x").speed.add(5)` |
+| `rig.layer("x").local.speed.add(5)` | `rig.layer("x").speed.add(5)` |
 | `rig.world.speed.add(5)` | `rig.final.speed.add(5)` |
-| `rig.tag("x").world.speed.to(10)` | `rig.layer("x").override.speed.to(10)` |
+| `rig.layer("x").world.speed.to(10)` | `rig.layer("x").override.speed.to(10)` |
 
 ### Preserved Functionality
-All existing tag behaviors are preserved in layers:
+All existing layer behaviors are preserved in layers:
 - **Lifecycle methods**: `replace()`, `stack()`, `queue()`, `extend()`, `throttle()`, `ignore()`
 - **Timing controls**: `.over()`, `.after()`, `.during()`
 - **Revert behavior**: Automatic cleanup when layer operations complete
@@ -418,7 +418,7 @@ rig.layer("boost").stack().speed.add(20).over(500)
 rig.layer("boost").queue().speed.add(10).over(300)
 rig.layer("boost").throttle(100).speed.add(10)
 
-# With new phased operations
+# With new has_incoming_outgoing operations
 rig.layer("boost").replace().incoming.speed.mul(2)
 rig.layer("boost").stack().outgoing.speed.mul(1.5)
 ```
@@ -428,8 +428,8 @@ rig.layer("boost").stack().outgoing.speed.mul(1.5)
 2. **Split `world` into two concepts:**
    - `final` - Operations at the end of the processing chain
    - `override` - Replacement behavior at a layer's position
-3. **Rename `tag()` to `layer()`** - Better semantic fit
-4. **Add phased/non-phased distinction** - User layers require explicit phases for `mul`
+3. **Rename `layer()` to `layer()`** - Better semantic fit
+4. **Add has_incoming_outgoing/non-has_incoming_outgoing distinction** - User layers require explicit phases for `mul`
 5. **Preserve all existing functionality** - replace/stack/queue/extend/throttle/ignore/over/after/during still work
 
 **What stays the same:**
