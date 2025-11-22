@@ -49,61 +49,28 @@ class RigState:
         # Throttle tracking (tag -> last execution time)
         self._throttle_times: dict[str, float] = {}
 
-        # Operation category tracking (tag -> "additive" or "multiplicative")
-        self._tag_operation_categories: dict[str, str] = {}
+        # Tag order tracking (tag -> order)
+        self._tag_orders: dict[str, int] = {}
 
-        # Scope tracking (tag -> "relative" or "absolute")
-        self._tag_scopes: dict[str, str] = {}
+        # Track scope per property per tag: (tag_name, property) -> scope
+        self._tag_property_scopes: dict[tuple[str, str], str] = {}
+
+        # Track operations per tag per property for processing
+        # (tag_name, property) -> {
+        #   "incoming": [],  # incoming mul operations
+        #   "local": [],     # add/sub/by/to operations
+        #   "outgoing": [],  # outgoing mul operations
+        #   "scale": None    # scale value (last one wins)
+        # }
+        self._tag_operations: dict[tuple[str, str], dict] = {}
 
     def generate_anonymous_tag(self) -> str:
         """Generate a unique tag for anonymous builders"""
         self._tag_counter += 1
         return f"__anon_{self._tag_counter}"
 
-    def _get_operation_category(self, operator: str) -> str:
-        """Get operation category for an operator"""
-        if operator in ("add", "by", "sub"):
-            return "additive"
-        elif operator in ("mul", "div"):
-            return "multiplicative"
-        else:
-            # "to" and "bake" don't have categories
-            return "other"
-
-    def _validate_operation_category(self, tag: str, new_operator: str):
-        """Validate that new operator matches existing tag's category"""
-        if tag not in self._tag_operation_categories:
-            return  # First operation on this tag
-
-        existing_category = self._tag_operation_categories[tag]
-        new_category = self._get_operation_category(new_operator)
-
-        # Skip validation for special operators
-        if new_category == "other" or existing_category == "other":
-            return
-
-        if existing_category != new_category:
-            existing_builder = self._active_builders[tag]
-            existing_op = existing_builder.config.operator
-
-            # Build helpful error message
-            if existing_category == "additive":
-                allowed = "add(), by(), sub()"
-                not_allowed = "mul(), div()"
-            else:  # multiplicative
-                allowed = "mul(), div()"
-                not_allowed = "add(), by(), sub()"
-
-            raise ValueError(
-                f"Cannot mix operation types on tag '{tag}'. "
-                f"Tag '{tag}' uses .{existing_op}() ({existing_category}), "
-                f"but you tried to use .{new_operator}() ({new_category}).\n\n"
-                f"A tag can only use {allowed} operations, not {not_allowed}.\n"
-                f"Use a different tag name or .replace to change the operation type."
-            )
-
-    def _validate_scope_consistency(self, tag: str, new_scope: Optional[str]):
-        """Validate that new scope matches existing tag's scope
+    def _validate_scope_consistency(self, tag: str, property: str, new_scope: Optional[str]):
+        """Validate that new scope matches existing tag's scope for this property
 
         Args:
             tag: The tag name
@@ -156,11 +123,9 @@ class RigState:
         if not builder.is_anonymous and tag in self._active_builders:
             existing = self._active_builders[tag]
 
-            # Validate operation category consistency
-            self._validate_operation_category(tag, builder.config.operator)
-
-            # Validate scope consistency
-            self._validate_scope_consistency(tag, builder.config.scope)
+            # Validate scope consistency (per property)
+            if builder.config.property:
+                self._validate_scope_consistency(tag, builder.config.property, builder.config.scope)
 
             if behavior == "replace":
                 # Replace entire builder
@@ -249,14 +214,16 @@ class RigState:
         # Add builder to active set
         self._active_builders[tag] = builder
 
-        # Track operation category and scope for tagged builders
-        if not builder.is_anonymous:
-            category = self._get_operation_category(builder.config.operator)
-            self._tag_operation_categories[tag] = category
-
-            # Track scope if provided
+        # Track scope and order for tagged builders (per property)
+        if not builder.is_anonymous and builder.config.property:
+            # Track scope per property
             if builder.config.scope is not None:
-                self._tag_scopes[tag] = builder.config.scope
+                key = (tag, builder.config.property)
+                self._tag_property_scopes[key] = builder.config.scope
+            
+            # Track order if provided
+            if builder.config.order is not None:
+                self._tag_orders[tag] = builder.config.order
 
         # Track execution order
         if builder.is_anonymous:
@@ -303,11 +270,14 @@ class RigState:
             if tag in self._tagged_tags:
                 self._tagged_tags.remove(tag)
 
-            # Remove operation category and scope tracking
-            if tag in self._tag_operation_categories:
-                del self._tag_operation_categories[tag]
-            if tag in self._tag_scopes:
-                del self._tag_scopes[tag]
+            # Remove scope tracking for this tag's properties
+            keys_to_remove = [key for key in self._tag_property_scopes if key[0] == tag]
+            for key in keys_to_remove:
+                del self._tag_property_scopes[key]
+            
+            # Remove order tracking
+            if tag in self._tag_orders:
+                del self._tag_orders[tag]
 
             # Notify queue system (using same queue key logic as add_builder)
             queue_key = tag
@@ -398,12 +368,11 @@ class RigState:
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2]:
         """Compute current state by applying all active builders to base.
 
-        Computation order (per PRD11):
+        Computation order (per PRD12):
         1. Start with base values
-        2. Apply tag.absolute operations (modify base via tags)
-        3. Apply tag.relative operations (add tag contributions)
-        4. Apply anonymous builders (no scope, legacy behavior)
-        5. Apply rig.absolute operations (global override/bake)
+        2. Apply local tags (in order) with incoming → local → scale → outgoing
+        3. Apply world operations
+        4. Apply world scale (if present and no tag world scales)
 
         Returns:
             (position, speed, direction)
@@ -413,12 +382,17 @@ class RigState:
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
 
-        # Separate builders by scope type
-        absolute_builders = []  # tag.absolute
-        relative_builders = []  # tag.relative or anonymous
-        rig_absolute_builders = []  # rig.absolute (special)
+        # Separate builders by scope
+        local_builders = []   # local scope (including anonymous)
+        world_builders = []   # world scope
 
-        all_tags = self._anonymous_tags + self._tagged_tags
+        # Sort tagged tags by order (if specified), then by creation order
+        def get_tag_order(tag: str) -> int:
+            return self._tag_orders.get(tag, 999999)  # Unordered tags go last
+        
+        sorted_tagged = sorted(self._tagged_tags, key=get_tag_order)
+        all_tags = self._anonymous_tags + sorted_tagged
+
         for tag in all_tags:
             if tag not in self._active_builders:
                 continue
@@ -426,49 +400,103 @@ class RigState:
             builder = self._active_builders[tag]
             scope = builder.config.scope
 
-            # Check if this is rig.absolute (tag_name could be special marker or None)
-            # For now, rig.absolute uses tag_name = "__rig_absolute__" or similar
-            # Anonymous builders have no scope (scope=None)
-            if tag.startswith("__rig_absolute__"):
-                rig_absolute_builders.append(builder)
-            elif scope == "absolute":
-                absolute_builders.append(builder)
+            if scope == "world":
+                world_builders.append(builder)
             else:
-                # scope == "relative" or scope == None (anonymous/legacy)
-                relative_builders.append(builder)
+                # scope == "local" or None (anonymous/default to local)
+                local_builders.append(builder)
 
-        # Apply in order: absolute -> relative -> rig.absolute
-        for builder in absolute_builders:
-            pos, speed, direction = self._apply_builder(
-                builder, pos, speed, direction, scope_mode="absolute"
+        # Apply local builders (tags in order)
+        for builder in local_builders:
+            pos, speed, direction = self._apply_local_builder(
+                builder, pos, speed, direction
             )
 
-        for builder in relative_builders:
-            pos, speed, direction = self._apply_builder(
-                builder, pos, speed, direction, scope_mode="relative"
-            )
-
-        for builder in rig_absolute_builders:
-            pos, speed, direction = self._apply_builder(
-                builder, pos, speed, direction, scope_mode="rig_absolute"
+        # Apply world builders
+        for builder in world_builders:
+            pos, speed, direction = self._apply_world_builder(
+                builder, pos, speed, direction
             )
 
         return (pos, speed, direction)
 
-    def _apply_builder(
+    def _apply_local_builder(
         self,
         builder: 'ActiveBuilder',
         pos: Vec2,
         speed: float,
-        direction: Vec2,
-        scope_mode: str
+        direction: Vec2
     ) -> tuple[Vec2, float, Vec2]:
-        """Apply a single builder to current state.
+        """Apply a local builder: incoming → local ops → scale → outgoing
 
         Args:
             builder: The builder to apply
             pos, speed, direction: Current state values
-            scope_mode: "absolute", "relative", or "rig_absolute"
+
+        Returns:
+            Updated (pos, speed, direction)
+        """
+        prop = builder.config.property
+        operator = builder.config.operator
+        phase = builder.config.phase
+        current_value = builder.get_current_value()
+
+        # For now, simplified: just apply the operation directly
+        # Full implementation would track incoming/outgoing separately
+        if prop == "speed":
+            if phase == "incoming":
+                # Multiply input before tag's work
+                speed *= current_value
+            elif phase == "outgoing":
+                # Multiply output after tag's work
+                speed *= current_value
+            elif operator == "to":
+                speed = current_value
+            elif operator in ("add", "by"):
+                speed += current_value
+            elif operator == "sub":
+                speed -= current_value
+            elif operator == "mul":
+                speed *= current_value
+            elif operator == "div":
+                speed /= current_value if current_value != 0 else 1
+            elif operator == "scale":
+                # Scale is a retroactive multiplier
+                speed *= current_value
+        elif prop == "direction":
+            if phase == "incoming":
+                direction = direction * current_value
+            elif phase == "outgoing":
+                direction = direction * current_value
+            elif operator == "to":
+                direction = current_value
+            elif operator in ("add", "by"):
+                direction = (direction + current_value).normalized()
+            elif operator == "sub":
+                direction = (direction - current_value).normalized()
+            elif operator == "scale":
+                direction = direction * current_value
+        elif prop == "pos":
+            if operator in ("add", "by"):
+                pos = pos + current_value
+            elif operator == "to":
+                # Position 'to' in local scope is an offset
+                pos = pos + current_value
+
+        return (pos, speed, direction)
+
+    def _apply_world_builder(
+        self,
+        builder: 'ActiveBuilder',
+        pos: Vec2,
+        speed: float,
+        direction: Vec2
+    ) -> tuple[Vec2, float, Vec2]:
+        """Apply a world builder to accumulated global value
+
+        Args:
+            builder: The builder to apply
+            pos, speed, direction: Current state values
 
         Returns:
             Updated (pos, speed, direction)
@@ -488,19 +516,23 @@ class RigState:
                 speed *= current_value
             elif operator == "div":
                 speed /= current_value if current_value != 0 else 1
+            elif operator == "scale":
+                speed *= current_value
         elif prop == "direction":
             if operator == "to":
-                # Direction 'to' replaces current value
                 direction = current_value
             elif operator in ("add", "by"):
-                # Direction add/by contributes to current value
                 direction = (direction + current_value).normalized()
             elif operator == "sub":
-                # Direction sub subtracts from current value
                 direction = (direction - current_value).normalized()
+            elif operator == "scale":
+                direction = direction * current_value
         elif prop == "pos":
-            # Position builders return offsets
-            pos = pos + current_value
+            if operator == "to":
+                # World position 'to' is absolute
+                pos = current_value if isinstance(current_value, Vec2) else Vec2.from_tuple(current_value)
+            elif operator in ("add", "by"):
+                pos = pos + current_value
 
         return (pos, speed, direction)
 

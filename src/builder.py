@@ -36,12 +36,46 @@ class BehaviorProxy:
         return getattr(self.builder, name)
 
 
+class PhaseProxy:
+    """Proxy for .incoming and .outgoing phase accessors"""
+
+    def __init__(self, builder: 'RigBuilder', scope: str, phase: str):
+        self.builder = builder
+        self.scope = scope  # "local" or "world"
+        self.phase = phase  # "incoming" or "outgoing"
+
+    @property
+    def pos(self) -> 'PropertyBuilder':
+        """Position property accessor with scope and phase"""
+        return PropertyBuilder(self.builder, "pos", scope=self.scope, phase=self.phase)
+
+    @property
+    def speed(self) -> 'PropertyBuilder':
+        """Speed property accessor with scope and phase"""
+        return PropertyBuilder(self.builder, "speed", scope=self.scope, phase=self.phase)
+
+    @property
+    def direction(self) -> 'PropertyBuilder':
+        """Direction property accessor with scope and phase"""
+        return PropertyBuilder(self.builder, "direction", scope=self.scope, phase=self.phase)
+
+
 class ScopeProxy:
-    """Proxy for .relative and .absolute scope accessors"""
+    """Proxy for .local and .world scope accessors"""
 
     def __init__(self, builder: 'RigBuilder', scope: str):
         self.builder = builder
-        self.scope = scope  # "relative" or "absolute"
+        self.scope = scope  # "local" or "world"
+
+    @property
+    def incoming(self) -> 'PhaseProxy':
+        """Incoming phase accessor - pre-process operations"""
+        return PhaseProxy(self.builder, self.scope, "incoming")
+
+    @property
+    def outgoing(self) -> 'PhaseProxy':
+        """Outgoing phase accessor - post-process operations"""
+        return PhaseProxy(self.builder, self.scope, "outgoing")
 
     @property
     def pos(self) -> 'PropertyBuilder':
@@ -66,7 +100,7 @@ class RigBuilder:
     Execution happens when the Python object is garbage collected (__del__).
     """
 
-    def __init__(self, rig_state: 'RigState', tag: Optional[str] = None):
+    def __init__(self, rig_state: 'RigState', tag: Optional[str] = None, order: Optional[int] = None):
         self.rig_state = rig_state
         self.config = BuilderConfig()
 
@@ -75,6 +109,10 @@ class RigBuilder:
             self.config.tag_name = rig_state.generate_anonymous_tag()
         else:
             self.config.tag_name = tag
+
+        # Set order if provided
+        if order is not None:
+            self.config.order = order
 
         self._executed = False
         self._lifecycle_stage = None  # Track which stage we're adding callbacks to
@@ -89,14 +127,14 @@ class RigBuilder:
     # ========================================================================
 
     @property
-    def relative(self) -> 'ScopeProxy':
-        """Relative scope accessor - operate on tag's own contribution"""
-        return ScopeProxy(self, "relative")
+    def local(self) -> 'ScopeProxy':
+        """Local scope accessor - operate on tag's own contribution"""
+        return ScopeProxy(self, "local")
 
     @property
-    def absolute(self) -> 'ScopeProxy':
-        """Absolute scope accessor - operate on base value"""
-        return ScopeProxy(self, "absolute")
+    def world(self) -> 'ScopeProxy':
+        """World scope accessor - operate on accumulated global value"""
+        return ScopeProxy(self, "world")
 
     # ========================================================================
     # PROPERTY ACCESSORS (return PropertyBuilder helper)
@@ -455,10 +493,11 @@ class RigBuilder:
 class PropertyBuilder:
     """Helper for property operations - thin wrapper that configures RigBuilder"""
 
-    def __init__(self, rig_builder: RigBuilder, property_name: str, scope: Optional[str] = None):
+    def __init__(self, rig_builder: RigBuilder, property_name: str, scope: Optional[str] = None, phase: Optional[str] = None):
         self.rig_builder = rig_builder
         self.property_name = property_name
-        self.scope = scope  # None, "relative", or "absolute"
+        self.scope = scope  # None, "local", or "world"
+        self.phase = phase  # None, "incoming", or "outgoing"
 
         # Set property on builder
         self.rig_builder.config.property = property_name
@@ -467,9 +506,13 @@ class PropertyBuilder:
         if scope is not None:
             self.rig_builder.config.scope = scope
 
+        # Set phase if provided
+        if phase is not None:
+            self.rig_builder.config.phase = phase
+
     def _apply_scope_default(self, operator: str):
         """Apply default scope for unambiguous operations on tagged builders"""
-        from .contracts import RELATIVE_DEFAULT_OPERATORS, SCOPE_REQUIRED_OPERATORS
+        from .contracts import LOCAL_DEFAULT_OPERATORS
 
         # If scope already set, use it
         if self.rig_builder.config.scope is not None:
@@ -479,17 +522,16 @@ class PropertyBuilder:
         if self.rig_builder.is_anonymous:
             return
 
-        # For tagged builders, default to relative for add/sub/by
-        if operator in RELATIVE_DEFAULT_OPERATORS:
-            self.rig_builder.config.scope = "relative"
+        # For tagged builders, default to local for add/sub/by/to
+        if operator in LOCAL_DEFAULT_OPERATORS:
+            self.rig_builder.config.scope = "local"
 
     def to(self, *args) -> RigBuilder:
-        """Set value - requires scope for tagged builders"""
+        """Set value - defaults to local scope for tagged builders"""
         self._apply_scope_default("to")
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
-        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
@@ -513,21 +555,23 @@ class PropertyBuilder:
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
-        """Multiply - requires scope for tagged builders"""
-        self._apply_scope_default("mul")
+        """Multiply - requires incoming/outgoing phase for tagged builders (unless world scope)"""
+        # Default to local scope if not set
+        if self.rig_builder.config.scope is None and not self.rig_builder.is_anonymous:
+            self.rig_builder.config.scope = "local"
+        
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
-        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
+        self.rig_builder.config.validate_phase_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
-        """Divide - requires scope for tagged builders"""
+        """Divide - defaults to local scope for tagged builders"""
         self._apply_scope_default("div")
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
-        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def bake(self) -> RigBuilder:
@@ -539,6 +583,25 @@ class PropertyBuilder:
         """
         self.rig_builder.config.operator = "bake"
         self.rig_builder.config.value = None
+        self.rig_builder.config.validate_property_operator()
+        return self.rig_builder
+
+    def scale(self, value: float) -> RigBuilder:
+        """Scale accumulated operations retroactively
+
+        Scale is a retroactive multiplier applied to accumulated values.
+        Last scale wins (tag scales override rig scales).
+
+        Examples:
+            rig.tag("boost").speed.add(5).scale(2)  # Add 10 instead of 5
+            rig.world.speed.scale(2)  # Scale final accumulated value
+        """
+        # Default to local scope if not set
+        if self.rig_builder.config.scope is None and not self.rig_builder.is_anonymous:
+            self.rig_builder.config.scope = "local"
+        
+        self.rig_builder.config.operator = "scale"
+        self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 

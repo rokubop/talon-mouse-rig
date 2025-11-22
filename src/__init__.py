@@ -100,13 +100,28 @@ class Rig:
         """Direction property accessor"""
         return RigBuilder(self._state).direction
 
+    @property
+    def local(self):
+        """Local scope accessor - operate on base rig's local contribution"""
+        return RigBuilder(self._state).local
+
+    @property
+    def world(self):
+        """World scope accessor - operate on accumulated global value"""
+        return RigBuilder(self._state).world
+
     # ========================================================================
     # TAG ACCESSOR
     # ========================================================================
 
-    def tag(self, name: str) -> RigBuilder:
-        """Create a tagged builder"""
-        return RigBuilder(self._state, tag=name)
+    def tag(self, name: str, order: Optional[int] = None) -> RigBuilder:
+        """Create a tagged builder
+        
+        Args:
+            name: Tag name
+            order: Optional execution order (lower numbers execute first)
+        """
+        return RigBuilder(self._state, tag=name, order=order)
 
     # ========================================================================
     # BEHAVIOR SUGAR (returns builder with behavior pre-set)

@@ -17,16 +17,19 @@ if TYPE_CHECKING:
 VALID_PROPERTIES = ['pos', 'speed', 'direction']
 
 VALID_OPERATORS = {
-    'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
-    'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
-    'pos': ['to', 'add', 'by', 'sub', 'bake']
+    'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
+    'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
+    'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale']
 }
 
-# Operators that require scope for tagged builders
-SCOPE_REQUIRED_OPERATORS = ['to', 'mul', 'div']
+# Valid scopes
+VALID_SCOPES = ['local', 'world']
 
-# Operators that default to relative for tagged builders
-RELATIVE_DEFAULT_OPERATORS = ['add', 'sub', 'by']
+# Valid phases (for mul operations)
+VALID_PHASES = ['incoming', 'outgoing']
+
+# Operators that default to local for tags
+LOCAL_DEFAULT_OPERATORS = ['add', 'sub', 'by', 'to']
 
 VALID_EASINGS = [
     'linear',
@@ -119,7 +122,7 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
-    'relative', 'absolute',  # Scope accessors
+    'local', 'world',  # Scope accessors
     'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
@@ -333,9 +336,11 @@ class BuilderConfig:
     def __init__(self):
         # Property and operation
         self.property: Optional[str] = None  # pos, speed, direction
-        self.operator: Optional[str] = None  # to, by, add, sub, mul, div
+        self.operator: Optional[str] = None  # to, by, add, sub, mul, div, scale
         self.value: Any = None
-        self.scope: Optional[str] = None  # None, "relative", "absolute"
+        self.scope: Optional[str] = None  # None, "local", "world"
+        self.phase: Optional[str] = None  # None, "incoming", "outgoing" (for mul only)
+        self.order: Optional[int] = None  # Explicit tag ordering
 
         # Identity
         self.tag_name: Optional[str] = None
@@ -450,24 +455,24 @@ class BuilderConfig:
                 f"Valid operators for {self.property}: {valid_str}"
             )
 
-    def validate_scope_requirement(self, is_tagged: bool) -> None:
-        """Validate that scope is provided when required
+    def validate_phase_requirement(self, is_tagged: bool) -> None:
+        """Validate that mul on tags uses incoming or outgoing
 
         Args:
             is_tagged: Whether this is a tagged builder
 
         Raises:
-            ConfigError: If scope is required but not provided
+            ConfigError: If mul on tag doesn't use incoming/outgoing
         """
         if not is_tagged or not self.operator:
             return
 
-        # Check if operator requires scope for tagged builders
-        if self.operator in SCOPE_REQUIRED_OPERATORS and self.scope is None:
+        # Check if mul on tag requires phase
+        if self.operator == 'mul' and self.scope != 'world' and self.phase is None:
             raise ConfigError(
-                f"Tag operations with .{self.operator}() require explicit scope. Use:\n"
-                f"  rig.tag('{self.tag_name}').relative.{self.property}.{self.operator}(...)  # Operate on tag's contribution\n"
-                f"  rig.tag('{self.tag_name}').absolute.{self.property}.{self.operator}(...)  # Operate on base value"
+                f"Tag operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
+                f"  rig.tag('{self.tag_name}').local.incoming.{self.property}.mul(...)  # Multiply input before tag's work\n"
+                f"  rig.tag('{self.tag_name}').local.outgoing.{self.property}.mul(...)  # Multiply output after tag's work"
             )
 
     def validate_easing(self, easing: str, context: str = "easing") -> None:
