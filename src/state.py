@@ -27,13 +27,16 @@ class RigState:
         self._base_speed: float = 0.0
         self._base_direction: Vec2 = Vec2(1, 0)
 
-        # Active builders (tag -> ActiveBuilder)
-        # Anonymous builders get unique generated tags
+        # Active builders (layer_name -> ActiveBuilder)
         self._active_builders: dict[str, 'ActiveBuilder'] = {}
 
-        # Execution order tracking (for anonymous before tagged)
-        self._anonymous_tags: list[str] = []  # Ordered list of anonymous builder tags
-        self._tagged_tags: list[str] = []     # Ordered list of named builder tags
+        # Layer order tracking (layer_name -> order)
+        self._layer_orders: dict[str, int] = {}
+
+        # Track operations per layer per property for processing
+        # (layer_name, property, phase) -> list of operations
+        # phase is one of: "incoming", "default", "outgoing"
+        self._layer_operations: dict[tuple[str, str, str], list] = {}
 
         # Queue system
         self._queue_manager = QueueManager()
@@ -43,93 +46,49 @@ class RigState:
         self._last_frame_time: Optional[float] = None
         self._subpixel_adjuster = SubpixelAdjuster()
 
-        # Tag counter for anonymous builders
-        self._tag_counter = 0
-
-        # Throttle tracking (tag -> last execution time)
+        # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
 
-        # Tag order tracking (tag -> order)
-        self._tag_orders: dict[str, int] = {}
+        # Base layer counter for unique base layer names
+        self._base_counter: int = 0
 
-        # Track scope per property per tag: (tag_name, property) -> scope
-        self._tag_property_scopes: dict[tuple[str, str], str] = {}
+    def _generate_base_layer_name(self) -> str:
+        """Generate unique base layer name for base operations"""
+        self._base_counter += 1
+        return f"__base_{self._base_counter}"
 
-        # Track operations per tag per property for processing
-        # (tag_name, property) -> {
-        #   "incoming": [],  # incoming mul operations
-        #   "local": [],     # add/sub/by/to operations
-        #   "outgoing": [],  # outgoing mul operations
-        #   "scale": None    # scale value (last one wins)
-        # }
-        self._tag_operations: dict[tuple[str, str], dict] = {}
-
-    def generate_anonymous_tag(self) -> str:
-        """Generate a unique tag for anonymous builders"""
-        self._tag_counter += 1
-        return f"__anon_{self._tag_counter}"
-
-    def _validate_scope_consistency(self, tag: str, property: str, new_scope: Optional[str]):
-        """Validate that new scope matches existing tag's scope for this property
-
-        Args:
-            tag: The tag name
-            new_scope: The scope for the new operation (None, "relative", "absolute")
-        """
-        # Anonymous builders don't have scope restrictions
-        if tag.startswith("__anon_"):
-            return
-
-        # No scope means it's an unambiguous operation (add/sub/by defaults to relative)
-        if new_scope is None:
-            return
-
-        # Check if tag already has a scope
-        if tag in self._tag_scopes:
-            existing_scope = self._tag_scopes[tag]
-            if existing_scope != new_scope:
-                from .contracts import ConfigError
-                raise ConfigError(
-                    f"Tag '{tag}' is in {existing_scope} mode, cannot use {new_scope}.\n"
-                    f"All operations on a tag must use the same scope."
-                )
-
-    def time_alive(self, tag: str) -> Optional[float]:
+    def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
 
-        Returns None if tag doesn't exist
+        Returns None if layer doesn't exist
         """
-        if tag in self._active_builders:
-            return self._active_builders[tag].time_alive()
+        if layer in self._active_builders:
+            return self._active_builders[layer].time_alive()
         return None
 
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add an active builder to state
 
-        For tagged builders, if tag exists, add as child to existing builder.
-        For anonymous builders, behavior modes control the relationship.
+        For user layers, if layer exists, add as child to existing builder.
+        For base/final layers, operations execute with their configured lifecycle.
         """
-        tag = builder.tag
+        layer = builder.config.layer_name
 
         # Handle bake operation immediately
         if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, tag if not builder.is_anonymous else None)
+            self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() and layer != "__final__" else None)
             return
 
         # Handle behavior modes
         behavior = builder.config.get_effective_behavior()
 
-        # Tagged builders: add as child to existing parent
-        if not builder.is_anonymous and tag in self._active_builders:
-            existing = self._active_builders[tag]
-
-            # Validate scope consistency (per property)
-            if builder.config.property:
-                self._validate_scope_consistency(tag, builder.config.property, builder.config.scope)
+        # User layers: add as child to existing parent
+        if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
+            existing = self._active_builders[layer]
 
             if behavior == "replace":
                 # Replace entire builder
-                self.remove_builder(tag)
+                self.remove_builder(layer)
             elif behavior == "extend":
                 # Extend hold duration of parent
                 if existing.lifecycle.hold_ms is not None:
@@ -138,8 +97,8 @@ class RigState:
             elif behavior == "throttle":
                 # Check throttle timing
                 throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-                if tag in self._throttle_times:
-                    elapsed = (time.perf_counter() - self._throttle_times[tag]) * 1000
+                if layer in self._throttle_times:
+                    elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
                     if elapsed < throttle_ms:
                         return  # Ignore this call
                 # Add as child
@@ -149,139 +108,74 @@ class RigState:
                 # Ignore if already active
                 return
             else:
-                # Stack/queue: add as child
+                # Stack or queue - add as child
                 existing.add_child(builder)
                 return
 
-        # Anonymous builders: behavior modes control creation
-        if behavior == "replace":
-            # For .to() operator, cancel all anonymous builders with same property
-            if builder.config.operator == "to" and builder.config.property:
-                tags_to_remove = [
-                    t for t, b in self._active_builders.items()
-                    if b.is_anonymous and b.config.property == builder.config.property
+        # Base/final layer operations
+        if behavior == "replace" and layer in ("__base__", "__final__"):
+            # For .to() operator, cancel all base/final builders with same property
+            if builder.config.property:
+                layers_to_remove = [
+                    l for l, b in self._active_builders.items()
+                    if l == layer and b.config.property == builder.config.property
                 ]
-                for t in tags_to_remove:
-                    self.remove_builder(t)
-            else:
-                # For other operators with explicit .replace(), remove by tag
-                self.remove_builder(tag)
-
-        elif behavior == "queue":
-            # For anonymous builders, queue by property/operator
-            queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
-
-            # Check if any builder with same property/operator is active and animating
-            is_queue_busy = False
-            for active_builder in self._active_builders.values():
-                if (active_builder.config.property == builder.config.property and
-                    active_builder.config.operator == builder.config.operator and
-                    active_builder.is_anonymous and
-                    not active_builder.lifecycle.is_complete()):
-                    is_queue_busy = True
-                    break
-
-            if is_queue_busy:
-                # Queue this builder for later
-                def execute_later():
-                    self.add_builder(builder)
-                self._queue_manager.enqueue(queue_key, execute_later)
-                return
+                for l in layers_to_remove:
+                    self.remove_builder(l)
 
         elif behavior == "throttle":
-            # Check throttle timing for anonymous (uses generated tag)
+            # Check throttle timing
             throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-            if tag in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[tag]) * 1000
+            if layer in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
                 if elapsed < throttle_ms:
                     return  # Ignore this call
 
-        elif behavior == "stack":
-            # Check stack limit for anonymous builders
-            max_count = builder.config.behavior_args[0] if builder.config.behavior_args else None
-            if max_count is not None:
-                # Count existing stacks with same property/operator
-                stack_key = f"{builder.config.property}_{builder.config.operator}"
-                count = sum(1 for b in self._active_builders.values()
-                           if f"{b.config.property}_{b.config.operator}" == stack_key)
-                if count >= max_count:
-                    # Remove oldest stack
-                    for old_tag, old_builder in list(self._active_builders.items()):
-                        if f"{old_builder.config.property}_{old_builder.config.operator}" == stack_key:
-                            self.remove_builder(old_tag)
-                            break
-
         # Add builder to active set
-        self._active_builders[tag] = builder
+        self._active_builders[layer] = builder
 
-        # Track scope and order for tagged builders (per property)
-        if not builder.is_anonymous and builder.config.property:
-            # Track scope per property
-            if builder.config.scope is not None:
-                key = (tag, builder.config.property)
-                self._tag_property_scopes[key] = builder.config.scope
-
-            # Track order if provided
-            if builder.config.order is not None:
-                self._tag_orders[tag] = builder.config.order
-
-        # Track execution order
-        if builder.is_anonymous:
-            self._anonymous_tags.append(tag)
-        else:
-            self._tagged_tags.append(tag)
+        # Track order if provided
+        if builder.config.order is not None:
+            self._layer_orders[layer] = builder.config.order
 
         # Update throttle time
-        self._throttle_times[tag] = time.perf_counter()
+        self._throttle_times[layer] = time.perf_counter()
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
-            # Instant completion - bake immediately if anonymous, remove if tagged
-            if builder.is_anonymous:
-                # Bake BEFORE removing, since frame loop might clear children
+            # Instant completion - bake immediately for anonymous layers
+            if builder.config.is_anonymous():
+                # Bake BEFORE removing
                 if builder.config.get_effective_bake():
                     self._bake_builder(builder)
-                # Remove from active set (don't call remove_builder to avoid double-bake)
-                del self._active_builders[tag]
-                self._anonymous_tags.remove(tag)
+                # Remove from active set
+                del self._active_builders[layer]
             else:
-                # Tagged builders without lifecycle should stay active indefinitely
-                # (they can be manually reverted later)
+                # User/final layers without lifecycle should stay active
                 pass
             return
 
         # Start frame loop if not running
         self._ensure_frame_loop_running()
 
-    def remove_builder(self, tag: str):
+    def remove_builder(self, layer: str):
         """Remove an active builder"""
-        if tag in self._active_builders:
-            builder = self._active_builders[tag]
+        if layer in self._active_builders:
+            builder = self._active_builders[layer]
 
             # If bake=true, merge values into base
             if builder.config.get_effective_bake():
                 self._bake_builder(builder)
 
-            del self._active_builders[tag]
-
-            # Remove from order tracking
-            if tag in self._anonymous_tags:
-                self._anonymous_tags.remove(tag)
-            if tag in self._tagged_tags:
-                self._tagged_tags.remove(tag)
-
-            # Remove scope tracking for this tag's properties
-            keys_to_remove = [key for key in self._tag_property_scopes if key[0] == tag]
-            for key in keys_to_remove:
-                del self._tag_property_scopes[key]
+            del self._active_builders[layer]
 
             # Remove order tracking
-            if tag in self._tag_orders:
-                del self._tag_orders[tag]
+            if layer in self._layer_orders:
+                del self._layer_orders[layer]
 
-            # Notify queue system (using same queue key logic as add_builder)
-            queue_key = tag
-            if builder.is_anonymous:
+            # Notify queue system
+            queue_key = layer
+            if layer in ("__base__", "__final__"):
                 queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
             self._queue_manager.on_builder_complete(queue_key)
 
@@ -325,24 +219,22 @@ class RigState:
         if self._has_movement():
             self._ensure_frame_loop_running()
 
-    def _bake_property(self, property_name: str, tag: Optional[str] = None):
+    def _bake_property(self, property_name: str, layer: Optional[str] = None):
         """Bake current computed value of a property into base state
 
         Args:
             property_name: The property to bake ("speed", "direction", "pos")
-            tag: Optional tag to bake from a specific builder. If None, bakes computed state.
+            layer: Optional layer to bake from a specific builder. If None, bakes computed state.
         """
-        if tag:
-            # Bake from a specific tagged builder - remove it and bake its value
-            if tag in self._active_builders:
-                builder = self._active_builders[tag]
+        if layer:
+            # Bake from a specific layer - remove it and bake its value
+            if layer in self._active_builders:
+                builder = self._active_builders[layer]
                 if builder.config.property == property_name:
                     # Force bake this builder
                     self._bake_builder(builder)
                     # Remove the builder
-                    del self._active_builders[tag]
-                    if tag in self._tagged_tags:
-                        self._tagged_tags.remove(tag)
+                    del self._active_builders[layer]
         else:
             # Bake current computed value for this property
             current_value = getattr(self, property_name)
@@ -354,25 +246,23 @@ class RigState:
             elif property_name == "pos":
                 self._base_pos = current_value
 
-            # Remove all anonymous builders affecting this property
-            tags_to_remove = [
-                t for t, b in self._active_builders.items()
-                if b.is_anonymous and b.config.property == property_name
+            # Remove all anonymous layer builders affecting this property
+            layers_to_remove = [
+                l for l, b in self._active_builders.items()
+                if b.config.is_anonymous() and b.config.property == property_name
             ]
-            for t in tags_to_remove:
-                if t in self._active_builders:
-                    del self._active_builders[t]
-                if t in self._anonymous_tags:
-                    self._anonymous_tags.remove(t)
+            for l in layers_to_remove:
+                if l in self._active_builders:
+                    del self._active_builders[l]
 
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2]:
-        """Compute current state by applying all active builders to base.
+        """Compute current state by applying all active layers to base.
 
-        Computation order (per PRD12):
+        Computation order (per PRD13):
         1. Start with base values
-        2. Apply local tags (in order) with incoming → local → scale → outgoing
-        3. Apply world operations
-        4. Apply world scale (if present and no tag world scales)
+        2. Process base layer: incoming (no-op) → operations → outgoing (no-op)
+        3. Process user layers (in order): incoming → operations → outgoing
+        4. Process final layer: incoming (no-op) → operations → outgoing (no-op)
 
         Returns:
             (position, speed, direction)
@@ -382,56 +272,50 @@ class RigState:
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
 
-        # Separate builders by scope
-        local_builders = []   # local scope (including anonymous)
-        world_builders = []   # world scope
+        # Separate builders by layer type
+        base_builders = []   # Anonymous layers (base operations)
+        user_builders = []   # User layers
+        final_builders = []  # __final__ layer
 
-        # Sort tagged tags by order (if specified), then by creation order
-        def get_tag_order(tag: str) -> int:
-            return self._tag_orders.get(tag, 999999)  # Unordered tags go last
-
-        sorted_tagged = sorted(self._tagged_tags, key=get_tag_order)
-        all_tags = self._anonymous_tags + sorted_tagged
-
-        for tag in all_tags:
-            if tag not in self._active_builders:
-                continue
-
-            builder = self._active_builders[tag]
-            scope = builder.config.scope
-
-            if scope == "world":
-                world_builders.append(builder)
+        for layer_name, builder in self._active_builders.items():
+            if builder.config.is_anonymous():
+                base_builders.append(builder)
+            elif layer_name == "__final__":
+                final_builders.append(builder)
             else:
-                # scope == "local" or None (anonymous/default to local)
-                local_builders.append(builder)
+                user_builders.append(builder)
 
-        # Apply local builders (tags in order)
-        for builder in local_builders:
-            pos, speed, direction = self._apply_local_builder(
-                builder, pos, speed, direction
-            )
+        # Sort user layers by order
+        def get_layer_order(builder: 'ActiveBuilder') -> int:
+            layer_name = builder.config.layer_name
+            return self._layer_orders.get(layer_name, 999999)  # Unordered layers go last
 
-        # Apply world builders
-        for builder in world_builders:
-            pos, speed, direction = self._apply_world_builder(
-                builder, pos, speed, direction
-            )
+        user_builders = sorted(user_builders, key=get_layer_order)
+
+        # Process in layer order: base → user layers → final
+        for builder in base_builders:
+            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
+
+        for builder in user_builders:
+            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
+
+        for builder in final_builders:
+            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
 
         return (pos, speed, direction)
 
-    def _apply_local_builder(
+    def _apply_layer(
         self,
         builder: 'ActiveBuilder',
         pos: Vec2,
         speed: float,
         direction: Vec2
     ) -> tuple[Vec2, float, Vec2]:
-        """Apply a local builder: incoming → local ops → scale → outgoing
+        """Apply a layer: incoming → operations → outgoing
 
         Args:
             builder: The builder to apply
-            pos, speed, direction: Current state values
+            pos, speed, direction: Current accumulated state values
 
         Returns:
             Updated (pos, speed, direction)
@@ -439,16 +323,29 @@ class RigState:
         prop = builder.config.property
         operator = builder.config.operator
         phase = builder.config.phase
+        scope = builder.config.scope
         current_value = builder.get_current_value()
 
-        # For now, simplified: just apply the operation directly
-        # Full implementation would track incoming/outgoing separately
+        # Check for override scope - ignore accumulated value
+        if scope == "override":
+            if prop == "speed":
+                if operator == "to":
+                    speed = current_value
+            elif prop == "direction":
+                if operator == "to":
+                    direction = current_value
+            elif prop == "pos":
+                if operator == "to":
+                    pos = current_value if isinstance(current_value, Vec2) else Vec2.from_tuple(current_value)
+            return (pos, speed, direction)
+
+        # Apply operation based on property and phase
         if prop == "speed":
             if phase == "incoming":
-                # Multiply input before tag's work
+                # Multiply input before layer's operations
                 speed *= current_value
             elif phase == "outgoing":
-                # Multiply output after tag's work
+                # Multiply output after layer's operations
                 speed *= current_value
             elif operator == "to":
                 speed = current_value
@@ -457,82 +354,37 @@ class RigState:
             elif operator == "sub":
                 speed -= current_value
             elif operator == "mul":
+                # mul on non-phased layers (base/final) is ordered operation
                 speed *= current_value
             elif operator == "div":
                 speed /= current_value if current_value != 0 else 1
             elif operator == "scale":
                 # Scale is a retroactive multiplier
                 speed *= current_value
+
         elif prop == "direction":
             if phase == "incoming":
-                direction = direction * current_value
+                # Multiply direction components
+                direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif phase == "outgoing":
-                direction = direction * current_value
+                # Multiply direction components
+                direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif operator == "to":
                 direction = current_value
             elif operator in ("add", "by"):
-                direction = (direction + current_value).normalized()
-            elif operator == "sub":
-                direction = (direction - current_value).normalized()
+                # Apply rotation
+                direction = current_value  # Already computed as rotated direction
+            elif operator == "mul":
+                # mul on non-phased layers (base/final) is ordered operation
+                direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
             elif operator == "scale":
-                direction = direction * current_value
+                direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
+
         elif prop == "pos":
             if operator in ("add", "by"):
                 pos = pos + current_value
             elif operator == "to":
-                # Position 'to' in local scope is an offset
-                pos = pos + current_value
-
-        return (pos, speed, direction)
-
-    def _apply_world_builder(
-        self,
-        builder: 'ActiveBuilder',
-        pos: Vec2,
-        speed: float,
-        direction: Vec2
-    ) -> tuple[Vec2, float, Vec2]:
-        """Apply a world builder to accumulated global value
-
-        Args:
-            builder: The builder to apply
-            pos, speed, direction: Current state values
-
-        Returns:
-            Updated (pos, speed, direction)
-        """
-        prop = builder.config.property
-        operator = builder.config.operator
-        current_value = builder.get_current_value()
-
-        if prop == "speed":
-            if operator == "to":
-                speed = current_value
-            elif operator in ("add", "by"):
-                speed += current_value
-            elif operator == "sub":
-                speed -= current_value
-            elif operator == "mul":
-                speed *= current_value
-            elif operator == "div":
-                speed /= current_value if current_value != 0 else 1
-            elif operator == "scale":
-                speed *= current_value
-        elif prop == "direction":
-            if operator == "to":
-                direction = current_value
-            elif operator in ("add", "by"):
-                direction = (direction + current_value).normalized()
-            elif operator == "sub":
-                direction = (direction - current_value).normalized()
-            elif operator == "scale":
-                direction = direction * current_value
-        elif prop == "pos":
-            if operator == "to":
-                # World position 'to' is absolute
                 pos = current_value if isinstance(current_value, Vec2) else Vec2.from_tuple(current_value)
-            elif operator in ("add", "by"):
-                pos = pos + current_value
 
         return (pos, speed, direction)
 
@@ -549,12 +401,12 @@ class RigState:
         # Update all builders, remove completed ones
         # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
         completed = []
-        for tag, builder in list(self._active_builders.items()):
+        for layer, builder in list(self._active_builders.items()):
             if not builder.update(dt):
-                completed.append(tag)
+                completed.append(layer)
 
-        for tag in completed:
-            self.remove_builder(tag)
+        for layer in completed:
+            self.remove_builder(layer)
 
         # Compute current state
         pos, speed, direction = self._compute_current_state()
@@ -658,26 +510,27 @@ class RigState:
         return self._get_cardinal_direction(direction)
 
     @property
-    def tags(self) -> list[str]:
-        """List of active named tags (excludes anonymous builders)
+    def layers(self) -> list[str]:
+        """List of active user layers (excludes anonymous and final)
 
-        Returns a list of tag names for currently active builders.
-        Anonymous builders (internal temporary effects) are excluded.
+        Returns a list of layer names for currently active user layers.
+        Anonymous (base) and final layers are excluded.
 
         Example:
-            rig.state.tags  # ["sprint", "drift"]
+            rig.state.layers  # ["sprint", "drift"]
         """
-        return [tag for tag in self._tagged_tags if tag in self._active_builders]
+        return [layer for layer, builder in self._active_builders.items()
+                if not builder.config.is_anonymous() and layer != "__final__"]
 
-    # Tag state access
-    class TagState:
-        """State information for a specific tag"""
+    # Layer state access
+    class LayerState:
+        """State information for a specific layer"""
         def __init__(self, builder: 'ActiveBuilder'):
             self._builder = builder
 
         @property
         def prop(self) -> str:
-            """What property this tag is affecting: 'speed', 'direction', 'pos'"""
+            """What property this layer is affecting: 'speed', 'direction', 'pos'"""
             return self._builder.config.property
 
         @property
@@ -697,17 +550,17 @@ class RigState:
 
         @property
         def speed(self) -> Optional[float]:
-            """Speed value if this tag affects speed, else None"""
+            """Speed value if this layer affects speed, else None"""
             return self.value if self.prop == 'speed' else None
 
         @property
         def direction(self) -> Optional[Vec2]:
-            """Direction value if this tag affects direction, else None"""
+            """Direction value if this layer affects direction, else None"""
             return self.value if self.prop == 'direction' else None
 
         @property
         def pos(self) -> Optional[Vec2]:
-            """Position offset if this tag affects position, else None"""
+            """Position offset if this layer affects position, else None"""
             return self.value if self.prop == 'pos' else None
 
         def time_alive(self) -> float:
@@ -715,7 +568,7 @@ class RigState:
             return self._builder.time_alive()
 
         def revert(self, ms: Optional[float] = None, easing: str = "linear"):
-            """Trigger a revert on this tagged builder
+            """Trigger a revert on this layer
 
             Args:
                 ms: Duration in milliseconds for the revert
@@ -723,27 +576,27 @@ class RigState:
             """
             from .builder import RigBuilder
             # Create a revert-only builder that will trigger the revert
-            builder = RigBuilder(self._builder.rig_state, self._builder.config.tag_name)
+            builder = RigBuilder(self._builder.rig_state, self._builder.config.layer_name)
             builder.revert(ms, easing)
             # Force immediate execution (since it won't have __del__ called naturally)
             builder._execute()
 
-    def tag(self, tag: str) -> Optional['RigState.TagState']:
-        """Get state information for a specific tag
+    def layer(self, layer_name: str) -> Optional['RigState.LayerState']:
+        """Get state information for a specific layer
 
-        Returns a TagState object with the tag's current state, or None if not active.
+        Returns a LayerState object with the layer's current state, or None if not active.
 
         Example:
-            sprint = rig.state.tag("sprint")
+            sprint = rig.state.layer("sprint")
             if sprint:
                 print(f"Sprint speed: {sprint.speed}")
                 print(f"Phase: {sprint.phase}")
         """
-        if tag not in self._active_builders:
+        if layer_name not in self._active_builders:
             return None
 
-        builder = self._active_builders[tag]
-        return RigState.TagState(builder)
+        builder = self._active_builders[layer_name]
+        return RigState.LayerState(builder)
 
     # Base state access
     class BaseState:
@@ -787,22 +640,23 @@ class RigState:
             if not builder.lifecycle.has_reverted():
                 self._bake_builder(builder)
 
-        # 2. Clear all active builders
+        # 2. Clear all active builders and layer tracking
         self._active_builders.clear()
-        self._anonymous_tags.clear()
-        self._tagged_tags.clear()
+        self._layer_orders.clear()
+        self._layer_operations.clear()
+        self._throttle_times.clear()
 
         # 3. Decelerate speed to 0
         if transition_ms is None or transition_ms == 0:
             # Immediate stop
             self._base_speed = 0.0
         else:
-            # Smooth deceleration - create anonymous builder
+            # Smooth deceleration - create base layer builder
             from .builder import ActiveBuilder
             from .contracts import BuilderConfig
 
             config = BuilderConfig()
-            config.tag_name = self.generate_anonymous_tag()
+            config.layer_name = self._generate_base_layer_name()
             config.property = "speed"
             config.operator = "to"
             config.value = 0
@@ -810,8 +664,7 @@ class RigState:
             config.over_easing = easing
 
             builder = ActiveBuilder(config, self, is_anonymous=True)
-            self._active_builders[config.tag_name] = builder
-            self._anonymous_tags.append(config.tag_name)
+            self._active_builders[config.layer_name] = builder
             self._ensure_frame_loop_running()
 
     def reverse(self, transition_ms: Optional[float] = None):
@@ -821,10 +674,10 @@ class RigState:
 
     def bake_all(self):
         """Bake all active builders immediately"""
-        for tag in list(self._active_builders.keys()):
-            self.remove_builder(tag)
+        for layer in list(self._active_builders.keys()):
+            self.remove_builder(layer)
 
-    def trigger_revert(self, tag: str, revert_ms: Optional[float] = None, easing: str = "linear"):
+    def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear"):
         """Trigger revert on builder tree
 
         Strategy:
@@ -832,8 +685,8 @@ class RigState:
         2. Clear all children (bake the aggregate)
         3. Create group lifecycle that reverses from aggregate to neutral
         """
-        if tag in self._active_builders:
-            builder = self._active_builders[tag]
+        if layer in self._active_builders:
+            builder = self._active_builders[layer]
 
             # Capture current aggregated value
             current_value = builder.get_current_value()

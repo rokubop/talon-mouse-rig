@@ -1,108 +1,139 @@
-# Mouse Rig Examples - Voice Commands
+# Mouse Rig - Comprehensive Test Commands
+# Organized into 14 categories for systematic manual testing
 
-# =============================================================================
-# BASIC MOVEMENT
-# =============================================================================
+# =========================================================================
+# 1. BASIC MOVEMENT & DIRECTION
+# =========================================================================
 
-rig right: user.mouse_rig_go_right()
-rig left: user.mouse_rig_go_left()
-rig up: user.mouse_rig_go_up()
-rig down: user.mouse_rig_go_down()
+test move right: user.test_move_right()
+test move left: user.test_move_left()
+test move up: user.test_move_up()
+test move down: user.test_move_down()
+test move diagonal: user.test_move_diagonal()
+test rotate: user.test_direction_rotate()
+test reverse: user.test_reverse()
 
-rig up right: user.mouse_rig_go_up_right()
-rig up left: user.mouse_rig_go_up_left()
-rig down right: user.mouse_rig_go_down_right()
-rig down left: user.mouse_rig_go_down_left()
+# =========================================================================
+# 2. SPEED & ACCELERATION
+# =========================================================================
 
-# =============================================================================
-# SPEED CONTROL
-# =============================================================================
+test speed set: user.test_speed_set()
+test speed add: user.test_speed_add()
+test speed add negative: user.test_speed_add_negative()
+test speed multiply: user.test_speed_mul()
+test speed over: user.test_speed_over()
+test stop: user.test_stop()
+test stop gradual: user.test_stop_gradual()
 
-rig slow: user.mouse_rig_speed_slow()
-rig normal: user.mouse_rig_speed_normal()
-rig fast: user.mouse_rig_speed_fast()
-rig ramp up: user.mouse_rig_speed_ramp_up()
-rig ramp down: user.mouse_rig_speed_ramp_down()
+# =========================================================================
+# 3. LAYER SYSTEM - BASE, USER LAYERS, FINAL
+# =========================================================================
 
-# =============================================================================
-# TEMPORARY SPEED BOOSTS
-# =============================================================================
+test layer basic: user.test_layer_basic()
+test layer stacking: user.test_layer_stacking()
+test layer ordering: user.test_layer_ordering()
+test layer replace: user.test_layer_lifecycle_replace()
+test layer stack: user.test_layer_lifecycle_stack()
 
-rig boost: user.mouse_rig_boost_instant()
-rig boost fade: user.mouse_rig_boost_fade()
-rig boost smooth: user.mouse_rig_boost_smooth()
+# =========================================================================
+# 4. PHASES - INCOMING VS OUTGOING
+# =========================================================================
 
-# =============================================================================
-# TRANSFORM SYSTEM - REPLACE MODE (DEFAULT)
-# =============================================================================
+test phase incoming: user.test_phase_incoming()
+test phase outgoing: user.test_phase_outgoing()
+test phase both: user.test_phase_both()
+test phase sequence: user.test_phase_sequence()
 
-rig sprint: user.mouse_rig_sprint_on()
-rig sprint off: user.mouse_rig_sprint_off()
-rig slow mode: user.mouse_rig_slow_mode_on()
-rig slow mode off: user.mouse_rig_slow_mode_off()
+# =========================================================================
+# 5. FINAL LAYER
+# =========================================================================
 
-# =============================================================================
-# TRANSFORM SYSTEM - SHORTHAND SYNTAX
-# =============================================================================
+test final speed: user.test_final_speed()
+test final direction: user.test_final_direction()
+test final force: user.test_final_force()
 
-rig boost simple: user.mouse_rig_boost_simple()
-rig drift simple: user.mouse_rig_drift_simple()
-rig offset simple: user.mouse_rig_offset_simple()
-rig offset stop: user.mouse_rig_offset_reset()
-# =============================================================================
-# TRANSFORM SYSTEM - STACKING
-# =============================================================================
+# =========================================================================
+# 6. OVERRIDE SCOPE
+# =========================================================================
 
-rig boost pad: user.mouse_rig_boost_pad()
-rig boost pad max: user.mouse_rig_boost_pad_max()
-rig boost pad short: user.mouse_rig_boost_pad_shorthand()
-rig boost pad timeout: user.mouse_rig_boost_pad_with_timeout()
-rig rage: user.mouse_rig_rage_stacks()
+test override speed: user.test_override_speed()
+test override direction: user.test_override_direction()
 
-# =============================================================================
-# TRANSFORM SYSTEM - DIRECTION
-# =============================================================================
+# =========================================================================
+# 7. LIFECYCLE METHODS - QUEUE, EXTEND, THROTTLE, IGNORE
+# =========================================================================
 
-rig drift: user.mouse_rig_drift_on()
-rig drift off: user.mouse_rig_drift_off()
-rig drift smooth: user.mouse_rig_drift_smooth()
+test lifecycle queue: user.test_lifecycle_queue()
+test lifecycle extend: user.test_lifecycle_extend()
+test lifecycle throttle: user.test_lifecycle_throttle()
+test lifecycle ignore: user.test_lifecycle_ignore()
 
-# =============================================================================
-# FORCE SYSTEM
-# =============================================================================
+# =========================================================================
+# 8. BEHAVIOR MODES - HOLD, RELEASE
+# =========================================================================
 
-rig gravity: user.mouse_rig_gravity_on()
-rig gravity off: user.mouse_rig_gravity_off()
-rig wind: user.mouse_rig_wind_on()
-rig wind smooth: user.mouse_rig_wind_smooth()
+test hold: user.test_hold()
+test release: user.test_release()
 
-# =============================================================================
-# SMOOTH TURNS
-# =============================================================================
+# =========================================================================
+# 9. SCALE - GLOBAL MULTIPLIER
+# =========================================================================
 
-rig turn right: user.mouse_rig_turn_right()
-rig turn left: user.mouse_rig_turn_left()
-rig turn lerp: user.mouse_rig_turn_lerp()
-rig reverse: user.mouse_rig_reverse()
+test scale: user.test_scale()
+test scale add: user.test_scale_add()
+test scale layer: user.test_scale_layer()
 
-# =============================================================================
-# POSITION CONTROL
-# =============================================================================
+# =========================================================================
+# 10. POSITION CONTROL
+# =========================================================================
 
-rig center: user.mouse_rig_pos_center()
-rig nudge right: user.mouse_rig_nudge_right()
-rig nudge down: user.mouse_rig_nudge_down()
+test position to: user.test_position_to()
+test position by: user.test_position_by()
 
-# =============================================================================
-# STOPPING & STATE
-# =============================================================================
+# =========================================================================
+# 11. EASING & INTERPOLATION
+# =========================================================================
 
-rig stop: user.mouse_rig_stop()
-rig stop smooth: user.mouse_rig_stop_smooth()
-rig bake: user.mouse_rig_bake()
-rig state: user.mouse_rig_show_state()
+test easing: user.test_easing()
 
-rig test: user.mouse_rig_test()
-rig test two: user.mouse_rig_test_two()
+# =========================================================================
+# 12. STATE ACCESS & BAKING
+# =========================================================================
 
-rig reload: user.mouse_rig_reload()
+test state read: user.test_state_read()
+test bake: user.test_bake()
+
+# =========================================================================
+# 13. ERROR CASES & EDGE CONDITIONS
+# =========================================================================
+
+# test error base incoming: user.test_error_base_incoming()
+# test error final incoming: user.test_error_final_incoming()
+# test error layer mul: user.test_error_layer_mul_without_phase()
+
+# =========================================================================
+# 14. REAL-WORLD SCENARIOS
+# =========================================================================
+
+test sprint: user.test_scenario_sprint()
+test precision: user.test_scenario_precision()
+test acceleration ramp: user.test_scenario_acceleration_ramp()
+test drift: user.test_scenario_drift()
+test rubber band: user.test_scenario_rubber_band()
+test orbit: user.test_scenario_orbit()
+test multi layer: user.test_scenario_multi_layer_combo()
+
+# =========================================================================
+# LEGACY COMMANDS (for backward compatibility testing)
+# =========================================================================
+
+mouse rig turn right: user.mouse_rig_turn_right()
+mouse rig turn left: user.mouse_rig_turn_left()
+mouse rig turn lerp: user.mouse_rig_turn_lerp()
+mouse rig reverse: user.mouse_rig_reverse()
+mouse rig position center: user.mouse_rig_pos_center()
+mouse rig nudge right: user.mouse_rig_nudge_right()
+mouse rig nudge down: user.mouse_rig_nudge_down()
+mouse rig stop smooth: user.mouse_rig_stop_smooth()
+mouse rig bake: user.mouse_rig_bake()
+mouse rig show state: user.mouse_rig_show_state()

@@ -22,14 +22,18 @@ VALID_OPERATORS = {
     'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale']
 }
 
-# Valid scopes
-VALID_SCOPES = ['local', 'world']
+# Valid scopes (override replaces accumulated value at layer position)
+VALID_SCOPES = ['override']
 
-# Valid phases (for mul operations)
+# Valid phases (for mul operations on user layers)
 VALID_PHASES = ['incoming', 'outgoing']
 
-# Operators that default to local for tags
-LOCAL_DEFAULT_OPERATORS = ['add', 'sub', 'by', 'to']
+# Layer types
+LAYER_TYPES = {
+    '__base__': {'phased': False, 'order': float('-inf')},
+    '__final__': {'phased': False, 'order': float('inf')},
+    # User layers are phased=True by default
+}
 
 VALID_EASINGS = [
     'linear',
@@ -116,13 +120,13 @@ PARAMETER_SUGGESTIONS = {
 
 # Valid method/property names for Rig class
 VALID_RIG_METHODS = [
-    'tag', 'stop', 'reverse', 'bake',
+    'layer', 'stop', 'reverse', 'bake',
 ]
 
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
-    'local', 'world',  # Scope accessors
+    'final', 'override', 'incoming', 'outgoing',  # Layer accessors
     'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
@@ -338,12 +342,13 @@ class BuilderConfig:
         self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div, scale
         self.value: Any = None
-        self.scope: Optional[str] = None  # None, "local", "world"
-        self.phase: Optional[str] = None  # None, "incoming", "outgoing" (for mul only)
-        self.order: Optional[int] = None  # Explicit tag ordering
+        self.scope: Optional[str] = None  # None or "override"
+        self.phase: Optional[str] = None  # None, "incoming", "outgoing" (for mul on user layers)
+        self.order: Optional[int] = None  # Explicit layer ordering
 
         # Identity
-        self.tag_name: Optional[str] = None
+        self.layer_name: Optional[str] = None  # Layer name (__base__, user name, __final__)
+        self.is_phased: bool = False  # True for user layers, False for base/final
 
         # Behavior
         self.behavior: Optional[str] = None  # stack, replace, queue, extend, throttle, ignore
@@ -369,8 +374,16 @@ class BuilderConfig:
         self.bake_value: Optional[bool] = None
 
     def is_anonymous(self) -> bool:
-        """Check if this builder is anonymous (auto-generated tag)"""
-        return self.tag_name is not None and self.tag_name.startswith("__anon_")
+        """Check if this builder is anonymous (auto-generated base layer)"""
+        return self.layer_name is not None and self.layer_name.startswith("__base_")
+
+    def is_base_layer(self) -> bool:
+        """Check if this is a base layer (anonymous or __base__)"""
+        return self.is_anonymous() or self.layer_name == "__base__"
+
+    def is_final_layer(self) -> bool:
+        """Check if this is the final layer"""
+        return self.layer_name == "__final__"
 
     def get_effective_behavior(self) -> str:
         """Get behavior with defaults applied"""
@@ -455,24 +468,35 @@ class BuilderConfig:
                 f"Valid operators for {self.property}: {valid_str}"
             )
 
-    def validate_phase_requirement(self, is_tagged: bool) -> None:
-        """Validate that mul on tags uses incoming or outgoing
+    def validate_phase_requirement(self) -> None:
+        """Validate phase requirements based on layer type
 
-        Args:
-            is_tagged: Whether this is a tagged builder
+        Rules:
+        - User layers (phased): mul REQUIRES incoming or outgoing
+        - Base/final (non-phased): incoming/outgoing ERROR
+        - Base/final: mul allowed without phase (ordered operations)
 
         Raises:
-            ConfigError: If mul on tag doesn't use incoming/outgoing
+            ConfigError: If phase rules violated
         """
-        if not is_tagged or not self.operator:
+        if not self.operator:
             return
 
-        # Check if mul on tag requires phase
-        if self.operator == 'mul' and self.scope != 'world' and self.phase is None:
+        # Check if incoming/outgoing used on non-phased layers (base/final)
+        if (self.is_base_layer() or self.is_final_layer()) and self.phase is not None:
+            layer_type = "base" if self.is_base_layer() else "final"
             raise ConfigError(
-                f"Tag operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
-                f"  rig.tag('{self.tag_name}').local.incoming.{self.property}.mul(...)  # Multiply input before tag's work\n"
-                f"  rig.tag('{self.tag_name}').local.outgoing.{self.property}.mul(...)  # Multiply output after tag's work"
+                f"incoming/outgoing phases not allowed on {layer_type} layer.\n"
+                f"The {layer_type} layer uses ordered operations - operations execute in the order you call them.\n"
+                f"Use: rig.{'' if self.is_base_layer() else 'final.'}{self.property}.mul(...) directly"
+            )
+
+        # Check if mul on user layer requires phase
+        if self.is_phased and self.operator == 'mul' and self.scope != 'override' and self.phase is None:
+            raise ConfigError(
+                f"User layer operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
+                f"  rig.layer('{self.layer_name}').incoming.{self.property}.mul(...)  # Multiply input before layer's work\n"
+                f"  rig.layer('{self.layer_name}').outgoing.{self.property}.mul(...)  # Multiply output after layer's work"
             )
 
     def validate_easing(self, easing: str, context: str = "easing") -> None:

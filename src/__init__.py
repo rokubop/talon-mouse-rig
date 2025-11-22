@@ -12,11 +12,11 @@ Example usage:
 
     def boost():
         r = rig()
-        r.tag("boost").speed.add(10).hold(2000)
+        r.layer("boost").speed.add(10).hold(2000)
 
     def sprint():
         r = rig()
-        r.tag("sprint").speed.mul(2).over(500).hold(3000).revert(500)
+        r.layer("sprint").incoming.speed.mul(2).over(500).hold(3000).revert(500)
 """
 
 from typing import Optional
@@ -82,46 +82,62 @@ class Rig:
         self._state = _get_global_state()
 
     # ========================================================================
-    # PROPERTY ACCESSORS
+    # PROPERTY ACCESSORS (base layer)
     # ========================================================================
 
     @property
     def pos(self):
-        """Position property accessor"""
+        """Position property accessor (base layer)"""
         return RigBuilder(self._state).pos
 
     @property
     def speed(self):
-        """Speed property accessor"""
+        """Speed property accessor (base layer)"""
         return RigBuilder(self._state).speed
 
     @property
     def direction(self):
-        """Direction property accessor"""
+        """Direction property accessor (base layer)"""
         return RigBuilder(self._state).direction
 
-    @property
-    def local(self):
-        """Local scope accessor - operate on base rig's local contribution"""
-        return RigBuilder(self._state).local
-
-    @property
-    def world(self):
-        """World scope accessor - operate on accumulated global value"""
-        return RigBuilder(self._state).world
-
     # ========================================================================
-    # TAG ACCESSOR
+    # LAYER ACCESSORS
     # ========================================================================
 
-    def tag(self, name: str, order: Optional[int] = None) -> RigBuilder:
-        """Create a tagged builder
+    @property
+    def final(self):
+        """Final layer accessor - operations at the end of processing chain"""
+        return RigBuilder(self._state, layer="__final__")
+
+    @property
+    def override(self):
+        """Override scope accessor - for base layer (ignore accumulated, replace)"""
+        return RigBuilder(self._state).override
+
+    @property
+    def incoming(self):
+        """Incoming phase accessor - not allowed on base layer"""
+        from .contracts import ConfigError
+        raise ConfigError("incoming phase not allowed on base layer (use on user layers with rig.layer())")
+
+    @property
+    def outgoing(self):
+        """Outgoing phase accessor - not allowed on base layer"""
+        from .contracts import ConfigError
+        raise ConfigError("outgoing phase not allowed on base layer (use on user layers with rig.layer())")
+
+    # ========================================================================
+    # LAYER METHOD
+    # ========================================================================
+
+    def layer(self, name: str, order: Optional[int] = None) -> RigBuilder:
+        """Create a user layer
 
         Args:
-            name: Tag name
+            name: Layer name
             order: Optional execution order (lower numbers execute first)
         """
-        return RigBuilder(self._state, tag=name, order=order)
+        return RigBuilder(self._state, layer=name, order=order)
 
     # ========================================================================
     # BEHAVIOR SUGAR (returns builder with behavior pre-set)
