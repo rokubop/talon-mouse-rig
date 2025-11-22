@@ -116,7 +116,7 @@ class Rig:
 
     def tag(self, name: str, order: Optional[int] = None) -> RigBuilder:
         """Create a tagged builder
-        
+
         Args:
             name: Tag name
             order: Optional execution order (lower numbers execute first)

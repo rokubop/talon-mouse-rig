@@ -220,7 +220,7 @@ class RigState:
             if builder.config.scope is not None:
                 key = (tag, builder.config.property)
                 self._tag_property_scopes[key] = builder.config.scope
-            
+
             # Track order if provided
             if builder.config.order is not None:
                 self._tag_orders[tag] = builder.config.order
@@ -274,7 +274,7 @@ class RigState:
             keys_to_remove = [key for key in self._tag_property_scopes if key[0] == tag]
             for key in keys_to_remove:
                 del self._tag_property_scopes[key]
-            
+
             # Remove order tracking
             if tag in self._tag_orders:
                 del self._tag_orders[tag]
@@ -389,7 +389,7 @@ class RigState:
         # Sort tagged tags by order (if specified), then by creation order
         def get_tag_order(tag: str) -> int:
             return self._tag_orders.get(tag, 999999)  # Unordered tags go last
-        
+
         sorted_tagged = sorted(self._tagged_tags, key=get_tag_order)
         all_tags = self._anonymous_tags + sorted_tagged
 

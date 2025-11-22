@@ -559,7 +559,7 @@ class PropertyBuilder:
         # Default to local scope if not set
         if self.rig_builder.config.scope is None and not self.rig_builder.is_anonymous:
             self.rig_builder.config.scope = "local"
-        
+
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
@@ -599,7 +599,7 @@ class PropertyBuilder:
         # Default to local scope if not set
         if self.rig_builder.config.scope is None and not self.rig_builder.is_anonymous:
             self.rig_builder.config.scope = "local"
-        
+
         self.rig_builder.config.operator = "scale"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()

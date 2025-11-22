@@ -66,22 +66,34 @@ result
 ```python
 # Base layer operations (rig.speed = rig.layer("__base__"))
 rig.speed.to(10)                    # Set initial value
-rig.speed.add(5).over(1000)         # Anonymous operation in base
-rig.incoming.speed.mul(2)           # No-op (nothing before base)
-rig.outgoing.speed.mul(1.5)         # Post-process base before user layers
+rig.speed.add(5)                    # Add operation
+rig.speed.mul(2)                    # Multiply operation (no phase needed!)
+rig.speed.mul(2).over(1000)         # Animated multiply
+rig.speed.add(5).over(1000)         # Animated operation
+
+# ERROR: incoming/outgoing supported on layer, but not allowed on base layer (for simplicity)
+# rig.incoming.speed.mul(2)         # ❌ ERROR
+# rig.outgoing.speed.mul(1.5)       # ❌ ERROR
 ```
 
 ### User Layers
 
 ```python
 # Simple layer
-rig.layer("boost").speed.add(10)
+rig.layer("boost").speed.add(10)    # ✅ add doesn't need phase
 
-# With incoming/outgoing
-rig.layer("boost").incoming.speed.mul(2)    # Pre-process input
-rig.layer("boost").speed.add(10)            # Layer's work
-rig.layer("boost").speed.add(5)             # More work
-rig.layer("boost").outgoing.speed.mul(1.5)  # Post-process output
+# mul REQUIRES incoming/outgoing on user layers
+rig.layer("boost").incoming.speed.mul(2)    # ✅ Pre-process input
+rig.layer("boost").outgoing.speed.mul(1.5)  # ✅ Post-process output
+
+# ERROR: mul without phase on user layer
+# rig.layer("boost").speed.mul(2)   # ❌ ERROR
+
+# Multiple operations
+rig.layer("boost").incoming.speed.mul(2)
+rig.layer("boost").speed.add(10)            # ✅ add works
+rig.layer("boost").speed.add(5)             # ✅ add works
+rig.layer("boost").outgoing.speed.mul(1.5)
 
 # With ordering
 rig.layer("first", order=1).speed.add(5)
@@ -92,9 +104,13 @@ rig.layer("second", order=2).speed.add(3)
 
 ```python
 # Final layer operations
-rig.final.speed.add(5)              # Final adjustments
-rig.final.incoming.speed.mul(2)     # Pre-process accumulated result
-rig.final.outgoing.speed.mul(0.5)   # THE FINAL FINAL OPERATION
+rig.final.speed.add(5)              # ✅ Final adjustments
+rig.final.speed.mul(2)              # ✅ Final multiply (no phase needed!)
+rig.final.speed.mul(2).over(1000)   # ✅ Animated final multiply
+
+# ERROR: incoming/outgoing not allowed on final (for simplicity)
+# rig.final.incoming.speed.mul(2)   # ❌ ERROR
+# rig.final.outgoing.speed.mul(0.5) # ❌ ERROR
 ```
 
 ### Override Scope
@@ -159,7 +175,7 @@ rig.layer("more").speed.add(10)        # 30 + 10 = 40
 
 # Final
 rig.final.speed.add(5)                 # 40 + 5 = 45
-rig.final.outgoing.speed.mul(2)        # 45 × 2 = 90
+rig.final.speed.mul(2)                 # 45 × 2 = 90
 
 # Result: 90
 ```
@@ -169,7 +185,7 @@ rig.final.outgoing.speed.mul(2)        # 45 × 2 = 90
 ```python
 # Base
 rig.speed.to(10)
-rig.outgoing.speed.mul(2)              # 10 × 2 = 20
+rig.speed.mul(2)                               # 10 × 2 = 20
 
 # Layer 1
 rig.layer("boost", order=1).incoming.speed.mul(1.5)  # 20 × 1.5 = 30
@@ -186,20 +202,21 @@ rig.final.speed.add(10)                # 50 + 10 = 60
 # Result: 60
 ```
 
-### Example 3: Practical Use - The Final Final
+### Example 3: Practical Use - Base and Final Operations
 
 ```python
 # Movement setup
 rig.speed.to(100)
+rig.speed.mul(2)                               # Double base speed: 200
 rig.direction(1, 0)
 
 # Boost effects
-rig.layer("sprint").incoming.speed.mul(2)      # Double input
-rig.layer("sprint").speed.add(50)              # Add boost
+rig.layer("sprint").incoming.speed.mul(2)      # Double input: 400
+rig.layer("sprint").speed.add(50)              # Add boost: 450
 
 # Final adjustments
-rig.final.speed.add(10)                        # Fine-tune
-rig.final.outgoing.speed.mul(0.8)              # Global speed limiter (THE FINAL THING)
+rig.final.speed.add(10)                        # Fine-tune: 460
+rig.final.speed.mul(0.8)                       # Global limiter: 368
 ```
 
 ### Example 4: Complex Multi-Layer
@@ -207,24 +224,25 @@ rig.final.outgoing.speed.mul(0.8)              # Global speed limiter (THE FINAL
 ```python
 # Base
 rig.speed.to(10)
+rig.speed.mul(2)                                     # 10 × 2 = 20
 rig.direction(1, 0)
 
 # Layer 1 - Boost
-rig.layer("boost", order=1).incoming.speed.mul(2)   # 10 × 2 = 20
-rig.layer("boost").speed.add(5)                     # 20 + 5 = 25
-rig.layer("boost").speed.add(3)                     # 25 + 3 = 28
-rig.layer("boost").speed.scale(2)                   # (5+3)×2 = 16, total: 20 + 16 = 36
-rig.layer("boost").outgoing.speed.mul(1.5)          # 36 × 1.5 = 54
+rig.layer("boost", order=1).incoming.speed.mul(2)   # 20 × 2 = 40
+rig.layer("boost").speed.add(5)                     # 40 + 5 = 45
+rig.layer("boost").speed.add(3)                     # 45 + 3 = 48
+rig.layer("boost").speed.scale(2)                   # (5+3)×2 = 16, total: 40 + 16 = 56
+rig.layer("boost").outgoing.speed.mul(1.5)          # 56 × 1.5 = 84
 
 # Layer 2 - Sprint
-rig.layer("sprint", order=2).incoming.speed.mul(0.5) # 54 × 0.5 = 27
-rig.layer("sprint").speed.add(10)                    # 27 + 10 = 37
+rig.layer("sprint", order=2).incoming.speed.mul(0.5) # 84 × 0.5 = 42
+rig.layer("sprint").speed.add(10)                    # 42 + 10 = 52
 
 # Final
-rig.final.speed.add(5)                               # 37 + 5 = 42
-rig.final.outgoing.speed.mul(2)                      # 42 × 2 = 84
+rig.final.speed.add(5)                               # 52 + 5 = 57
+rig.final.speed.mul(2)                               # 57 × 2 = 114
 
-# Result: speed = 84
+# Result: speed = 114
 ```
 
 ## Rules
@@ -237,11 +255,21 @@ rig.final.outgoing.speed.mul(2)                      # 42 × 2 = 84
 5. All layers follow the same contract: incoming → operations → outgoing
 
 ### Operation Rules
-1. **`incoming`/`outgoing`** - For phase-specific operations (typically `mul`)
-2. **`add`, `sub`, `by`, `to`** - Can be used directly in layer (no phase needed)
-3. **`mul`** - MUST use `incoming` or `outgoing` on user layers for clarity
-4. **`scale`** - Retroactive multiplier applied to accumulated layer operations
-5. **No operation mode locking** - Layers can freely mix all operation types
+1. **`add`, `sub`, `by`, `to`** - Can be used directly on any layer (no phase needed)
+2. **`mul`** - Phase requirements vary by layer type:
+   - **Non-phased layers** (base, final): No phase needed - ordered operations
+   - **Phased layers** (user layers): MUST use `incoming` or `outgoing` for clarity when using mul
+3. **`scale`** - Retroactive multiplier applied to accumulated layer operations
+4. **No operation mode locking** - Layers can freely mix all operation types
+
+**Layer Classification:**
+- **Non-phased layers**: base (`__base__`), final (`__final__`) - use ordered operations
+- **Phased layers**: user layers (named) - require explicit phases for `mul`
+
+### Phase Rules (incoming/outgoing)
+1. **Non-phased layers** (base, final): incoming/outgoing phases ERROR if used (for simplicity)
+2. **Phased layers** (user layers): `mul` MUST use incoming/outgoing phases
+3. Rationale: Non-phased use ordered operations; phased layers need explicit phases for `mul` clarity
 
 ### Override Rules
 1. `override` scope ignores previous accumulated value
@@ -257,43 +285,50 @@ rig.final.outgoing.speed.mul(2)                      # 42 × 2 = 84
 5. Subsequent operations on same layer append to that layer
 
 ### Edge Cases
-1. `base.incoming` - No-op (nothing before base)
-2. `final.outgoing` - THE absolute final operation before result
-3. `rig.speed.add(5)` - Shorthand for base layer operation
-4. Anonymous operations in base layer stack normally
+1. `rig.incoming.speed.mul(2)` - ERROR (not allowed on base)
+2. `rig.outgoing.speed.mul(2)` - ERROR (not allowed on base)
+3. `rig.final.incoming.speed.mul(2)` - ERROR (not allowed on final)
+4. `rig.final.outgoing.speed.mul(2)` - ERROR (not allowed on final)
+5. `rig.layer("x").speed.mul(2)` - ERROR (must use incoming/outgoing on user layers)
+6. `rig.speed.add(5)` - Valid (shorthand for base layer operation)
+7. `rig.speed.mul(2)` - Valid (ordered operation on base layer)
+8. `rig.final.speed.mul(2)` - Valid (ordered operation on final layer)
 
 ## Implementation Notes
 
 ### Internal Representation
 ```python
 # Internally, all use the same layer system:
-rig.speed.to(10)              # layer_name = "__base__"
-rig.layer("boost").speed.add(5)  # layer_name = "boost"
-rig.final.speed.add(10)       # layer_name = "__final__"
+rig.speed.to(10)              # layer_name = "__base__", phased = False
+rig.layer("boost").speed.add(5)  # layer_name = "boost", phased = True
+rig.final.speed.add(10)       # layer_name = "__final__", phased = False
 ```
 
 ### Layer Contract
 ```python
 class Layer:
+    name: str                  # Layer name ("__base__", "boost", "__final__")
+    phased: bool               # True = user layer (requires phases for mul)
+                               # False = base/final (ordered operations)
     incoming_operations: list  # Phase 1: Pre-process
     operations: list           # Phase 2: Main work
     outgoing_operations: list  # Phase 3: Post-process
     override_mode: bool        # Ignore previous accumulated value
     order: int                 # Processing order
-    
+
     def process(input_value):
-        # Phase 1: Incoming
+        # Phase 1: Incoming (only used if phased=True)
         value = apply_operations(input_value, incoming_operations)
-        
+
         # Phase 2: Main operations (with potential override)
         if override_mode:
             value = apply_operations(0, operations)  # Ignore input
         else:
             value = apply_operations(value, operations)
-        
-        # Phase 3: Outgoing
+
+        # Phase 3: Outgoing (only used if phased=True)
         value = apply_operations(value, outgoing_operations)
-        
+
         return value
 ```
 
@@ -302,13 +337,13 @@ class Layer:
 # Pseudo-code for computation
 def compute_property(property_name):
     value = base_value
-    
+
     # Get all layers sorted by order
     layers = [base_layer] + sorted(user_layers, by=order) + [final_layer]
-    
+
     for layer in layers:
         value = layer.process(value)
-    
+
     return value
 ```
 
@@ -346,11 +381,11 @@ rig.final.speed.add(5)                        # Consistent layer model
 ### 4. More Powerful Final Operations
 **PRD12:** `world` was primarily for override/replacement
 
-**PRD13:** `final` supports full layer contract:
+**PRD13:** `final` supports ordered operations like base:
 ```python
-rig.final.incoming.speed.mul(2)     # Pre-process result
-rig.final.speed.add(5)               # Final adjustments
-rig.final.outgoing.speed.mul(0.5)   # THE FINAL FINAL THING
+rig.final.speed.add(5)       # Final adjustments
+rig.final.speed.mul(2)       # Final multiply (ordered operations)
+rig.final.speed.mul(2).over(1000)  # Can animate too!
 ```
 
 ### 5. Consistent Mental Model
@@ -368,13 +403,42 @@ rig.final.outgoing.speed.mul(0.5)   # THE FINAL FINAL THING
 | `rig.world.speed.add(5)` | `rig.final.speed.add(5)` |
 | `rig.tag("x").world.speed.to(10)` | `rig.layer("x").override.speed.to(10)` |
 
+### Preserved Functionality
+All existing tag behaviors are preserved in layers:
+- **Lifecycle methods**: `replace()`, `stack()`, `queue()`, `extend()`, `throttle()`, `ignore()`
+- **Timing controls**: `.over()`, `.after()`, `.during()`
+- **Revert behavior**: Automatic cleanup when layer operations complete
+- **Order control**: `order` parameter for explicit layer sequencing
+
+**Example with lifecycle methods:**
+```python
+# All existing patterns still work
+rig.layer("boost").replace().speed.add(50).over(1000)
+rig.layer("boost").stack().speed.add(20).over(500)
+rig.layer("boost").queue().speed.add(10).over(300)
+rig.layer("boost").throttle(100).speed.add(10)
+
+# With new phased operations
+rig.layer("boost").replace().incoming.speed.mul(2)
+rig.layer("boost").stack().outgoing.speed.mul(1.5)
+```
+
 ### Key Changes
 1. **Remove `local` scope** - Implicit in layer concept
 2. **Split `world` into two concepts:**
    - `final` - Operations at the end of the processing chain
    - `override` - Replacement behavior at a layer's position
 3. **Rename `tag()` to `layer()`** - Better semantic fit
-4. **Add `final.outgoing`** - The absolute final operation
+4. **Add phased/non-phased distinction** - User layers require explicit phases for `mul`
+5. **Preserve all existing functionality** - replace/stack/queue/extend/throttle/ignore/over/after/during still work
+
+**What stays the same:**
+- Layer lifecycle methods (replace, stack, queue, extend, throttle, ignore)
+- Timing controls (over, after, during)
+- Automatic revert behavior
+- Order parameter
+- Scale operation
+- Mix any operation types freely
 
 ## Summary
 
