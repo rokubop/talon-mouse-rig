@@ -22,6 +22,12 @@ VALID_OPERATORS = {
     'pos': ['to', 'add', 'by', 'sub', 'bake']
 }
 
+# Operators that require scope for tagged builders
+SCOPE_REQUIRED_OPERATORS = ['to', 'mul', 'div']
+
+# Operators that default to relative for tagged builders
+RELATIVE_DEFAULT_OPERATORS = ['add', 'sub', 'by']
+
 VALID_EASINGS = [
     'linear',
     'ease_in', 'ease_out', 'ease_in_out',
@@ -113,6 +119,7 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
+    'relative', 'absolute',  # Scope accessors
     'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
@@ -328,6 +335,7 @@ class BuilderConfig:
         self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div
         self.value: Any = None
+        self.scope: Optional[str] = None  # None, "relative", "absolute"
 
         # Identity
         self.tag_name: Optional[str] = None
@@ -440,6 +448,26 @@ class BuilderConfig:
             raise ConfigError(
                 f"Invalid operator {repr(self.operator)} for property {repr(self.property)}\n"
                 f"Valid operators for {self.property}: {valid_str}"
+            )
+
+    def validate_scope_requirement(self, is_tagged: bool) -> None:
+        """Validate that scope is provided when required
+
+        Args:
+            is_tagged: Whether this is a tagged builder
+
+        Raises:
+            ConfigError: If scope is required but not provided
+        """
+        if not is_tagged or not self.operator:
+            return
+
+        # Check if operator requires scope for tagged builders
+        if self.operator in SCOPE_REQUIRED_OPERATORS and self.scope is None:
+            raise ConfigError(
+                f"Tag operations with .{self.operator}() require explicit scope. Use:\n"
+                f"  rig.tag('{self.tag_name}').relative.{self.property}.{self.operator}(...)  # Operate on tag's contribution\n"
+                f"  rig.tag('{self.tag_name}').absolute.{self.property}.{self.operator}(...)  # Operate on base value"
             )
 
     def validate_easing(self, easing: str, context: str = "easing") -> None:

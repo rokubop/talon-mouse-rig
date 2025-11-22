@@ -36,6 +36,29 @@ class BehaviorProxy:
         return getattr(self.builder, name)
 
 
+class ScopeProxy:
+    """Proxy for .relative and .absolute scope accessors"""
+
+    def __init__(self, builder: 'RigBuilder', scope: str):
+        self.builder = builder
+        self.scope = scope  # "relative" or "absolute"
+
+    @property
+    def pos(self) -> 'PropertyBuilder':
+        """Position property accessor with scope"""
+        return PropertyBuilder(self.builder, "pos", scope=self.scope)
+
+    @property
+    def speed(self) -> 'PropertyBuilder':
+        """Speed property accessor with scope"""
+        return PropertyBuilder(self.builder, "speed", scope=self.scope)
+
+    @property
+    def direction(self) -> 'PropertyBuilder':
+        """Direction property accessor with scope"""
+        return PropertyBuilder(self.builder, "direction", scope=self.scope)
+
+
 class RigBuilder:
     """Universal builder for all mouse rig operations
 
@@ -60,6 +83,20 @@ class RigBuilder:
     def is_anonymous(self) -> bool:
         """Check if this is an anonymous builder"""
         return self.config.tag_name.startswith("__anon_")
+
+    # ========================================================================
+    # SCOPE ACCESSORS (return ScopeProxy helper)
+    # ========================================================================
+
+    @property
+    def relative(self) -> 'ScopeProxy':
+        """Relative scope accessor - operate on tag's own contribution"""
+        return ScopeProxy(self, "relative")
+
+    @property
+    def absolute(self) -> 'ScopeProxy':
+        """Absolute scope accessor - operate on base value"""
+        return ScopeProxy(self, "absolute")
 
     # ========================================================================
     # PROPERTY ACCESSORS (return PropertyBuilder helper)
@@ -418,28 +455,46 @@ class RigBuilder:
 class PropertyBuilder:
     """Helper for property operations - thin wrapper that configures RigBuilder"""
 
-    def __init__(self, rig_builder: RigBuilder, property_name: str):
+    def __init__(self, rig_builder: RigBuilder, property_name: str, scope: Optional[str] = None):
         self.rig_builder = rig_builder
         self.property_name = property_name
+        self.scope = scope  # None, "relative", or "absolute"
 
         # Set property on builder
         self.rig_builder.config.property = property_name
 
+        # Set scope if provided
+        if scope is not None:
+            self.rig_builder.config.scope = scope
+
+    def _apply_scope_default(self, operator: str):
+        """Apply default scope for unambiguous operations on tagged builders"""
+        from .contracts import RELATIVE_DEFAULT_OPERATORS, SCOPE_REQUIRED_OPERATORS
+
+        # If scope already set, use it
+        if self.rig_builder.config.scope is not None:
+            return
+
+        # Anonymous builders don't need scope
+        if self.rig_builder.is_anonymous:
+            return
+
+        # For tagged builders, default to relative for add/sub/by
+        if operator in RELATIVE_DEFAULT_OPERATORS:
+            self.rig_builder.config.scope = "relative"
+
     def to(self, *args) -> RigBuilder:
-        """Set absolute value (anonymous builders only)"""
-        if not self.rig_builder.is_anonymous:
-            raise ValueError(
-                "Tagged operations cannot use .to() - use delta operations (.add(), .sub(), .by(), .mul(), .div()) "
-                "or use .revert() to remove the tag's effect"
-            )
+        """Set value - requires scope for tagged builders"""
+        self._apply_scope_default("to")
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
-        # Validate property + operator combination
         self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
         """Add delta"""
+        self._apply_scope_default("add")
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
@@ -451,23 +506,28 @@ class PropertyBuilder:
 
     def sub(self, *args) -> RigBuilder:
         """Subtract delta"""
+        self._apply_scope_default("sub")
         self.rig_builder.config.operator = "sub"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
-        """Multiply"""
+        """Multiply - requires scope for tagged builders"""
+        self._apply_scope_default("mul")
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
-        """Divide"""
+        """Divide - requires scope for tagged builders"""
+        self._apply_scope_default("div")
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_scope_requirement(not self.rig_builder.is_anonymous)
         return self.rig_builder
 
     def bake(self) -> RigBuilder:
@@ -496,12 +556,10 @@ class PropertyBuilder:
 
     # Shorthand for anonymous only
     def __call__(self, *args) -> RigBuilder:
-        """Shorthand: rig.speed(5) -> rig.speed.to(5)"""
-        if not self.rig_builder.is_anonymous:
-            raise ValueError(
-                "Tagged operations cannot use call syntax - use delta operations (.add(), .sub(), .by(), .mul(), .div()) "
-                "or use .revert() to remove the tag's effect"
-            )
+        """Shorthand: rig.speed(5) -> rig.speed.to(5)
+
+        Only works for anonymous builders.
+        """
         return self.to(*args)
 
 

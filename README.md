@@ -53,9 +53,11 @@ Use `.revert()` to remove a tag's effect, or anonymous builders for absolute pos
 rig = actions.user.mouse_rig()
 rig.tag("boost").speed.add(10).over(1000)  # Additive
 rig.tag("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
+
+# Revert effect after 1 second and remove tag operations
 rig.tag("boost").revert(1000)
 
-# Bake current state into base values
+# Bake current state into base values and remove tag operations
 rig.tag("boost").bake()
 ```
 
@@ -72,7 +74,6 @@ rig.tag("boost").replace.speed.add(10) # Replace instead of stack
 rig.tag("boost").throttle.speed.add(10) # Ignore while active
 rig.tag("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
 ```
-
 
 ### Revert and callbacks
 
