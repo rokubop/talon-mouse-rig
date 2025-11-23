@@ -51,7 +51,8 @@ class RigState:
         # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
 
-        # Base layer counter for unique base layer names
+        # Auto-order counter for layers without explicit order
+        self._next_auto_order: int = 0
     def _generate_base_layer_name(self) -> str:
         """Return base layer name"""
         return "__base__"
@@ -141,9 +142,14 @@ class RigState:
         # Add builder to active set
         self._active_builders[layer]= builder
 
-        # Track order if provided
+        # Track order: explicit order, or auto-assign based on creation order
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
+        elif layer not in ("__base__", "__final__"):
+            # Auto-assign order if not explicit (preserves creation order)
+            if layer not in self._layer_orders:
+                self._layer_orders[layer] = self._next_auto_order
+                self._next_auto_order += 1
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
@@ -229,9 +235,11 @@ class RigState:
             # current_value is already the final direction (operation already applied in target_value)
             self._base_direction = current_value
         elif prop == "pos":
-            # Position is more complex - update base position
-            offset = current_value
-            self._base_pos = self._base_pos + offset
+            # Update base position to current mouse position
+            # This resets the reference point after position animation completes
+            self._base_pos = Vec2(*ctrl.mouse_pos())
+            # Reset position offset tracking
+            self._last_position_offset = Vec2(0, 0)
 
         # Ensure frame loop is running if there's movement
         if self._has_movement():
@@ -296,7 +304,7 @@ class RigState:
         final_builders = []  # __final__ layer
 
         for layer_name, builder in self._active_builders.items():
-            if builder.config.is_anonymous():
+            if layer_name == "__base__":
                 base_builders.append(builder)
             elif layer_name == "__final__":
                 final_builders.append(builder)

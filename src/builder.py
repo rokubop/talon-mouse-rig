@@ -641,13 +641,22 @@ class ActiveBuilder:
         if config.operator == "to":
             # For 'to' operations, we need the current computed value
             # This "bakes" the current state before transitioning to new target
-            self.base_value = getattr(rig_state, config.property)
+            # EXCEPT for position - use actual mouse position instead of base
+            if config.property == "pos":
+                from talon import ctrl
+                self.base_value = Vec2(*ctrl.mouse_pos())
+            else:
+                self.base_value = getattr(rig_state, config.property)
         else:
             # For all other operations (including direction.add), use base state
             # This ensures stacked rotations all rotate from the same base
             self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
+
+        # Debug logging for position operations
+        if config.property == "pos" and config.operator == "to":
+            print(f"DEBUG: Position.to() - base_value={self.base_value}, target_value={self.target_value}, target_pos={Vec2.from_tuple(config.value)}")
 
     def time_alive(self) -> float:
         """Get time in seconds since this builder was created"""
