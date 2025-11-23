@@ -654,10 +654,6 @@ class ActiveBuilder:
 
         self.target_value = self._calculate_target_value()
 
-        # Debug logging for position operations
-        if config.property == "pos" and config.operator == "to":
-            print(f"DEBUG: Position.to() - base_value={self.base_value}, target_value={self.target_value}, target_pos={Vec2.from_tuple(config.value)}")
-
     def time_alive(self) -> float:
         """Get time in seconds since this builder was created"""
         import time

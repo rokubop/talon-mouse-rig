@@ -22,7 +22,6 @@ class RigState:
     """Core state manager for the mouse rig"""
 
     def __init__(self):
-        print(f"DEBUG: Creating NEW RigState instance")
         # Base state (baked values)
         self._base_pos: Vec2 = Vec2(*ctrl.mouse_pos())
         self._base_speed: float = 0.0
@@ -160,16 +159,13 @@ class RigState:
         # Start frame loop if not running (BEFORE checking lifecycle completion)
         # This ensures _base_pos is synced to current mouse position before builder calculates offsets
         if not builder.lifecycle.is_complete():
-            print(f"DEBUG: Builder {layer} has lifecycle, starting frame loop. over_ms={builder.config.over_ms}, revert_ms={builder.config.revert_ms}")
             self._ensure_frame_loop_running()
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
-            print(f"DEBUG: Builder {layer} completes instantly, anonymous={builder.config.is_anonymous()}")
             # Instant completion - bake immediately for anonymous layers
             if builder.config.is_anonymous():
                 if builder.config.get_effective_bake():
-                    print(f"DEBUG: Baking {layer} immediately")
                     self._bake_builder(builder)
                 # Remove from active set (it was added on line 134)
                 del self._active_builders[layer]
@@ -185,8 +181,6 @@ class RigState:
         """Remove an active builder"""
         if layer in self._active_builders:
             builder = self._active_builders[layer]
-
-            print(f"DEBUG: Removing builder {layer}, has_reverted={builder.lifecycle.has_reverted()}, will_bake={builder.config.get_effective_bake()}")
 
             # If bake=true, merge values into base
             if builder.config.get_effective_bake():
@@ -214,10 +208,7 @@ class RigState:
         """Merge builder's final aggregated value into base state"""
         # If builder has reverted, don't bake (it's already back to base)
         if builder.lifecycle.has_reverted():
-            print(f"DEBUG: Builder has reverted, NOT baking")
             return
-
-        print(f"DEBUG: Baking builder - property={builder.config.property}, operator={builder.config.operator}")
 
         # Get aggregated value (includes own value + children)
         current_value = builder.get_current_value()
@@ -448,15 +439,12 @@ class RigState:
         offset_delta = position_offset - self._last_position_offset
 
         if offset_delta.x != 0 or offset_delta.y != 0:
-            print(f"DEBUG POS: pos={pos}, _base_pos={self._base_pos}, position_offset={position_offset}")
-            print(f"DEBUG POS: _last_position_offset={self._last_position_offset}, offset_delta={offset_delta}")
             # Apply position offset directly without subpixel adjuster
             # Position changes are absolute targets, not velocity-based movement
             self._internal_pos = Vec2(
                 self._internal_pos.x + offset_delta.x,
                 self._internal_pos.y + offset_delta.y
             )
-            print(f"DEBUG POS: _internal_pos after={self._internal_pos}")
 
         self._last_position_offset = position_offset
 
@@ -499,6 +487,7 @@ class RigState:
                 self._last_manual_movement_time = None
 
         return False
+
     def _update_frame(self):
         """Update all active builders and move mouse"""
         now = time.perf_counter()
@@ -518,13 +507,10 @@ class RigState:
         for layer, builder in list(self._active_builders.items()):
             still_active = builder.update(dt)
             if not still_active:
-                print(f"DEBUG: Builder {layer} completed, will be removed. is_complete={builder.lifecycle.is_complete()}, should_gc={builder.lifecycle.should_be_garbage_collected()}")
                 completed.append(layer)
             else:
                 # Debug: why is it still active?
                 phase, progress = builder.lifecycle.update(0)
-                if builder.config.property == "pos":
-                    print(f"DEBUG: Position builder {layer} still active. phase={phase}, progress={progress:.2f}, is_complete={builder.lifecycle.is_complete()}")
 
         for layer in completed:
             self.remove_builder(layer)
@@ -565,11 +551,9 @@ class RigState:
             self._last_frame_time = None
             # Sync to actual mouse position when starting (handles manual movements)
             current_mouse = Vec2(*ctrl.mouse_pos())
-            print(f"DEBUG FRAME START: current_mouse={current_mouse}")
             self._internal_pos = current_mouse
             self._base_pos = current_mouse
             self._last_position_offset = Vec2(0, 0)
-            print(f"DEBUG FRAME START: _internal_pos={self._internal_pos}, _base_pos={self._base_pos}")
 
     def _stop_frame_loop(self):
         """Stop the frame loop"""
@@ -730,7 +714,7 @@ class RigState:
             builder._execute()
 
     def layer(self, layer_name: str) -> Optional['RigState.LayerState']:
-        """Get state information for a specific layer
+        """Get state information for a specific ---layer
 
         Returns a LayerState object with the layer's current state, or None if not active.
 
