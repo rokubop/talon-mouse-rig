@@ -47,6 +47,8 @@ class RigState:
         self._last_frame_time: Optional[float] = None
         self._subpixel_adjuster = SubpixelAdjuster()
         self._last_position_offset: Vec2 = Vec2(0, 0)
+        # Track our internal position with subpixel precision
+        self._internal_pos: Vec2 = Vec2(*ctrl.mouse_pos())
 
         # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
@@ -235,14 +237,24 @@ class RigState:
             # current_value is already the final direction (operation already applied in target_value)
             self._base_direction = current_value
         elif prop == "pos":
-            # Update base position to current mouse position
-            # This resets the reference point after position animation completes
-            self._base_pos = Vec2(*ctrl.mouse_pos())
+            # For position.to(), snap to the exact target position
+            if operator == "to":
+                # Use the config.value which is the absolute target position
+                target_pos = builder.config.value
+                print(f"DEBUG BAKE: operator=to, config.value={target_pos}, type={type(target_pos)}")
+                self._base_pos = Vec2(target_pos[0], target_pos[1]) if isinstance(target_pos, (tuple, list)) else target_pos
+                # Snap internal position to exact target
+                self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
+                print(f"DEBUG BAKE: Snapped to _base_pos={self._base_pos}, _internal_pos={self._internal_pos}")
+            else:
+                # For add/by operations, use current internal position
+                self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
             # Reset position offset tracking
             self._last_position_offset = Vec2(0, 0)
 
         # Ensure frame loop is running if there's movement
         if self._has_movement():
+            self._ensure_frame_loop_running()
             self._ensure_frame_loop_running()
 
     def _bake_property(self, property_name: str, layer: Optional[str] = None):
@@ -415,6 +427,33 @@ class RigState:
 
         return (pos, speed, direction)
 
+    def _apply_velocity_movement(self, speed: float, direction: Vec2):
+        """Apply velocity-based movement to internal position"""
+        if speed == 0:
+            return
+
+        velocity = direction * speed
+        dx_int, dy_int = self._subpixel_adjuster.adjust(velocity.x, velocity.y)
+        self._internal_pos = Vec2(self._internal_pos.x + dx_int, self._internal_pos.y + dy_int)
+
+    def _apply_position_offset(self, pos: Vec2):
+        """Apply position offset to internal position"""
+        position_offset = pos - self._base_pos
+        offset_delta = position_offset - self._last_position_offset
+
+        if offset_delta.x != 0 or offset_delta.y != 0:
+            print(f"DEBUG POS: pos={pos}, _base_pos={self._base_pos}, position_offset={position_offset}")
+            print(f"DEBUG POS: _last_position_offset={self._last_position_offset}, offset_delta={offset_delta}")
+            # Apply position offset directly without subpixel adjuster
+            # Position changes are absolute targets, not velocity-based movement
+            self._internal_pos = Vec2(
+                self._internal_pos.x + offset_delta.x,
+                self._internal_pos.y + offset_delta.y
+            )
+            print(f"DEBUG POS: _internal_pos after={self._internal_pos}")
+
+        self._last_position_offset = position_offset
+
     def _update_frame(self):
         """Update all active builders and move mouse"""
         now = time.perf_counter()
@@ -442,31 +481,18 @@ class RigState:
         for layer in completed:
             self.remove_builder(layer)
 
-        # Compute current state
         pos, speed, direction = self._compute_current_state()
 
-        # Calculate velocity-based movement delta
-        velocity = direction * speed
-        position_delta = Vec2(velocity.x, velocity.y)
+        self._apply_velocity_movement(speed, direction)
+        self._apply_position_offset(pos)
 
-        # Apply subpixel adjustment
-        dx_int, dy_int = self._subpixel_adjuster.adjust(position_delta.x, position_delta.y)
+        new_x = int(round(self._internal_pos.x))
+        new_y = int(round(self._internal_pos.y))
 
-        # Get current mouse position
         current_x, current_y = ctrl.mouse_pos()
-        new_x = current_x + dx_int
-        new_y = current_y + dy_int
-
-        # Apply position offset (only the CHANGE since last frame)
-        position_offset = pos - self._base_pos
-        offset_delta = position_offset - self._last_position_offset
-        new_x += int(round(offset_delta.x))
-        new_y += int(round(offset_delta.y))
-        self._last_position_offset = position_offset
-
-        # Move cursor if position changed
         if new_x != current_x or new_y != current_y:
             mouse_move(new_x, new_y)
+
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
@@ -474,6 +500,13 @@ class RigState:
             # 60 FPS = ~16.67ms per frame
             self._cron_job = cron.interval("16ms", self._update_frame)
             self._last_frame_time = None
+            # Sync to actual mouse position when starting (handles manual movements)
+            current_mouse = Vec2(*ctrl.mouse_pos())
+            print(f"DEBUG FRAME START: current_mouse={current_mouse}")
+            self._internal_pos = current_mouse
+            self._base_pos = current_mouse
+            self._last_position_offset = Vec2(0, 0)
+            print(f"DEBUG FRAME START: _internal_pos={self._internal_pos}, _base_pos={self._base_pos}")
 
     def _stop_frame_loop(self):
         """Stop the frame loop"""
@@ -482,6 +515,11 @@ class RigState:
             self._cron_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
+            # Sync to actual mouse position when stopping
+            current_mouse = Vec2(*ctrl.mouse_pos())
+            self._internal_pos = current_mouse
+            self._base_pos = current_mouse
+            self._last_position_offset = Vec2(0, 0)
 
     def _has_movement(self) -> bool:
         """Check if there's any movement happening (base speed non-zero)"""
