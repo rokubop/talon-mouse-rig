@@ -34,7 +34,7 @@ class Actions:
         """Basic right movement - base layer"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed(5)
+        rig.speed(5).over(1000)
         # rig.layer("hello").direction(1, 0)
         # rig.layer("hello").speed(5)
 

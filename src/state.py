@@ -153,6 +153,12 @@ class RigState:
                 self._layer_orders[layer] = self._next_auto_order
                 self._next_auto_order += 1
 
+        # Start frame loop if not running (BEFORE checking lifecycle completion)
+        # This ensures _base_pos is synced to current mouse position before builder calculates offsets
+        if not builder.lifecycle.is_complete():
+            print(f"DEBUG: Builder {layer} has lifecycle, starting frame loop. over_ms={builder.config.over_ms}, revert_ms={builder.config.revert_ms}")
+            self._ensure_frame_loop_running()
+
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
             print(f"DEBUG: Builder {layer} completes instantly, anonymous={builder.config.is_anonymous()}")
@@ -170,10 +176,6 @@ class RigState:
                 # User/final layers without lifecycle should stay active
                 pass
             return
-
-        # Start frame loop if not running
-        print(f"DEBUG: Builder {layer} has lifecycle, starting frame loop. over_ms={builder.config.over_ms}, revert_ms={builder.config.revert_ms}")
-        self._ensure_frame_loop_running()
 
     def remove_builder(self, layer: str):
         """Remove an active builder"""
@@ -202,9 +204,7 @@ class RigState:
                 queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
             self._queue_manager.on_builder_complete(queue_key)
 
-        # Stop frame loop if no active builders AND no movement
-        if len(self._active_builders) == 0 and not self._has_movement():
-            self._stop_frame_loop()
+        # Frame loop will be stopped by _update_frame after final mouse movement
 
     def _bake_builder(self, builder: 'ActiveBuilder'):
         """Merge builder's final aggregated value into base state"""
@@ -254,7 +254,6 @@ class RigState:
 
         # Ensure frame loop is running if there's movement
         if self._has_movement():
-            self._ensure_frame_loop_running()
             self._ensure_frame_loop_running()
 
     def _bake_property(self, property_name: str, layer: Optional[str] = None):
@@ -493,6 +492,11 @@ class RigState:
         if new_x != current_x or new_y != current_y:
             mouse_move(new_x, new_y)
 
+        # Stop frame loop AFTER mouse movement if no active builders AND no movement
+        # This ensures final position is applied before stopping
+        if len(self._active_builders) == 0 and not self._has_movement():
+            self._stop_frame_loop()
+
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
@@ -515,10 +519,15 @@ class RigState:
             self._cron_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
-            # Sync to actual mouse position when stopping
+            # Sync internal position to actual mouse position when stopping
+            # But keep _base_pos as-is (it was set by the last bake)
             current_mouse = Vec2(*ctrl.mouse_pos())
             self._internal_pos = current_mouse
-            self._base_pos = current_mouse
+            # Only update _base_pos if it's significantly different from current mouse
+            # This handles manual mouse movements while preserving exact baked positions
+            diff = abs(current_mouse.x - self._base_pos.x) + abs(current_mouse.y - self._base_pos.y)
+            if diff > 2:  # More than 2 pixels difference suggests manual movement
+                self._base_pos = current_mouse
             self._last_position_offset = Vec2(0, 0)
 
     def _has_movement(self) -> bool:
