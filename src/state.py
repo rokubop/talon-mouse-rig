@@ -52,18 +52,13 @@ class RigState:
         self._throttle_times: dict[str, float] = {}
 
         # Base layer counter for unique base layer names
-        self._base_counter: int = 0
-        self._final_counter: int = 0
-
     def _generate_base_layer_name(self) -> str:
-        """Generate unique base layer name for base operations"""
-        self._base_counter += 1
-        return f"__base_{self._base_counter}"
+        """Return base layer name"""
+        return "__base__"
 
     def _generate_final_layer_name(self) -> str:
-        """Generate unique final layer name for final operations"""
-        self._final_counter += 1
-        return f"__final_{self._final_counter}"
+        """Return final layer name"""
+        return "__final__"
 
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
@@ -426,8 +421,15 @@ class RigState:
         # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
         completed = []
         for layer, builder in list(self._active_builders.items()):
-            if not builder.update(dt):
+            still_active = builder.update(dt)
+            if not still_active:
+                print(f"DEBUG: Builder {layer} completed, will be removed. is_complete={builder.lifecycle.is_complete()}, should_gc={builder.lifecycle.should_be_garbage_collected()}")
                 completed.append(layer)
+            else:
+                # Debug: why is it still active?
+                phase, progress = builder.lifecycle.update(0)
+                if builder.config.property == "pos":
+                    print(f"DEBUG: Position builder {layer} still active. phase={phase}, progress={progress:.2f}, is_complete={builder.lifecycle.is_complete()}")
 
         for layer in completed:
             self.remove_builder(layer)

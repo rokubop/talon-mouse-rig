@@ -29,40 +29,22 @@ from .builder import RigBuilder
 _global_state: Optional[RigState] = None
 
 
-# Auto-reload: watch for file changes and clear state
-try:
-    from talon import fs
-
-    def _on_file_change(path, flags):
-        """Clear state when source files change"""
-        if path.endswith('.py') and 'src' in path:
-            reload_rig()
-
-    # Watch the src directory
-    _src_dir = os.path.dirname(__file__)
-    fs.watch(_src_dir, _on_file_change)
-except Exception as e:
-    # If talon.fs not available (running outside Talon), skip auto-reload
-    print(f"Auto-reload disabled: {e}")
-
-
 def _get_global_state() -> RigState:
     """Get or create the global rig state"""
     global _global_state
     if _global_state is None:
-        print("DEBUG: _global_state is None, creating new RigState")
         _global_state = RigState()
-    else:
-        print(f"DEBUG: Reusing existing _global_state, counter={_global_state._base_counter}, active_builders={len(_global_state._active_builders)}")
     return _global_state
 
 
 def reload_rig():
-    """Clear the rig state to pick up code changes
+    """Clear the rig state and touch all src files to force Talon reload
 
-    Talon auto-reloads Python files when you save them.
-    This just clears the cached state so the next rig() call
-    will create a fresh instance with the new code.
+    Manually triggers reload by:
+    1. Stopping active movements and clearing state
+    2. Touching all Python files in src/ to trigger Talon's file watcher
+
+    Call this manually when you want to reload code changes.
     """
     global _global_state
 
@@ -74,7 +56,22 @@ def reload_rig():
             print(f"Error stopping frame loop: {e}")
         _global_state = None
 
-    print("✓ Rig state cleared - next rig() call will use reloaded code")
+    # Touch all Python files in src/ to trigger Talon's file watcher
+    src_dir = os.path.dirname(__file__)
+    touched_count = 0
+    for filename in os.listdir(src_dir):
+        if filename.endswith('.py'):
+            filepath = os.path.join(src_dir, filename)
+            try:
+                # Touch the file by updating its modification time
+                import time
+                os.utime(filepath, None)  # Updates to current time
+                touched_count += 1
+            except Exception as e:
+                print(f"Error touching {filename}: {e}")
+
+    print(f"✓ Rig state cleared and {touched_count} files touched for reload")
+
 class Rig:
     """Main entry point for mouse rig operations
 

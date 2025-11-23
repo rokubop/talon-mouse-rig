@@ -114,7 +114,7 @@ class RigBuilder:
 
     @property
     def is_anonymous(self) -> bool:
-        """Check if this is an anonymous builder (base layer without operations)"""
+        """Check if this is an anonymous builder (base layer without user-defined name)"""
         return self.config.layer_name == "__base__"
 
     # ========================================================================
@@ -768,8 +768,11 @@ class ActiveBuilder:
         self.children = active_children
 
         # Should be removed if own lifecycle says garbage collect AND no children
-        own_active = not self.lifecycle.should_be_garbage_collected()
-        return own_active or len(self.children) > 0
+        should_gc = self.lifecycle.should_be_garbage_collected()
+        own_active = not should_gc
+        has_children = len(self.children) > 0
+
+        return own_active or has_children
 
     def _get_own_value(self) -> Any:
         """Get just this builder's own value (not including children)
