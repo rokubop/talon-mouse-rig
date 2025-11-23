@@ -453,12 +453,15 @@ class RigState:
 
         self._last_position_offset = position_offset
 
-    def _sync_to_manual_mouse_movement(self):
+    def _sync_to_manual_mouse_movement(self) -> bool:
         """Detect and sync to manual mouse movements by the user
 
         If the actual mouse position differs from our expected internal position,
         the user has manually moved the mouse. We sync our internal state to the
         new position so we don't fight against manual movements.
+        
+        Returns:
+            True if manual movement was detected, False otherwise
         """
         current_x, current_y = ctrl.mouse_pos()
         expected_x = int(round(self._internal_pos.x))
@@ -467,12 +470,17 @@ class RigState:
         # If mouse position differs from our internal position, user moved it manually
         if current_x != expected_x or current_y != expected_y:
             manual_move = Vec2(current_x, current_y)
+            
             # Update internal position to match manual movement
             self._internal_pos = manual_move
             # Update base position to match (this effectively "bakes" the manual movement)
             self._base_pos = manual_move
             # Reset position offset tracking
             self._last_position_offset = Vec2(0, 0)
+            
+            return True
+        
+        return False
 
 
     def _update_frame(self):
@@ -486,7 +494,11 @@ class RigState:
         self._last_frame_time = now
 
         # Sync to any manual mouse movements by the user
-        self._sync_to_manual_mouse_movement()
+        manual_movement_detected = self._sync_to_manual_mouse_movement()
+        
+        # If user manually moved mouse, don't apply rig movement this frame
+        if manual_movement_detected:
+            return
 
         # Update all builders, remove completed ones
         # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
