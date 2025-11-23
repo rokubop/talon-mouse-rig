@@ -42,7 +42,7 @@ class Actions:
         """Basic left movement"""
         rig = actions.user.mouse_rig()
         rig.direction(-1, 0)
-        rig.speed(5)
+        rig.speed(rig.state.speed or 3)
 
     def test_move_up():
         """Basic up movement`!"""
@@ -83,29 +83,36 @@ class Actions:
     def test_speed_set():
         """Set absolute speed"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(8)
+        # rig.direction(1, 0)
+        rig.speed(6)
 
     def test_speed_add():
         """Add to speed (accelerate)"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(3)
+        # rig.direction(1, 0)
+        # rig.speed(3)
         rig.speed.add(2)  # Accelerate to 5
 
     def test_speed_add_negative():
         """Decelerate by adding negative"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5)
+        # rig.direction(1, 0)
+        # rig.speed(5)
         rig.speed.add(-2)  # Slow to 3
 
     def test_speed_mul():
         """Multiply speed (double)"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(3)
+        # rig.direction(1, 0)
+        # rig.speed(3)
         rig.speed.mul(2)  # Double to 6
+
+    def test_speed_slow():
+        """Multiply speed (double)"""
+        rig = actions.user.mouse_rig()
+        # rig.direction(1, 0) *
+        # rig.speed(3)
+        rig.speed.div(2)  # Double to 6
 
     def test_speed_over():
         """Gradual speed change over time"""

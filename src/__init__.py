@@ -51,6 +51,9 @@ def reload_rig():
     if _global_state is not None:
         # Stop any active movements
         try:
+            # Stop movement first (sets base speed to 0)
+            _global_state.stop(transition_ms=0)
+            # Then stop the frame loop
             _global_state._stop_frame_loop()
         except Exception as e:
             print(f"Error stopping frame loop: {e}")
@@ -68,7 +71,7 @@ def reload_rig():
                 os.utime(filepath, None)  # Updates to current time
                 touched_count += 1
             except Exception as e:
-                print(f"Error touching {filename}: {e}")
+                print(f"Error updating {filename}: {e}")
 
     print(f"✓ Rig state cleared and {touched_count} files touched for reload")
 

@@ -55,6 +55,10 @@ class RigState:
 
         # Auto-order counter for layers without explicit order
         self._next_auto_order: int = 0
+
+        # Manual mouse movement timeout
+        self._last_manual_movement_time: Optional[float] = None
+        self._manual_movement_timeout_ms: float = 200  # Default 200ms delay
     def _generate_base_layer_name(self) -> str:
         """Return base layer name"""
         return "__base__"
@@ -237,15 +241,18 @@ class RigState:
             # current_value is already the final direction (operation already applied in target_value)
             self._base_direction = current_value
         elif prop == "pos":
-            # For position.to(), snap to the exact target position
+            # For position.to(), check if we should snap to exact target
             if operator == "to":
-                # Use the config.value which is the absolute target position
-                target_pos = builder.config.value
-                print(f"DEBUG BAKE: operator=to, config.value={target_pos}, type={type(target_pos)}")
-                self._base_pos = Vec2(target_pos[0], target_pos[1]) if isinstance(target_pos, (tuple, list)) else target_pos
-                # Snap internal position to exact target
-                self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
-                print(f"DEBUG BAKE: Snapped to _base_pos={self._base_pos}, _internal_pos={self._internal_pos}")
+                # Only snap to exact target if there's no velocity movement
+                # If there's velocity, use current position to avoid jumps
+                if self._base_speed == 0:
+                    # No velocity - snap to exact target position
+                    target_pos = builder.config.value
+                    self._base_pos = Vec2(target_pos[0], target_pos[1]) if isinstance(target_pos, (tuple, list)) else target_pos
+                    self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
+                else:
+                    # Velocity is active - use current position to avoid jump
+                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
             else:
                 # For add/by operations, use current internal position
                 self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
@@ -457,11 +464,10 @@ class RigState:
         """Detect and sync to manual mouse movements by the user
 
         If the actual mouse position differs from our expected internal position,
-        the user has manually moved the mouse. We sync our internal state to the
-        new position so we don't fight against manual movements.
-        
+        the user has manually moved the mouse.
+
         Returns:
-            True if manual movement was detected, False otherwise
+            True if we should skip rig movement (manual movement detected or in timeout), False otherwise
         """
         current_x, current_y = ctrl.mouse_pos()
         expected_x = int(round(self._internal_pos.x))
@@ -470,19 +476,29 @@ class RigState:
         # If mouse position differs from our internal position, user moved it manually
         if current_x != expected_x or current_y != expected_y:
             manual_move = Vec2(current_x, current_y)
-            
+
             # Update internal position to match manual movement
             self._internal_pos = manual_move
             # Update base position to match (this effectively "bakes" the manual movement)
             self._base_pos = manual_move
             # Reset position offset tracking
             self._last_position_offset = Vec2(0, 0)
-            
+
+            # Record time of manual movement
+            self._last_manual_movement_time = time.perf_counter()
+
             return True
-        
+
+        # Check if we're still in timeout period after manual movement
+        if self._last_manual_movement_time is not None:
+            elapsed_ms = (time.perf_counter() - self._last_manual_movement_time) * 1000
+            if elapsed_ms < self._manual_movement_timeout_ms:
+                return True  # Still in timeout, skip rig movement
+            else:
+                # Timeout expired, allow rig to take control again
+                self._last_manual_movement_time = None
+
         return False
-
-
     def _update_frame(self):
         """Update all active builders and move mouse"""
         now = time.perf_counter()
@@ -495,10 +511,6 @@ class RigState:
 
         # Sync to any manual mouse movements by the user
         manual_movement_detected = self._sync_to_manual_mouse_movement()
-        
-        # If user manually moved mouse, don't apply rig movement this frame
-        if manual_movement_detected:
-            return
 
         # Update all builders, remove completed ones
         # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
@@ -517,10 +529,20 @@ class RigState:
         for layer in completed:
             self.remove_builder(layer)
 
+        # If user manually moved mouse, skip applying rig movement this frame
+        # But we still updated the builders above so time progresses
+        if manual_movement_detected:
+            return
+
         pos, speed, direction = self._compute_current_state()
 
         self._apply_velocity_movement(speed, direction)
         self._apply_position_offset(pos)
+
+        # Update _base_pos to track accumulated position from velocity movement
+        # This ensures position offsets are calculated from the current actual position
+        # Otherwise position builders can "snap" at the end when they don't account for velocity
+        self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
 
         new_x = int(round(self._internal_pos.x))
         new_y = int(round(self._internal_pos.y))

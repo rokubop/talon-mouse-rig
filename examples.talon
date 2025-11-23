@@ -21,6 +21,7 @@ rig speed set: user.test_speed_set()
 rig speed add: user.test_speed_add()
 rig speed add negative: user.test_speed_add_negative()
 rig speed multiply: user.test_speed_mul()
+rig speed slow: user.test_speed_slow()
 rig speed over: user.test_speed_over()
 rig stop: user.test_stop()
 rig stop gradual: user.test_stop_gradual()
@@ -99,7 +100,7 @@ rig easing: user.test_easing()
 # 12. STATE ACCESS & BAKING
 # =========================================================================
 
-rig state read: user.test_state_read()
+rig state: user.test_state_read()
 rig bake: user.test_bake()
 
 # =========================================================================
