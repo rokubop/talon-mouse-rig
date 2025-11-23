@@ -1,1 +1,1 @@
-rig reload: user.mouse_rig_reload()
+rig [reload | reset]: user.mouse_rig_reload()
