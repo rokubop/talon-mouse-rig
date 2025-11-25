@@ -1,25 +1,3 @@
-"""Mouse Rig Test Examples - Comprehensive Test Scenarios
-
-This file provides extensive manual test scenarios organized by feature area.
-Each test is designed to verify specific functionality and edge cases.
-
-Test Categories:
-1. Basic Movement & Direction
-2. Speed Control (base layer)
-3. Layer System (PRD13)
-4. Incoming/Outgoing Phases
-5. Final Layer Operations
-6. Override Scope
-7. Lifecycle (over/hold/revert)
-8. Behavior Modes (replace/stack/queue/extend/throttle/ignore)
-9. Scale Operations
-10. Position Control
-11. Interpolation & Easing
-12. State Access & Baking
-13. Error Cases
-14. Real-World Scenarios
-"""
-
 from talon import Module, actions
 
 mod = Module()
@@ -128,7 +106,7 @@ class Actions:
     def test_stop_gradual():
         """Gradual stop over time"""
         rig = actions.user.mouse_rig()
-        rig.stop(500)  # Stop over 0.5 seconds
+        rig.stop(1000)  # Stop over 0.5 seconds
 
     # =========================================================================
     # 3. LAYER SYSTEM - BASE, USER LAYERS, FINAL
@@ -137,9 +115,15 @@ class Actions:
     def test_layer_basic():
         """Basic layer creation"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5)
-        rig.layer("modifier").incoming.speed.mul(2)  # User layer doubles speed
+        # rig.direction(1, 0)
+        # rig.speed(5)
+        rig.layer("modifier").direction.to(0, 1)  # User layer doubles speed
+        # rig.layer("modifier").incoming.speed.add(2)  # User layer doubles speed
+
+    def test_layer_basic_stop():
+        """Basic layer creation"""
+        rig = actions.user.mouse_rig()
+        rig.layer("modifier").revert()
 
     def test_layer_stacking():
         """Multiple layers stack"""

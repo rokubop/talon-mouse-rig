@@ -4,9 +4,7 @@ from talon import Module
 
 mod = Module()
 
-# Settings
-mod.setting(
-    "mouse_rig_frame_interval",
+mod.setting("mouse_rig_frame_interval",
     type=int,
     default=16,
     desc="Frame interval in milliseconds (default 16ms = ~60fps)"

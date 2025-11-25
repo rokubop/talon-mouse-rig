@@ -30,7 +30,8 @@ rig stop gradual: user.test_stop_gradual()
 # 3. LAYER SYSTEM - BASE, USER LAYERS, FINAL
 # =========================================================================
 
-rig layer basic: user.test_layer_basic()
+rig layer: user.test_layer_basic()
+rig layer stop: user.test_layer_basic_stop()
 rig layer stacking: user.test_layer_stacking()
 rig layer ordering: user.test_layer_ordering()
 rig layer replace: user.test_layer_lifecycle_replace()
@@ -135,5 +136,4 @@ rig position center: user.mouse_rig_pos_center()
 rig nudge right: user.mouse_rig_nudge_right()
 rig nudge down: user.mouse_rig_nudge_down()
 rig stop smooth: user.mouse_rig_stop_smooth()
-rig bake: user.mouse_rig_bake()
 rig show state: user.mouse_rig_show_state()

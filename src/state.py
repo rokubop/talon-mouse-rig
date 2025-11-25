@@ -177,13 +177,13 @@ class RigState:
                 pass
             return
 
-    def remove_builder(self, layer: str):
+    def remove_builder(self, layer: str, bake: bool = False):
         """Remove an active builder"""
         if layer in self._active_builders:
             builder = self._active_builders[layer]
 
             # If bake=true, merge values into base
-            if builder.config.get_effective_bake():
+            if builder.config.get_effective_bake() or bake:
                 self._bake_builder(builder)
 
             del self._active_builders[layer]
@@ -810,7 +810,7 @@ class RigState:
     def bake_all(self):
         """Bake all active builders immediately"""
         for layer in list(self._active_builders.keys()):
-            self.remove_builder(layer)
+            self.remove_builder(layer, bake=True)
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear"):
         """Trigger revert on builder tree

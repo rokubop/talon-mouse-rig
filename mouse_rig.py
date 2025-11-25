@@ -22,7 +22,16 @@ class Actions:
         return get_rig()
 
     def mouse_rig_stop(ms: float = None, easing: str = None) -> None:
-        """Stop the mouse rig and remove all active layers"""
+        """
+        Alias for `rig.stop(ms, easing)`
+
+        `rig.stop()` - Stop the mouse rig and remove all layers
+
+        `rig.stop(1000)` - Flatten all layers, and then stop over 1000ms
+
+        Easing values - `"ease_in_out"`, `"linear"`, `"ease_out"`, `"ease_in"`
+        Also can numbers 2, 3, 4 at the end of the easing to increase power e.g. `"ease_in_out2"`
+        """
         rig = get_rig()
         rig.stop(ms, easing)
 
@@ -51,8 +60,5 @@ class Actions:
         settings.set("user.mouse_rig_scale", scale)
 
     def mouse_rig_reload() -> None:
-        """Reload rig modules to pick up code changes
-
-        Use this instead of restarting Talon when developing.
-        """
+        """Reload/reset rig. Useful for development"""
         reload_rig()
