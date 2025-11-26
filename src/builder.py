@@ -281,13 +281,13 @@ class RigBuilder:
         return self
 
     @property
-    def replace(self) -> BehaviorProxy:
-        """Replace behavior (cancel previous) - use .replace or .replace()"""
-        return BehaviorProxy(self, 'replace')
+    def reset(self) -> BehaviorProxy:
+        """Reset behavior (cancel previous) - use .reset or .reset()"""
+        return BehaviorProxy(self, 'reset')
 
-    def _set_replace(self) -> 'RigBuilder':
-        """Internal: Set replace behavior"""
-        self.config.behavior = "replace"
+    def _set_reset(self) -> 'RigBuilder':
+        """Internal: Set reset behavior"""
+        self.config.behavior = "reset"
         return self
 
     @property

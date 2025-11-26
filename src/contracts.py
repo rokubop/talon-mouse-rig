@@ -43,7 +43,7 @@ VALID_EASINGS = [
     'ease_in_4', 'ease_out_4', 'ease_in_out_4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp']
-VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'extend', 'throttle', 'ignore']
+VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']
 
 # Method signatures for validation
 METHOD_SIGNATURES = {
@@ -127,12 +127,12 @@ VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
     'final', 'override', 'incoming', 'outgoing',  # Layer accessors
-    'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
+    'stack', 'reset', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake',
-    'stack', 'replace', 'queue', 'extend', 'throttle', 'ignore',
+    'stack', 'reset', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
 
@@ -311,9 +311,9 @@ class LifecycleMethods(Protocol):
 
 
 class BehaviorMethods(Protocol):
-    """Contract for behavior modes (stack, replace, queue, etc.)"""
+    """Contract for behavior modes (stack, reset, queue, etc.)"""
     def stack(self, max_count: Optional[int] = None): ...
-    def replace(self): ...
+    def reset(self): ...
     def queue(self): ...
     def extend(self): ...
     def throttle(self, ms: float): ...
@@ -351,7 +351,7 @@ class BuilderConfig:
         self.has_incoming_outgoing: bool = False  # True for user layers, False for base/final
 
         # Behavior
-        self.behavior: Optional[str] = None  # stack, replace, queue, extend, throttle, ignore
+        self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle, ignore
         self.behavior_args: tuple = ()
 
         # Lifecycle timing
@@ -394,10 +394,10 @@ class BuilderConfig:
         if self.behavior is not None:
             return self.behavior
         # Default based on operator semantics:
-        # .to() = absolute value, should replace (anonymous only)
+        # .to() = absolute value, should reset (anonymous only)
         # .add()/.by()/.sub()/.mul()/.div() = relative, should stack
         if self.operator == "to":
-            return "replace"
+            return "reset"
         return "stack"
 
     def get_effective_bake(self) -> bool:

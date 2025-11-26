@@ -405,7 +405,7 @@ rig.final.speed.mul(2).over(1000)  # Can animate too!
 
 ### Preserved Functionality
 All existing layer behaviors are preserved in layers:
-- **Lifecycle methods**: `replace()`, `stack()`, `queue()`, `extend()`, `throttle()`, `ignore()`
+- **Lifecycle methods**: `reset()`, `stack()`, `queue()`, `extend()`, `throttle()`, `ignore()`
 - **Timing controls**: `.over()`, `.after()`, `.during()`
 - **Revert behavior**: Automatic cleanup when layer operations complete
 - **Order control**: `order` parameter for explicit layer sequencing
@@ -413,13 +413,13 @@ All existing layer behaviors are preserved in layers:
 **Example with lifecycle methods:**
 ```python
 # All existing patterns still work
-rig.layer("boost").replace().speed.add(50).over(1000)
+rig.layer("boost").reset().speed.add(50).over(1000)
 rig.layer("boost").stack().speed.add(20).over(500)
 rig.layer("boost").queue().speed.add(10).over(300)
 rig.layer("boost").throttle(100).speed.add(10)
 
 # With new has_incoming_outgoing operations
-rig.layer("boost").replace().incoming.speed.mul(2)
+rig.layer("boost").reset().incoming.speed.mul(2)
 rig.layer("boost").stack().outgoing.speed.mul(1.5)
 ```
 
@@ -430,10 +430,10 @@ rig.layer("boost").stack().outgoing.speed.mul(1.5)
    - `override` - Replacement behavior at a layer's position
 3. **Rename `layer()` to `layer()`** - Better semantic fit
 4. **Add has_incoming_outgoing/non-has_incoming_outgoing distinction** - User layers require explicit phases for `mul`
-5. **Preserve all existing functionality** - replace/stack/queue/extend/throttle/ignore/over/after/during still work
+5. **Preserve all existing functionality** - reset/stack/queue/extend/throttle/ignore/over/after/during still work
 
 **What stays the same:**
-- Layer lifecycle methods (replace, stack, queue, extend, throttle, ignore)
+- Layer lifecycle methods (reset, stack, queue, extend, throttle, ignore)
 - Timing controls (over, after, during)
 - Automatic revert behavior
 - Order parameter

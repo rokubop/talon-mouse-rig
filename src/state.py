@@ -95,8 +95,8 @@ class RigState:
         if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
             existing = self._active_builders[layer]
 
-            if behavior == "replace":
-                # Replace entire builder
+            if behavior == "reset":
+                # Reset entire builder
                 self.remove_builder(layer)
             elif behavior == "extend":
                 # Extend hold duration of parent
@@ -124,7 +124,7 @@ class RigState:
                 return
 
         # Base/final layer operations
-        if behavior == "replace" and layer in ("__base__", "__final__"):
+        if behavior == "reset" and layer in ("__base__", "__final__"):
             # For .to() operator, cancel all base/final builders with same property
             if builder.config.property:
                 layers_to_remove = [
@@ -405,7 +405,15 @@ class RigState:
                 # Multiply direction components
                 direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif operator == "to":
-                direction = current_value
+                # Treat .to() on a user layer as a contributor to direction
+                # (additive) unless the layer explicitly used override scope
+                # which is handled above. We add the layer's vector and
+                # re-normalize to produce the resulting direction.
+                try:
+                    direction = (direction + current_value).normalized()
+                except Exception:
+                    # Fallback to direct set if types are unexpected
+                    direction = current_value
             elif operator in ("add", "by"):
                 # Apply rotation
                 direction = current_value  # Already computed as rotated direction

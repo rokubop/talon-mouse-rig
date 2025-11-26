@@ -114,7 +114,7 @@ class Rig:
 
     @property
     def override(self):
-        """Override scope accessor - for base layer (ignore accumulated, replace)"""
+        """Override scope accessor - for base layer (ignore accumulated, reset)"""
         return RigBuilder(self._state).override
 
     @property
@@ -152,9 +152,9 @@ class Rig:
         return _BehaviorAccessor(self._state, "stack")
 
     @property
-    def replace(self):
-        """Replace behavior accessor"""
-        return _BehaviorAccessor(self._state, "replace")
+    def reset(self):
+        """Reset behavior accessor"""
+        return _BehaviorAccessor(self._state, "reset")
 
     @property
     def queue(self):

@@ -34,7 +34,7 @@ rig layer: user.test_layer_basic()
 rig layer stop: user.test_layer_basic_stop()
 rig layer stacking: user.test_layer_stacking()
 rig layer ordering: user.test_layer_ordering()
-rig layer replace: user.test_layer_lifecycle_replace()
+rig layer reset: user.test_layer_lifecycle_reset()
 rig layer stack: user.test_layer_lifecycle_stack()
 
 # =========================================================================

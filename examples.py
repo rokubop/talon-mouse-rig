@@ -117,7 +117,7 @@ class Actions:
         rig = actions.user.mouse_rig()
         # rig.direction(1, 0)
         # rig.speed(5)
-        rig.layer("modifier").direction.to(0, 1)  # User layer doubles speed
+        rig.layer("modifier").speed.to(0)  # User layer doubles speed
         # rig.layer("modifier").incoming.speed.add(2)  # User layer doubles speed
 
     def test_layer_basic_stop():
@@ -141,12 +141,12 @@ class Actions:
         rig.layer("first", order=1).incoming.speed.add(5)  # Runs first
         rig.layer("second", order=2).incoming.speed.mul(2)  # Runs second
 
-    def test_layer_lifecycle_replace():
-        """Layer lifecycle - replace"""
+    def test_layer_lifecycle_reset():
+        """Layer lifecycle - reset"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.speed(10)  # Replace speed
+        rig.layer("test").incoming.speed(10)  # Reset speed
 
     def test_layer_lifecycle_stack():
         """Layer lifecycle - stack"""
@@ -221,11 +221,11 @@ class Actions:
     # =========================================================================
 
     def test_override_speed():
-        """Override scope - replace without stacking"""
+        """Override scope - reset without stacking"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.override.speed(15)  # Replace completely
+        rig.layer("test").incoming.override.speed(15)  # Reset completely
 
     def test_override_direction():
         """Override direction"""
