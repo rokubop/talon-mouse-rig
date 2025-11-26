@@ -45,7 +45,7 @@ class Actions:
         rig = actions.user.mouse_rig()
         # rig.direction(1, 0)  # Start right
         # rig.speed(5)
-        rig.direction.by(90)  # Rotate 90° clockwise
+        rig.direction.by(90).over(1000)  # Rotate 90° clockwise
 
     def test_reverse():
         """Reverse direction (180° turn)"""

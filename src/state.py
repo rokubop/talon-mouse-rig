@@ -344,9 +344,8 @@ class RigState:
         for builder in final_builders:
             pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
 
-        # Combine speed and direction into vector
-        vector = direction * speed
-        return (pos, speed, direction, vector)
+
+        return (pos, speed, direction)
 
     def _apply_layer(
         self,
@@ -378,9 +377,9 @@ class RigState:
                 speed *= current_value
             elif operator == "to":
                 if blend_mode == "override":
-                    speed = current_value  # override: ignore previous
+                    speed = current_value
                 else:
-                    speed += current_value  # contributor: add to accumulated
+                    speed += current_value
             elif operator in ("add", "by"):
                 speed += current_value
             elif operator == "sub":
@@ -399,10 +398,10 @@ class RigState:
                 direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif operator == "to":
                 if blend_mode == "override":
-                    direction = current_value  # override: ignore previous
+                    direction = current_value
                 else:
                     try:
-                        direction = (direction + current_value).normalized()  # contributor: add to accumulated
+                        direction = (direction + current_value).normalized()
                     except Exception:
                         direction = current_value
             elif operator in ("add", "by"):
@@ -428,11 +427,13 @@ class RigState:
                 direction = (direction - current_value.normalized()).normalized()
 
         elif prop == "pos":
-            # For position, both "to" and "add/by" work with offsets from base
-            # position.to() stores target_value as offset from base
-            # position.by() stores target_value as offset from base
-            # So both are applied by adding the offset
-            pos = pos + current_value
+            if operator == "to":
+                if blend_mode == "override":
+                    pos = current_value
+                else:
+                    pos = pos + current_value
+            elif operator in ("add", "by"):
+                pos = pos + current_value
 
         return pos, speed, direction
 

@@ -22,8 +22,7 @@ class Actions:
         return get_rig()
 
     def mouse_rig_stop(ms: float = None, easing: str = None) -> None:
-        """
-        Alias for `rig.stop(ms, easing)`
+        """Alias for `rig.stop(ms, easing)`
 
         `rig.stop()` - Stop the mouse rig and remove all layers
 
