@@ -217,7 +217,11 @@ class RigState:
         prop = builder.config.property
         operator = builder.config.operator
 
-        if prop == "speed":
+        if prop == "vector":
+            # Decompose vector into speed and direction
+            self._base_speed = current_value.magnitude()
+            self._base_direction = current_value.normalized()
+        elif prop == "speed":
             if operator == "to":
                 self._base_speed = current_value
             elif operator in ("add", "by"):
@@ -274,7 +278,10 @@ class RigState:
             # Bake current computed value for this property
             current_value = getattr(self, property_name)
 
-            if property_name == "speed":
+            if property_name == "vector":
+                self._base_speed = current_value.magnitude()
+                self._base_direction = current_value.normalized()
+            elif property_name == "speed":
                 self._base_speed = current_value
             elif property_name == "direction":
                 self._base_direction = current_value
@@ -337,7 +344,9 @@ class RigState:
         for builder in final_builders:
             pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
 
-        return (pos, speed, direction)
+        # Combine speed and direction into vector
+        vector = direction * speed
+        return (pos, speed, direction, vector)
 
     def _apply_layer(
         self,
@@ -403,6 +412,21 @@ class RigState:
             elif operator == "scale":
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
 
+        elif prop == "vector":
+            if operator == "to":
+                if blend_mode == "override":
+                    speed = current_value.magnitude()
+                    direction = current_value.normalized()
+                else:
+                    speed += current_value.magnitude()
+                    direction = (direction + current_value.normalized()).normalized()
+            elif operator in ("add", "by"):
+                speed += current_value.magnitude()
+                direction = (direction + current_value.normalized()).normalized()
+            elif operator == "sub":
+                speed -= current_value.magnitude()
+                direction = (direction - current_value.normalized()).normalized()
+
         elif prop == "pos":
             # For position, both "to" and "add/by" work with offsets from base
             # position.to() stores target_value as offset from base
@@ -410,7 +434,7 @@ class RigState:
             # So both are applied by adding the offset
             pos = pos + current_value
 
-        return (pos, speed, direction)
+        return pos, speed, direction
 
     def _apply_velocity_movement(self, speed: float, direction: Vec2):
         """Apply velocity-based movement to internal position"""

@@ -393,3 +393,24 @@ def _slerp(v1: Vec2, v2: Vec2, t: float) -> Vec2:
     new_y = v1.x * sin_a + v1.y * cos_a
 
     return Vec2(new_x, new_y).normalized()
+
+
+def calculate_vector_transition(
+    current: Vec2,
+    target: Vec2,
+    progress: float
+) -> Vec2:
+    """Calculate the interpolated vector value during a transition.
+
+    Args:
+        current: Current vector value
+        target: Target vector value
+        progress: Transition progress [0, 1]
+
+    Returns:
+        Interpolated vector value
+    """
+    interpolated_speed = lerp(current.magnitude(), target.magnitude(), progress)
+    interpolated_direction = lerp(current.normalized(), target.normalized(), progress).normalized()
+
+    return interpolated_direction * interpolated_speed

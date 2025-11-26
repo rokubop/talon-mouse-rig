@@ -124,3 +124,26 @@ def calculate_position_by_duration(
     """
     distance = offset.magnitude()
     return calculate_duration_from_rate(distance, rate)
+
+
+def calculate_vector_duration(
+    current: Vec2,
+    target: Vec2,
+    speed_rate: float,
+    direction_rate: float
+) -> float:
+    """Calculate duration for vector transition based on speed and direction rates.
+
+    Args:
+        current: Current vector value
+        target: Target vector value
+        speed_rate: Speed rate in units/second
+        direction_rate: Direction rotation rate in degrees/second
+
+    Returns:
+        Duration in milliseconds
+    """
+    speed_duration = calculate_speed_duration(current.magnitude(), target.magnitude(), speed_rate)
+    direction_duration = calculate_direction_duration(current.normalized(), target.normalized(), direction_rate)
+
+    return max(speed_duration, direction_duration)

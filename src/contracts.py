@@ -14,12 +14,13 @@ if TYPE_CHECKING:
 # VALIDATION SCHEMAS - Single source of truth for what's valid
 # ============================================================================
 
-VALID_PROPERTIES = ['pos', 'speed', 'direction']
+VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector']
 
 VALID_OPERATORS = {
     'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
     'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
-    'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale']
+    'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale'],
+    'vector': ['to', 'add', 'by', 'sub', 'bake']
 }
 
 """Valid blend modes (override replaces accumulated value at layer position)"""
