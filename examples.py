@@ -217,11 +217,11 @@ class Actions:
         rig.final.force(100, 100)  # Final force override
 
     # =========================================================================
-    # 6. OVERRIDE SCOPE
+    # 6. OVERRIDE BLEND_MODE
     # =========================================================================
 
     def test_override_speed():
-        """Override scope - reset without stacking"""
+        """Override blend_mode - reset without stacking"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)

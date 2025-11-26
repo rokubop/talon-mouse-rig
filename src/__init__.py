@@ -114,7 +114,7 @@ class Rig:
 
     @property
     def override(self):
-        """Override scope accessor - for base layer (ignore accumulated, reset)"""
+        """Override blend_mode accessor - for base layer (ignore accumulated, reset)"""
         return RigBuilder(self._state).override
 
     @property

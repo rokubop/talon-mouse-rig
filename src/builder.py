@@ -37,25 +37,25 @@ class BehaviorProxy:
 
 
 class OverrideProxy:
-    """Proxy for .override scope accessor (ignores accumulated value)"""
+    """Proxy for .override blend_mode accessor (ignores accumulated value)"""
 
     def __init__(self, builder: 'RigBuilder'):
         self.builder = builder
-        self.builder.config.scope = "override"
+        self.builder.config.blend_mode = "override"
 
     @property
     def pos(self) -> 'PropertyBuilder':
-        """Position property accessor with override scope"""
+        """Position property accessor with override blend_mode"""
         return PropertyBuilder(self.builder, "pos")
 
     @property
     def speed(self) -> 'PropertyBuilder':
-        """Speed property accessor with override scope"""
+        """Speed property accessor with override blend_mode"""
         return PropertyBuilder(self.builder, "speed")
 
     @property
     def direction(self) -> 'PropertyBuilder':
-        """Direction property accessor with override scope"""
+        """Direction property accessor with override blend_mode"""
         return PropertyBuilder(self.builder, "direction")
 
 
@@ -123,7 +123,7 @@ class RigBuilder:
 
     @property
     def override(self) -> 'OverrideProxy':
-        """Override scope accessor - ignore accumulated value, replace at this layer's position"""
+        """Override blend_mode accessor - ignore accumulated value, replace at this layer's position"""
         return OverrideProxy(self)
 
     @property

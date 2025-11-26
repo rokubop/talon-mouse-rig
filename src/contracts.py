@@ -22,8 +22,8 @@ VALID_OPERATORS = {
     'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale']
 }
 
-# Valid scopes (override replaces accumulated value at layer position)
-VALID_SCOPES = ['override']
+"""Valid blend modes (override replaces accumulated value at layer position)"""
+VALID_BLEND_MODES = ['contribute', 'override']
 
 # Valid phases (for mul operations on user layers)
 VALID_INCOMING_OUTGOING = ['incoming', 'outgoing']
@@ -342,7 +342,7 @@ class BuilderConfig:
         self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div, scale
         self.value: Any = None
-        self.scope: Optional[str] = None  # None or "override"
+        self.blend_mode: str = 'contribute'  # 'contribute' (default) or 'override'
         self.phase: Optional[str] = None  # None, "incoming", "outgoing" (for mul on user layers)
         self.order: Optional[int] = None  # Explicit layer ordering
 
@@ -496,7 +496,7 @@ class BuilderConfig:
             )
 
         # Check if mul on user layer requires phase
-        if self.has_incoming_outgoing and self.operator == 'mul' and self.scope != 'override' and self.phase is None:
+        if self.has_incoming_outgoing and self.operator == 'mul' and self.blend_mode != 'override' and self.phase is None:
             raise ConfigError(
                 f"User layer operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
                 f"  rig.layer('{self.layer_name}').incoming.{self.property}.mul(...)  # Multiply input before layer's work\n"

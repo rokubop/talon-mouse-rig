@@ -117,8 +117,8 @@ def test_api_examples():
     print("  rig.final.speed.mul(2)  # No phase needed on final!")
     print("  rig.final.speed.mul(2).over(1000)")
 
-    # Override scope
-    print("\nOverride scope:")
+    # Override blend_mode
+    print("\nOverride blend_mode:")
     print("  rig.layer('boost').speed.add(10)")
     print("  rig.layer('more').speed.add(5)")
     print("  rig.layer('cap').override.speed.to(100)  # Ignore previous, set to 100")

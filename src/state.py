@@ -358,67 +358,47 @@ class RigState:
         prop = builder.config.property
         operator = builder.config.operator
         phase = builder.config.phase
-        scope = builder.config.scope
+        blend_mode = builder.config.blend_mode
         current_value = builder.get_current_value()
 
-        # Check for override scope - ignore accumulated value
-        if scope == "override":
-            if prop == "speed":
-                if operator == "to":
-                    speed = current_value
-            elif prop == "direction":
-                if operator == "to":
-                    direction = current_value
-            elif prop == "pos":
-                if operator == "to":
-                    pos = current_value if isinstance(current_value, Vec2) else Vec2.from_tuple(current_value)
-            return (pos, speed, direction)
-
-        # Apply operation based on property and phase
+        # .to is a contributor by default, unless override blend_mode is provided
         if prop == "speed":
             if phase == "incoming":
-                # Multiply input before layer's operations
                 speed *= current_value
             elif phase == "outgoing":
-                # Multiply output after layer's operations
                 speed *= current_value
             elif operator == "to":
-                speed = current_value
+                if blend_mode == "override":
+                    speed = current_value  # override: ignore previous
+                else:
+                    speed += current_value  # contributor: add to accumulated
             elif operator in ("add", "by"):
                 speed += current_value
             elif operator == "sub":
                 speed -= current_value
             elif operator == "mul":
-                # mul on non-has_incoming_outgoing layers (base/final) is ordered operation
                 speed *= current_value
             elif operator == "div":
                 speed /= current_value if current_value != 0 else 1
             elif operator == "scale":
-                # Scale is a retroactive multiplier
                 speed *= current_value
 
         elif prop == "direction":
             if phase == "incoming":
-                # Multiply direction components
                 direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif phase == "outgoing":
-                # Multiply direction components
                 direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
             elif operator == "to":
-                # Treat .to() on a user layer as a contributor to direction
-                # (additive) unless the layer explicitly used override scope
-                # which is handled above. We add the layer's vector and
-                # re-normalize to produce the resulting direction.
-                try:
-                    direction = (direction + current_value).normalized()
-                except Exception:
-                    # Fallback to direct set if types are unexpected
-                    direction = current_value
+                if blend_mode == "override":
+                    direction = current_value  # override: ignore previous
+                else:
+                    try:
+                        direction = (direction + current_value).normalized()  # contributor: add to accumulated
+                    except Exception:
+                        direction = current_value
             elif operator in ("add", "by"):
-                # Apply rotation
-                direction = current_value  # Already computed as rotated direction
+                direction = current_value
             elif operator == "mul":
-                # mul on non-has_incoming_outgoing layers (base/final) is ordered operation
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
             elif operator == "scale":
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
