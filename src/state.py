@@ -33,11 +33,6 @@ class RigState:
         # Layer order tracking (layer_name -> order)
         self._layer_orders: dict[str, int] = {}
 
-        # Track operations per layer per property for processing
-        # (layer_name, property, phase) -> list of operations
-        # phase is one of: "incoming", "default", "outgoing"
-        self._layer_operations: dict[tuple[str, str, str], list] = {}
-
         # Queue system
         self._queue_manager = QueueManager()
 
@@ -300,11 +295,11 @@ class RigState:
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2]:
         """Compute current state by applying all active layers to base.
 
-        Computation order (per PRD13):
+        Computation order:
         1. Start with base values
-        2. Process base layer: incoming (no-op) → operations → outgoing (no-op)
-        3. Process user layers (in order): incoming → operations → outgoing
-        4. Process final layer: incoming (no-op) → operations → outgoing (no-op)
+        2. Process base layer operations
+        3. Process user layers (in order)
+        4. Process final layer operations
 
         Returns:
             (position, speed, direction)
@@ -354,7 +349,7 @@ class RigState:
         speed: float,
         direction: Vec2
     ) -> tuple[Vec2, float, Vec2]:
-        """Apply a layer: incoming → operations → outgoing
+        """Apply a layer's operations
 
         Args:
             builder: The builder to apply
@@ -365,17 +360,12 @@ class RigState:
         """
         prop = builder.config.property
         operator = builder.config.operator
-        phase = builder.config.phase
         blend_mode = builder.config.blend_mode
         current_value = builder.get_current_value()
 
         # .to is a contributor by default, unless override blend_mode is provided
         if prop == "speed":
-            if phase == "incoming":
-                speed *= current_value
-            elif phase == "outgoing":
-                speed *= current_value
-            elif operator == "to":
+            if operator == "to":
                 if blend_mode == "override":
                     speed = current_value
                 else:
@@ -392,11 +382,7 @@ class RigState:
                 speed *= current_value
 
         elif prop == "direction":
-            if phase == "incoming":
-                direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
-            elif phase == "outgoing":
-                direction = Vec2(direction.x * current_value.x, direction.y * current_value.y).normalized()
-            elif operator == "to":
+            if operator == "to":
                 if blend_mode == "override":
                     direction = current_value
                 else:
@@ -788,7 +774,6 @@ class RigState:
         # 2. Clear all active builders and layer tracking
         self._active_builders.clear()
         self._layer_orders.clear()
-        self._layer_operations.clear()
         self._throttle_times.clear()
 
         # 3. Decelerate speed to 0

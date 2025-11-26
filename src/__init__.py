@@ -16,7 +16,7 @@ Example usage:
 
     def sprint():
         r = rig()
-        r.layer("sprint").incoming.speed.mul(2).over(500).hold(3000).revert(500)
+        r.layer("sprint").speed.mul(2).over(500).hold(3000).revert(500)
 """
 
 from typing import Optional
@@ -116,18 +116,6 @@ class Rig:
     def override(self):
         """Override blend_mode accessor - for base layer (ignore accumulated, reset)"""
         return RigBuilder(self._state).override
-
-    @property
-    def incoming(self):
-        """Incoming phase accessor - not allowed on base layer"""
-        from .contracts import ConfigError
-        raise ConfigError("incoming phase not allowed on base layer (use on user layers with rig.layer())")
-
-    @property
-    def outgoing(self):
-        """Outgoing phase accessor - not allowed on base layer"""
-        from .contracts import ConfigError
-        raise ConfigError("outgoing phase not allowed on base layer (use on user layers with rig.layer())")
 
     # ========================================================================
     # LAYER METHOD

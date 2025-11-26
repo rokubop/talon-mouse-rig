@@ -59,29 +59,6 @@ class OverrideProxy:
         return PropertyBuilder(self.builder, "direction")
 
 
-class PhaseProxy:
-    """Proxy for .incoming and .outgoing phase accessors (for user layers)"""
-
-    def __init__(self, builder: 'RigBuilder', phase: str):
-        self.builder = builder
-        self.phase = phase  # "incoming" or "outgoing"
-
-    @property
-    def pos(self) -> 'PropertyBuilder':
-        """Position property accessor with phase"""
-        return PropertyBuilder(self.builder, "pos", phase=self.phase)
-
-    @property
-    def speed(self) -> 'PropertyBuilder':
-        """Speed property accessor with phase"""
-        return PropertyBuilder(self.builder, "speed", phase=self.phase)
-
-    @property
-    def direction(self) -> 'PropertyBuilder':
-        """Direction property accessor with phase"""
-        return PropertyBuilder(self.builder, "direction", phase=self.phase)
-
-
 class RigBuilder:
     """Universal builder for all mouse rig operations
 
@@ -96,14 +73,8 @@ class RigBuilder:
         # Auto-generate layer if anonymous (base layer)
         if layer is None:
             self.config.layer_name = rig_state._generate_base_layer_name()
-            self.config.has_incoming_outgoing = False
         else:
             self.config.layer_name = layer
-            # Determine if has_incoming_outgoing based on layer type
-            if layer == "__base__" or layer == "__final__":
-                self.config.has_incoming_outgoing = False
-            else:
-                self.config.has_incoming_outgoing = True  # User layers are has_incoming_outgoing
 
         # Set order if provided
         if order is not None:
@@ -125,24 +96,6 @@ class RigBuilder:
     def override(self) -> 'OverrideProxy':
         """Override blend_mode accessor - ignore accumulated value, replace at this layer's position"""
         return OverrideProxy(self)
-
-    @property
-    def incoming(self) -> 'PhaseProxy':
-        """Incoming phase accessor - pre-process operations on user layers"""
-        if not self.config.has_incoming_outgoing:
-            from .contracts import ConfigError
-            layer_type = "base" if self.config.is_base_layer() else "final"
-            raise ConfigError(f"incoming phase not allowed on {layer_type} layer")
-        return PhaseProxy(self, "incoming")
-
-    @property
-    def outgoing(self) -> 'PhaseProxy':
-        """Outgoing phase accessor - post-process operations on user layers"""
-        if not self.config.has_incoming_outgoing:
-            from .contracts import ConfigError
-            layer_type = "base" if self.config.is_base_layer() else "final"
-            raise ConfigError(f"outgoing phase not allowed on {layer_type} layer")
-        return PhaseProxy(self, "outgoing")
 
     # ========================================================================
     # PROPERTY ACCESSORS (return PropertyBuilder helper)
@@ -501,17 +454,12 @@ class RigBuilder:
 class PropertyBuilder:
     """Helper for property operations - thin wrapper that configures RigBuilder"""
 
-    def __init__(self, rig_builder: RigBuilder, property_name: str, phase: Optional[str] = None):
+    def __init__(self, rig_builder: RigBuilder, property_name: str):
         self.rig_builder = rig_builder
         self.property_name = property_name
-        self.phase = phase  # None, "incoming", or "outgoing"
 
         # Set property on builder
         self.rig_builder.config.property = property_name
-
-        # Set phase if provided
-        if phase is not None:
-            self.rig_builder.config.phase = phase
 
     def to(self, *args) -> RigBuilder:
         """Set absolute value"""
@@ -539,11 +487,10 @@ class PropertyBuilder:
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
-        """Multiply - requires incoming/outgoing phase for user layers"""
+        """Multiply"""
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
-        self.rig_builder.config.validate_phase_requirement()
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:

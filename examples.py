@@ -99,14 +99,14 @@ class Actions:
         rig.speed.add(10).over(1000)  # Accelerate to +10 over 1 second
 
     def test_stop():
-        """Stop completely"""
+        """Stop completely (immediate)"""
         rig = actions.user.mouse_rig()
         rig.stop()
 
     def test_stop_gradual():
-        """Gradual stop over time"""
+        """Gradual stop over time with easing"""
         rig = actions.user.mouse_rig()
-        rig.stop(1000)  # Stop over 0.5 seconds
+        rig.stop(1000, easing="ease_out")  # Stop over 1 second with ease_out
 
     # =========================================================================
     # 3. LAYER SYSTEM - BASE, USER LAYERS, FINAL
@@ -117,8 +117,7 @@ class Actions:
         rig = actions.user.mouse_rig()
         # rig.direction(1, 0)
         # rig.speed(5)
-        rig.layer("modifier").speed.to(0)  # User layer doubles speed
-        # rig.layer("modifier").incoming.speed.add(2)  # User layer doubles speed
+        rig.layer("modifier").speed.to(0)  # User layer sets speed
 
     def test_layer_basic_stop():
         """Basic layer creation"""
@@ -130,65 +129,65 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("layer1").incoming.speed.add(2)  # +2
-        rig.layer("layer2").incoming.speed.mul(1.5)  # ×1.5
+        rig.layer("layer1").speed.add(2)  # +2
+        rig.layer("layer2").speed.mul(1.5)  # ×1.5
 
     def test_layer_ordering():
         """Layer execution order"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("first", order=1).incoming.speed.add(5)  # Runs first
-        rig.layer("second", order=2).incoming.speed.mul(2)  # Runs second
+        rig.layer("first", order=1).speed.add(5)  # Runs first
+        rig.layer("second", order=2).speed.mul(2)  # Runs second
 
     def test_layer_lifecycle_reset():
         """Layer lifecycle - reset"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.speed(10)  # Reset speed
+        rig.layer("test").speed(10)  # Reset speed
 
     def test_layer_lifecycle_stack():
         """Layer lifecycle - stack"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.speed.stack(3)  # Add to existing
+        rig.layer("test").speed.stack(3)  # Add to existing
 
     # =========================================================================
-    # 4. PHASES - INCOMING VS OUTGOING
+    # 4. LAYER OPERATIONS
     # =========================================================================
 
-    def test_phase_incoming():
-        """Incoming phase - modify input to operations"""
+    def test_layer_multiply():
+        """Layer with multiply operation"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("input_mod").incoming.speed.mul(2)  # Affects operations
+        rig.layer("boost").speed.mul(2)  # Double speed
 
-    def test_phase_outgoing():
-        """Outgoing phase - modify output of operations"""
+    def test_layer_add():
+        """Layer with add operation"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("output_mod").outgoing.speed.add(3)  # Affects final result
+        rig.layer("boost").speed.add(3)  # Add 3 to speed
 
-    def test_phase_both():
-        """Both phases in same layer"""
+    def test_layer_combined():
+        """Multiple operations on same layer"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        layer = rig.layer("both")
-        layer.incoming.speed.mul(2)  # Double input
-        layer.outgoing.speed.add(1)  # Add 1 to output
+        layer = rig.layer("combined")
+        layer.speed.mul(2)  # Double speed
+        layer.speed.add(1)  # Then add 1
 
-    def test_phase_sequence():
-        """Multiple layers with phases"""
+    def test_layer_sequence():
+        """Multiple layers in sequence"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("first").incoming.speed.add(2)
-        rig.layer("second").outgoing.speed.mul(1.5)
+        rig.layer("first").speed.add(2)
+        rig.layer("second").speed.mul(1.5)
 
     # =========================================================================
     # 5. FINAL LAYER
@@ -199,7 +198,7 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.speed.mul(3)
+        rig.layer("test").speed.mul(3)
         rig.final.speed(10)  # Final override
 
     def test_final_direction():
@@ -208,13 +207,6 @@ class Actions:
         rig.direction(1, 0)
         rig.speed(5)
         rig.final.direction(0, 1)  # Force down
-
-    def test_final_force():
-        """Final layer force"""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5)
-        rig.final.force(100, 100)  # Final force override
 
     # =========================================================================
     # 6. OVERRIDE BLEND_MODE
@@ -225,86 +217,77 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.override.speed(15)  # Reset completely
+        rig.layer("test").override.speed(15)  # Reset completely
 
     def test_override_direction():
         """Override direction"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("test").incoming.override.direction(-1, 0)  # Force left
+        rig.layer("test").override.direction(-1, 0)  # Force left
 
     # =========================================================================
-    # 7. LIFECYCLE METHODS - QUEUE, EXTEND, THROTTLE, IGNORE
+    # 7. BEHAVIOR TYPES - QUEUE, EXTEND, THROTTLE, IGNORE
     # =========================================================================
 
-    def test_lifecycle_queue():
-        """Queue operations"""
+    def test_behavior_queue():
+        """Queue behavior - wait for current operation to finish"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5)
-        rig.layer("queued").incoming.speed.queue(8)  # Queue next
+        rig.layer("move").speed.to(10).over(1000)
+        rig.layer("move").speed.queue.to(5).over(500)  # Waits for first to finish
 
-    def test_lifecycle_extend():
-        """Extend operation duration"""
+    def test_behavior_extend():
+        """Extend behavior - extend hold duration"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5).over(1000)
-        rig.layer("ext").incoming.speed.extend(500)  # Add 500ms
+        rig.layer("boost").speed.add(5).hold(1000)
+        rig.layer("boost").speed.extend.hold(500)  # Adds 500ms to hold
 
-    def test_lifecycle_throttle():
-        """Throttle rapid changes"""
+    def test_behavior_throttle():
+        """Throttle behavior - rate limit updates"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.layer("throttled").incoming.speed.throttle(200)  # Max every 200ms
+        rig.layer("smooth").direction.by(10)
+        rig.layer("smooth").direction.throttle(200).by(10)  # Max every 200ms
 
-    def test_lifecycle_ignore():
-        """Ignore new operations"""
+    def test_behavior_ignore():
+        """Ignore behavior - ignore new operations while active"""
         rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5).over(1000)
-        rig.layer("lock").incoming.speed.ignore()  # Lock speed
+        rig.layer("lock").speed.to(10).over(1000)
+        rig.layer("lock").speed.ignore.to(5)  # Ignored while first operation active
 
     # =========================================================================
-    # 8. BEHAVIOR MODES - HOLD, RELEASE
+    # 8. HOLD - SUSTAIN VALUE AFTER TRANSITION
     # =========================================================================
 
     def test_hold():
-        """Hold value for duration"""
+        """Hold value for duration after transition"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed.add(5).over(1000).hold(2000)  # Hold for 2 seconds
-
-    def test_release():
-        """Release after duration"""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(10).release(1000)  # Release after 1 second
+        rig.speed.add(5).over(1000).hold(2000)  # Transition for 1s, hold for 2s
 
     # =========================================================================
-    # 9. SCALE - GLOBAL MULTIPLIER
+    # 9. SCALE - RETROACTIVE MULTIPLIER ON PROPERTIES
     # =========================================================================
 
     def test_scale():
-        """Scale all operations"""
+        """Scale a property operation"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed(5)
-        rig.scale(2)  # Double everything
-
-    def test_scale_add():
-        """Add to scale"""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        rig.speed(5)
-        rig.scale.add(0.5)  # Increase scale
+        rig.speed.add(5).scale(2)  # Adds 10 instead of 5
 
     def test_scale_layer():
         """Scale in layer"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("zoom").incoming.scale.mul(1.5)
+        rig.layer("zoom").speed.add(10).scale(1.5)  # Adds 15 instead of 10
+
+    def test_scale_final():
+        """Scale final layer"""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        rig.speed(5)
+        rig.layer("boost").speed.add(5)
+        rig.final.speed.add(0).scale(2)  # Scale all accumulated speed by 2
 
     # =========================================================================
     # 10. POSITION CONTROL
@@ -313,12 +296,12 @@ class Actions:
     def test_position_to():
         """Move to absolute position"""
         rig = actions.user.mouse_rig()
-        rig.position.to(500, 300).over(1000)  # 1 second transition
+        rig.pos.to(500, 300).over(1000)  # 1 second transition
 
     def test_position_by():
         """Move by relative amount"""
         rig = actions.user.mouse_rig()
-        rig.position.by(100, -50).over(500)  # Relative movement
+        rig.pos.by(100, -50).over(500)  # Relative movement
 
     # =========================================================================
     # 11. EASING & INTERPOLATION
@@ -328,7 +311,12 @@ class Actions:
         """Use easing function"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
-        rig.speed.add(10).over(1000).ease("ease_in_out")
+        rig.speed.add(10).over(1000, easing="ease_in_out")
+
+    def test_easing_revert():
+        """Easing on revert"""
+        rig = actions.user.mouse_rig()
+        rig.layer("boost").speed.add(10).over(500, easing="ease_out").hold(1000).revert(500, easing="ease_in")
 
     # =========================================================================
     # 12. STATE ACCESS & BAKING
@@ -347,29 +335,7 @@ class Actions:
         rig.bake()  # Lock current computed state
 
     # =========================================================================
-    # 13. ERROR CASES & EDGE CONDITIONS
-    # =========================================================================
-
-    def test_error_base_incoming():
-        """Base layer should not use incoming (error)"""
-        rig = actions.user.mouse_rig()
-        # This should raise error:
-        # rig.incoming.speed(5)
-
-    def test_error_final_incoming():
-        """Final layer should not use incoming (error)"""
-        rig = actions.user.mouse_rig()
-        # This should raise error:
-        # rig.final.incoming.speed(5)
-
-    def test_error_layer_mul_without_phase():
-        """User layer mul without phase (error)"""
-        rig = actions.user.mouse_rig()
-        # This should raise error:
-        # rig.layer("test").speed.mul(2)
-
-    # =========================================================================
-    # 14. REAL-WORLD SCENARIOS
+    # 13. REAL-WORLD SCENARIOS
     # =========================================================================
 
     def test_scenario_sprint():
@@ -377,14 +343,14 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(3)
-        rig.layer("sprint").incoming.speed.mul(3)  # 3x speed while active
+        rig.layer("sprint").speed.mul(3)  # 3x speed while active
 
     def test_scenario_precision():
         """Precision mode: hold for slower, finer control"""
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("precision").incoming.speed.mul(0.3)  # 30% speed
+        rig.layer("precision").speed.mul(0.3)  # 30% speed
 
     def test_scenario_acceleration_ramp():
         """Gradual acceleration ramp up"""
@@ -403,7 +369,7 @@ class Actions:
     def test_scenario_rubber_band():
         """Rubber band: snap back to center"""
         rig = actions.user.mouse_rig()
-        rig.position.to(960, 540).over(800).ease("ease_out")  # Snap to center
+        rig.pos.to(960, 540).over(800, easing="ease_out")  # Snap to center
 
     def test_scenario_orbit():
         """Orbit: rotate around point"""
@@ -417,9 +383,9 @@ class Actions:
         rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(5)
-        rig.layer("sprint", order=1).incoming.speed.mul(2)
-        rig.layer("precision", order=2).incoming.speed.mul(0.5)
-        rig.final.scale(1.2)  # Final 20% boost
+        rig.layer("sprint", order=1).speed.mul(2)
+        rig.layer("precision", order=2).speed.mul(0.5)
+        rig.final.speed.add(0).scale(1.2)  # Final 20% boost via scale
 
     def mouse_rig_pos_center():
         """Legacy: Move to center of screen"""

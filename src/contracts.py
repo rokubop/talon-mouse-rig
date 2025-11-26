@@ -26,14 +26,10 @@ VALID_OPERATORS = {
 """Valid blend modes (override replaces accumulated value at layer position)"""
 VALID_BLEND_MODES = ['contribute', 'override']
 
-# Valid phases (for mul operations on user layers)
-VALID_INCOMING_OUTGOING = ['incoming', 'outgoing']
-
 # Layer types
 LAYER_TYPES = {
-    '__base__': {'has_incoming_outgoing': False, 'order': float('-inf')},
-    '__final__': {'has_incoming_outgoing': False, 'order': float('inf')},
-    # User layers are has_incoming_outgoing=True by default
+    '__base__': {'order': float('-inf')},
+    '__final__': {'order': float('inf')},
 }
 
 VALID_EASINGS = [
@@ -127,7 +123,7 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
-    'final', 'override', 'incoming', 'outgoing',  # Layer accessors
+    'final', 'override',  # Layer accessors
     'stack', 'reset', 'queue', 'extend', 'throttle', 'ignore',
 ]
 
@@ -344,12 +340,10 @@ class BuilderConfig:
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div, scale
         self.value: Any = None
         self.blend_mode: str = 'contribute'  # 'contribute' (default) or 'override'
-        self.phase: Optional[str] = None  # None, "incoming", "outgoing" (for mul on user layers)
         self.order: Optional[int] = None  # Explicit layer ordering
 
         # Identity
         self.layer_name: Optional[str] = None  # Layer name (__base__, user name, __final__)
-        self.has_incoming_outgoing: bool = False  # True for user layers, False for base/final
 
         # Behavior
         self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle, ignore
@@ -471,37 +465,6 @@ class BuilderConfig:
             raise ConfigError(
                 f"Invalid operator {repr(self.operator)} for property {repr(self.property)}\n"
                 f"Valid operators for {self.property}: {valid_str}"
-            )
-
-    def validate_phase_requirement(self) -> None:
-        """Validate phase requirements based on layer type
-
-        Rules:
-        - User layers (has_incoming_outgoing): mul REQUIRES incoming or outgoing
-        - Base/final (non-has_incoming_outgoing): incoming/outgoing ERROR
-        - Base/final: mul allowed without phase (ordered operations)
-
-        Raises:
-            ConfigError: If phase rules violated
-        """
-        if not self.operator:
-            return
-
-        # Check if incoming/outgoing used on non-has_incoming_outgoing layers (base/final)
-        if (self.is_base_layer() or self.is_final_layer()) and self.phase is not None:
-            layer_type = "base" if self.is_base_layer() else "final"
-            raise ConfigError(
-                f"incoming/outgoing phases not allowed on {layer_type} layer.\n"
-                f"The {layer_type} layer uses ordered operations - operations execute in the order you call them.\n"
-                f"Use: rig.{'' if self.is_base_layer() else 'final.'}{self.property}.mul(...) directly"
-            )
-
-        # Check if mul on user layer requires phase
-        if self.has_incoming_outgoing and self.operator == 'mul' and self.blend_mode != 'override' and self.phase is None:
-            raise ConfigError(
-                f"User layer operations with .mul() require 'incoming' or 'outgoing' phase. Use:\n"
-                f"  rig.layer('{self.layer_name}').incoming.{self.property}.mul(...)  # Multiply input before layer's work\n"
-                f"  rig.layer('{self.layer_name}').outgoing.{self.property}.mul(...)  # Multiply output after layer's work"
             )
 
     def validate_easing(self, easing: str, context: str = "easing") -> None:
