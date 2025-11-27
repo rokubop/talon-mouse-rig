@@ -170,6 +170,10 @@ class RigBuilder:
             self.config.over_easing = easing
 
         self.config.over_interpolation = interpolation
+
+        # When .over() is called, this becomes asynchronous (frame loop execution)
+        self.config.is_synchronous = False
+
         self._lifecycle_stage = LifecyclePhase.OVER
         return self
 
@@ -208,6 +212,9 @@ class RigBuilder:
             self.config.revert_easing = easing
 
         self.config.revert_interpolation = interpolation
+
+        # When .revert() is called, this becomes asynchronous (frame loop execution)
+        self.config.is_synchronous = False
 
         self._lifecycle_stage = LifecyclePhase.REVERT
         return self
@@ -456,6 +463,11 @@ class PropertyBuilder:
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
+
+        # Position operations are synchronous by default (instant execution)
+        if self.rig_builder.config.property == "pos":
+            self.rig_builder.config.is_synchronous = True
+
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
@@ -463,6 +475,11 @@ class PropertyBuilder:
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
+
+        # Position operations are synchronous by default (instant execution)
+        if self.rig_builder.config.property == "pos":
+            self.rig_builder.config.is_synchronous = True
+
         return self.rig_builder
 
     def by(self, *args) -> RigBuilder:
@@ -671,6 +688,38 @@ class ActiveBuilder:
                 return Vec2.from_tuple(value)
 
         return current
+
+    def execute_synchronous(self):
+        """Execute this builder synchronously (instant, no animation)
+
+        Applies the operation immediately and updates internal state.
+        Only called for synchronous operations (no .over() or .revert()).
+        """
+        if self.config.property == "pos":
+            # Apply position operation immediately
+            current_value = self.target_value  # This is the offset for position
+
+            if self.config.operator == "to":
+                # For .to(), target_value is offset from current position
+                # Apply it to get to the target
+                target_pos = self.config.value
+                target_vec = Vec2.from_tuple(target_pos) if isinstance(target_pos, (tuple, list)) else target_pos
+                self.rig_state._internal_pos = target_vec
+                self.rig_state._base_pos = Vec2(target_vec.x, target_vec.y)
+            elif self.config.operator in ("add", "by"):
+                # For add/by, apply the offset
+                offset = Vec2.from_tuple(self.config.value) if isinstance(self.config.value, (tuple, list)) else self.config.value
+                self.rig_state._internal_pos = Vec2(
+                    self.rig_state._internal_pos.x + offset.x,
+                    self.rig_state._internal_pos.y + offset.y
+                )
+                self.rig_state._base_pos = Vec2(self.rig_state._internal_pos.x, self.rig_state._internal_pos.y)
+
+            # Move mouse immediately
+            from .core import mouse_move
+            mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
+
+        # Add other property types here as needed (speed, direction, etc.)
 
     def add_child(self, child: 'ActiveBuilder'):
         """Add a child builder to this parent

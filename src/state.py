@@ -37,7 +37,7 @@ class RigState:
         self._queue_manager = QueueManager()
 
         # Frame loop
-        self._cron_job: Optional[cron.CronJob] = None
+        self._frame_loop_job: Optional[cron.CronJob] = None
         self._last_frame_time: Optional[float] = None
         self._subpixel_adjuster = SubpixelAdjuster()
         self._last_position_offset: Vec2 = Vec2(0, 0)
@@ -158,13 +158,22 @@ class RigState:
 
         # Check if this builder completes instantly (no lifecycle)
         if builder.lifecycle.is_complete():
-            # Instant completion - bake immediately for anonymous layers
+            # For synchronous operations, execute immediately if frame loop isn't running
+            # If frame loop is active, it will handle the movement smoothly
+            if builder.config.is_synchronous and self._frame_loop_job is None:
+                builder.execute_synchronous()
+                # Synchronous execution already updated state, just cleanup
+                if builder.config.is_anonymous():
+                    del self._active_builders[layer]
+                    if layer in self._throttle_times:
+                        del self._throttle_times[layer]
+                return
+
+            # Non-synchronous instant completion (bake the value)
             if builder.config.is_anonymous():
                 if builder.config.get_effective_bake():
                     self._bake_builder(builder, removing_layer=layer)
-                # Remove from active set (it was added on line 134)
                 del self._active_builders[layer]
-                # Clean up throttle tracking
                 if layer in self._throttle_times:
                     del self._throttle_times[layer]
             else:
@@ -567,9 +576,9 @@ class RigState:
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
-        if self._cron_job is None:
+        if self._frame_loop_job is None:
             # 60 FPS = ~16.67ms per frame
-            self._cron_job = cron.interval("16ms", self._update_frame)
+            self._frame_loop_job = cron.interval("16ms", self._update_frame)
             self._last_frame_time = None
             # Sync to actual mouse position when starting (handles manual movements)
             current_mouse = Vec2(*ctrl.mouse_pos())
@@ -579,9 +588,9 @@ class RigState:
 
     def _stop_frame_loop(self):
         """Stop the frame loop"""
-        if self._cron_job is not None:
-            cron.cancel(self._cron_job)
-            self._cron_job = None
+        if self._frame_loop_job is not None:
+            cron.cancel(self._frame_loop_job)
+            self._frame_loop_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
             # Sync internal position to actual mouse position when stopping

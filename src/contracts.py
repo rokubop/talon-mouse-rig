@@ -367,6 +367,9 @@ class BuilderConfig:
         # Persistence
         self.bake_value: Optional[bool] = None
 
+        # Execution mode
+        self.is_synchronous: bool = False  # True for instant/sync execution, False for frame loop
+
     def is_anonymous(self) -> bool:
         """Check if this builder is anonymous (auto-generated base layer)"""
         return self.layer_name is not None and self.layer_name.startswith("__base_")
