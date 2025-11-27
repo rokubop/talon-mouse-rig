@@ -402,4 +402,4 @@ class Actions:
     def mouse_rig_pos_center():
         """Legacy: Move to center of screen"""
         rig = actions.user.mouse_rig()
-        rig.pos.to(960, 540).over(300)
+        rig.pos.to(960, 540).over(500)  # Move to center over 1 second

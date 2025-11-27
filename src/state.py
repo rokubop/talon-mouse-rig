@@ -161,7 +161,7 @@ class RigState:
             # Instant completion - bake immediately for anonymous layers
             if builder.config.is_anonymous():
                 if builder.config.get_effective_bake():
-                    self._bake_builder(builder)
+                    self._bake_builder(builder, removing_layer=layer)
                 # Remove from active set (it was added on line 134)
                 del self._active_builders[layer]
                 # Clean up throttle tracking
@@ -179,7 +179,7 @@ class RigState:
 
             # If bake=true, merge values into base
             if builder.config.get_effective_bake() or bake:
-                self._bake_builder(builder)
+                self._bake_builder(builder, removing_layer=layer)
 
             del self._active_builders[layer]
 
@@ -199,8 +199,13 @@ class RigState:
 
         # Frame loop will be stopped by _update_frame after final mouse movement
 
-    def _bake_builder(self, builder: 'ActiveBuilder'):
-        """Merge builder's final aggregated value into base state"""
+    def _bake_builder(self, builder: 'ActiveBuilder', removing_layer: Optional[str] = None):
+        """Merge builder's final aggregated value into base state
+
+        Args:
+            builder: The builder to bake
+            removing_layer: Layer being removed (to exclude from active count check)
+        """
         # If builder has reverted, don't bake (it's already back to base)
         if builder.lifecycle.has_reverted():
             return
@@ -243,14 +248,32 @@ class RigState:
                 else:
                     # Velocity is active - use current position to avoid jump
                     self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+            elif operator in ("add", "by"):
+                # For add/by operations, check if it was animated or instant
+                if builder.lifecycle.over_ms is not None and builder.lifecycle.over_ms > 0:
+                    # Was animated with .over() - position already at target, just use current position
+                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+                else:
+                    # Instant operation - apply the offset to current position
+                    self._base_pos = Vec2(self._internal_pos.x + current_value.x, self._internal_pos.y + current_value.y)
+                    self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
             else:
-                # For add/by operations, use current internal position
+                # For other operations, use current internal position
                 self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
             # Reset position offset tracking
             self._last_position_offset = Vec2(0, 0)
 
-        # Ensure frame loop is running if there's movement
-        if self._has_movement():
+            # For instant position changes, apply manually only if frame loop won't handle it
+            # Exclude the builder being removed from the active count
+            active_count = len(self._active_builders)
+            if removing_layer and removing_layer in self._active_builders:
+                active_count -= 1
+
+            will_be_active = self._has_movement() or active_count > 0
+            if not will_be_active:
+                mouse_move(int(self._base_pos.x), int(self._base_pos.y))
+
+        if self._should_frame_loop_be_active():
             self._ensure_frame_loop_running()
 
     def _bake_property(self, property_name: str, layer: Optional[str] = None):
@@ -536,9 +559,9 @@ class RigState:
         if new_x != current_x or new_y != current_y:
             mouse_move(new_x, new_y)
 
-        # Stop frame loop AFTER mouse movement if no active builders AND no movement
+        # Stop frame loop AFTER mouse movement if no longer needed
         # This ensures final position is applied before stopping
-        if len(self._active_builders) == 0 and not self._has_movement():
+        if not self._should_frame_loop_be_active():
             self._stop_frame_loop()
 
 
@@ -575,6 +598,10 @@ class RigState:
     def _has_movement(self) -> bool:
         """Check if there's any movement happening (base speed non-zero)"""
         return self._base_speed != 0
+
+    def _should_frame_loop_be_active(self) -> bool:
+        """Check if frame loop should be running (movement or active builders)"""
+        return self._has_movement() or len(self._active_builders) > 0
 
     def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
         """Get cardinal/intercardinal direction name from direction vector
