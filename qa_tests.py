@@ -4,8 +4,9 @@ Run these tests to verify position operations work correctly.
 Each test moves the mouse and validates the result.
 """
 
-from talon import Module, actions, ctrl
+from talon import Module, actions, ctrl, cron
 import time
+import inspect
 
 mod = Module()
 
@@ -17,7 +18,6 @@ TIMEOUT = 5.0  # Max seconds to wait for position
 
 def wait_for_position_async(target_x, target_y, tolerance, timeout_ms, on_success, on_failure):
     """Asynchronously wait for mouse position using cron polling"""
-    from talon import cron
     start = time.perf_counter()
 
     def check_position():
@@ -144,8 +144,6 @@ def test_result_ui():
 
 def run_single_test(test_name, test_func):
     """Run a single test and show result - supports both sync and async tests"""
-    from talon import cron
-    import inspect
 
     # Clear previous result
     actions.user.ui_elements_set_state("test_result", None)
@@ -303,7 +301,6 @@ def test_pos_to_over(on_success, on_failure):
 
 def test_pos_to_over_hold_revert(on_success, on_failure):
     """Test: rig.pos.to(x, y).over(ms).hold(ms).revert(ms) - full lifecycle"""
-    from talon import cron
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y
 
@@ -334,7 +331,6 @@ def test_pos_to_over_hold_revert(on_success, on_failure):
 
 def test_pos_to_revert(on_success, on_failure):
     """Test: rig.pos.to(x, y).revert(ms) - instant move then revert"""
-    from talon import cron
     target_x = CENTER_X - TEST_OFFSET
     target_y = CENTER_Y
 
@@ -365,7 +361,6 @@ def test_pos_to_revert(on_success, on_failure):
 
 def test_pos_by(on_success, on_failure):
     """Test: rig.pos.by(dx, dy) - relative instant move"""
-    from talon import cron
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, -TEST_OFFSET
 
@@ -400,7 +395,6 @@ def test_pos_by_over(on_success, on_failure):
 
 def test_pos_by_over_hold_revert(on_success, on_failure):
     """Test: rig.pos.by(dx, dy).over(ms).hold(ms).revert(ms)"""
-    from talon import cron
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, TEST_OFFSET
 
@@ -431,7 +425,6 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
 
 def test_pos_by_revert(on_success, on_failure):
     """Test: rig.pos.by(dx, dy).revert(ms) - instant relative then revert"""
-    from talon import cron
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = -TEST_OFFSET, -TEST_OFFSET
 
@@ -462,7 +455,6 @@ def test_pos_by_revert(on_success, on_failure):
 
 def test_layer_pos_to(on_success, on_failure):
     """Test: layer().pos.to(x, y).hold(ms)"""
-    from talon import cron
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y - TEST_OFFSET
 
@@ -489,7 +481,6 @@ def test_layer_pos_to(on_success, on_failure):
 
 def test_layer_pos_to_revert(on_success, on_failure):
     """Test: layer().pos.to(x, y).hold(ms).revert(ms)"""
-    from talon import cron
     target_x = CENTER_X - TEST_OFFSET
     target_y = CENTER_Y + TEST_OFFSET
 
@@ -520,7 +511,6 @@ def test_layer_pos_to_revert(on_success, on_failure):
 
 def test_layer_pos_by(on_success, on_failure):
     """Test: layer().pos.by(dx, dy).hold(ms)"""
-    from talon import cron
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, 0
 
