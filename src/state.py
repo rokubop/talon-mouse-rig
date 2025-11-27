@@ -154,6 +154,24 @@ class RigState:
             self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() and layer != "__final__" else None)
             return
 
+        # Validate mode consistency for user layers
+        if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
+            existing_builder = self._active_builders[layer]
+            existing_mode = existing_builder.config.mode
+            new_mode = builder.config.mode
+
+            # Check for mode mixing
+            if existing_mode is not None and new_mode is not None and existing_mode != new_mode:
+                from .contracts import ConfigError
+                raise ConfigError(
+                    f"Cannot mix modes on layer '{layer}'.\n"
+                    f"Existing mode: '{existing_mode}'\n"
+                    f"Attempted mode: '{new_mode}'\n\n"
+                    f"Each layer must use a single mode. Either use .reset or use separate layers for different modes:\n"
+                    f"  rig.layer('boost').speed.offset.to(100)\n"
+                    f"  rig.layer('cap').speed.override.to(200)  # Different layer"
+                )
+
         behavior = builder.config.get_effective_behavior()
 
         if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
@@ -391,66 +409,109 @@ class RigState:
         """
         prop = builder.config.property
         operator = builder.config.operator
-        blend_mode = builder.config.blend_mode
+        mode = builder.config.mode
         current_value = builder.get_current_value()
 
-        # .to is a contributor by default, unless override blend_mode is provided
+        # For anonymous layers (base/__final__), default to offset mode behavior
+        if mode is None:
+            mode = "offset"
+
         if prop == "speed":
-            if operator == "to":
-                if blend_mode == "override":
-                    speed = current_value
-                else:
+            if mode == "offset":
+                # Offset: additive contribution
+                if operator == "to":
                     speed += current_value
-            elif operator in ("add", "by"):
-                speed += current_value
-            elif operator == "sub":
-                speed -= current_value
-            elif operator == "mul":
-                speed *= current_value
-            elif operator == "div":
-                speed /= current_value if current_value != 0 else 1
-            elif operator == "scale":
+                elif operator in ("add", "by"):
+                    speed += current_value
+                elif operator == "sub":
+                    speed -= current_value
+                elif operator == "mul":
+                    speed *= current_value
+                elif operator == "div":
+                    speed /= current_value if current_value != 0 else 1
+            elif mode == "override":
+                # Override: replace accumulated value with absolute value
+                # For override, we need to convert operations to absolute values
+                if operator == "to":
+                    speed = current_value
+                elif operator in ("add", "by"):
+                    # Override with add: set to (base + animated_delta)
+                    speed = builder.base_value + current_value
+                elif operator == "sub":
+                    # Override with sub: set to (base - animated_delta)
+                    speed = builder.base_value - current_value
+                elif operator == "mul":
+                    # Override with mul: set to (base * animated_multiplier)
+                    speed = builder.base_value * current_value
+                elif operator == "div":
+                    # Override with div: set to (base / animated_divisor)
+                    speed = builder.base_value / current_value if current_value != 0 else builder.base_value
+            elif mode == "scale":
+                # Scale: multiplicative factor
                 speed *= current_value
 
         elif prop == "direction":
-            if operator == "to":
-                if blend_mode == "override":
-                    direction = current_value
-                else:
+            if mode == "offset":
+                # Offset: additive contribution
+                if operator == "to":
                     try:
                         direction = (direction + current_value).normalized()
                     except Exception:
                         direction = current_value
-            elif operator in ("add", "by"):
+                elif operator in ("add", "by"):
+                    direction = current_value
+                elif operator == "mul":
+                    direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
+            elif mode == "override":
+                # Override: replace accumulated value
+                # For direction, current_value from builder is already the absolute target
                 direction = current_value
-            elif operator == "mul":
-                direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
-            elif operator == "scale":
+            elif mode == "scale":
+                # Scale: multiplicative factor on components
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
 
         elif prop == "vector":
-            if operator == "to":
-                if blend_mode == "override":
-                    speed = current_value.magnitude()
-                    direction = current_value.normalized()
-                else:
+            if mode == "offset":
+                # Offset: additive contribution
+                if operator == "to":
                     speed += current_value.magnitude()
                     direction = (direction + current_value.normalized()).normalized()
-            elif operator in ("add", "by"):
-                speed += current_value.magnitude()
-                direction = (direction + current_value.normalized()).normalized()
-            elif operator == "sub":
-                speed -= current_value.magnitude()
-                direction = (direction - current_value.normalized()).normalized()
+                elif operator in ("add", "by"):
+                    speed += current_value.magnitude()
+                    direction = (direction + current_value.normalized()).normalized()
+                elif operator == "sub":
+                    speed -= current_value.magnitude()
+                    direction = (direction - current_value.normalized()).normalized()
+            elif mode == "override":
+                # Override: replace accumulated value
+                # For vector, current_value is the absolute vector
+                speed = current_value.magnitude()
+                direction = current_value.normalized()
+            elif mode == "scale":
+                # Scale: multiplicative factor
+                speed *= current_value.magnitude()
+                direction = (direction * current_value.magnitude()).normalized()
 
         elif prop == "pos":
-            if operator == "to":
-                if blend_mode == "override":
-                    pos = current_value
-                else:
+            if mode == "offset":
+                # Offset: additive contribution (offset from current position)
+                if operator == "to":
+                    # For offset.to(), current_value is an offset, add it
                     pos = pos + current_value
-            elif operator in ("add", "by"):
-                pos = pos + current_value
+                elif operator in ("add", "by"):
+                    pos = pos + current_value
+            elif mode == "override":
+                # Override: replace accumulated value (absolute position)
+                if operator == "to":
+                    # For override.to(), builder stores offset but we want absolute
+                    # current_value is animated offset, add to base to get absolute
+                    pos = builder.base_value + current_value
+                elif operator in ("add", "by"):
+                    # For override with add/by, add to base for absolute position
+                    pos = builder.base_value + current_value
+            elif mode == "scale":
+                # Scale: multiplicative factor on position components
+                pos = Vec2(pos.x * current_value, pos.y * current_value)
 
         return pos, speed, direction
 

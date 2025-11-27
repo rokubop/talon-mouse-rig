@@ -36,27 +36,36 @@ class BehaviorProxy:
         return getattr(self.builder, name)
 
 
-class OverrideProxy:
-    """Proxy for .override blend_mode accessor (ignores accumulated value)"""
+class ModeProxy:
+    """Proxy for mode-based property access (.offset, .override, .scale)"""
 
-    def __init__(self, builder: 'RigBuilder'):
+    def __init__(self, builder: 'RigBuilder', mode: str):
         self.builder = builder
-        self.builder.config.blend_mode = "override"
+        self.mode = mode
 
     @property
     def pos(self) -> 'PropertyBuilder':
-        """Position property accessor with override blend_mode"""
+        """Position property accessor with mode"""
+        self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "pos")
 
     @property
     def speed(self) -> 'PropertyBuilder':
-        """Speed property accessor with override blend_mode"""
+        """Speed property accessor with mode"""
+        self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "speed")
 
     @property
     def direction(self) -> 'PropertyBuilder':
-        """Direction property accessor with override blend_mode"""
+        """Direction property accessor with mode"""
+        self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "direction")
+
+    @property
+    def vector(self) -> 'PropertyBuilder':
+        """Vector property accessor with mode"""
+        self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "vector")
 
 
 class RigBuilder:
@@ -89,13 +98,23 @@ class RigBuilder:
         return self.config.layer_name == "__base__"
 
     # ========================================================================
-    # LAYER ACCESSORS
+    # MODE ACCESSORS
     # ========================================================================
 
     @property
-    def override(self) -> 'OverrideProxy':
-        """Override blend_mode accessor - ignore accumulated value, replace at this layer's position"""
-        return OverrideProxy(self)
+    def offset(self) -> 'ModeProxy':
+        """Offset mode - additive contribution to accumulated value"""
+        return ModeProxy(self, "offset")
+
+    @property
+    def override(self) -> 'ModeProxy':
+        """Override mode - replace accumulated value (ignores previous layers)"""
+        return ModeProxy(self, "override")
+
+    @property
+    def scale(self) -> 'ModeProxy':
+        """Scale mode - multiplicative factor on accumulated value"""
+        return ModeProxy(self, "scale")
 
     # ========================================================================
     # PROPERTY ACCESSORS (return PropertyBuilder helper)
@@ -321,6 +340,9 @@ class RigBuilder:
             # Incomplete builder, ignore
             return
 
+        # Validate mode is set for user layers
+        self.config.validate_mode()
+
         # Calculate rate-based durations
         self._calculate_rate_durations()
 
@@ -457,6 +479,25 @@ class PropertyBuilder:
 
         # Set property on builder
         self.rig_builder.config.property = property_name
+
+    # Mode accessors for property.mode.operation() syntax
+    @property
+    def offset(self) -> 'PropertyBuilder':
+        """Set offset mode for this property"""
+        self.rig_builder.config.mode = "offset"
+        return self
+
+    @property
+    def override(self) -> 'PropertyBuilder':
+        """Set override mode for this property"""
+        self.rig_builder.config.mode = "override"
+        return self
+
+    @property
+    def scale(self) -> 'PropertyBuilder':
+        """Set scale mode for this property"""
+        self.rig_builder.config.mode = "scale"
+        return self
 
     def to(self, *args) -> RigBuilder:
         """Set absolute value"""

@@ -17,14 +17,14 @@ if TYPE_CHECKING:
 VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector']
 
 VALID_OPERATORS = {
-    'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
-    'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake', 'scale'],
-    'pos': ['to', 'add', 'by', 'sub', 'bake', 'scale'],
+    'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
+    'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
+    'pos': ['to', 'add', 'by', 'sub', 'bake'],
     'vector': ['to', 'add', 'by', 'sub', 'bake']
 }
 
-"""Valid blend modes (override replaces accumulated value at layer position)"""
-VALID_BLEND_MODES = ['contribute', 'override']
+"""Valid modes for layer operations"""
+VALID_MODES = ['offset', 'override', 'scale']
 
 # Layer types
 LAYER_TYPES = {
@@ -123,7 +123,7 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
-    'final', 'override',  # Layer accessors
+    'final',  # Layer accessor
     'stack', 'reset', 'queue', 'extend', 'throttle',
 ]
 
@@ -336,9 +336,9 @@ class BuilderConfig:
     def __init__(self):
         # Property and operation
         self.property: Optional[str] = None  # pos, speed, direction
-        self.operator: Optional[str] = None  # to, by, add, sub, mul, div, scale
+        self.operator: Optional[str] = None  # to, by, add, sub, mul, div
         self.value: Any = None
-        self.blend_mode: str = 'contribute'  # 'contribute' (default) or 'override'
+        self.mode: Optional[str] = None  # 'offset', 'override', or 'scale'
         self.order: Optional[int] = None  # Explicit layer ordering
 
         # Identity
@@ -487,3 +487,32 @@ class BuilderConfig:
             if suggestion:
                 msg += f"\nDid you mean: {repr(suggestion)}?"
             raise ConfigError(msg)
+
+    def validate_mode(self) -> None:
+        """Validate that mode is set for layer operations
+
+        Raises:
+            ConfigError: If mode is missing or invalid
+        """
+        # Mode is only required for layer operations (not base/final)
+        if not self.is_user_layer():
+            return
+
+        if self.mode is None:
+            raise ConfigError(
+                f"Layer operations require an explicit mode.\n\n"
+                f"Available modes:\n"
+                f"  - .offset   - additive contribution (layer adds to accumulated value)\n"
+                f"  - .override - replace value (ignores accumulated, sets final value)\n"
+                f"  - .scale    - multiplicative factor (layer multiplies accumulated value)\n\n"
+                f"Example: rig.layer('boost').speed.offset.to(100)\n"
+                f"         rig.layer('cap').speed.override.to(200)\n"
+                f"         rig.layer('slowmo').speed.scale.to(0.5)"
+            )
+
+        if self.mode not in VALID_MODES:
+            valid_str = ', '.join(repr(m) for m in VALID_MODES)
+            raise ConfigError(
+                f"Invalid mode: {repr(self.mode)}\n"
+                f"Valid modes: {valid_str}"
+            )

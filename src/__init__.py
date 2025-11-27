@@ -112,11 +112,6 @@ class Rig:
         """Final layer accessor - operations at the end of processing chain"""
         return RigBuilder(self._state, layer=self._state._generate_final_layer_name())
 
-    @property
-    def override(self):
-        """Override blend_mode accessor - for base layer (ignore accumulated, reset)"""
-        return RigBuilder(self._state).override
-
     # ========================================================================
     # LAYER METHOD
     # ========================================================================

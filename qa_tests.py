@@ -80,9 +80,9 @@ def test_buttons_ui():
         ("pos.by() over", test_pos_by_over),
         ("pos.by() over hold revert", test_pos_by_over_hold_revert),
         ("pos.by() revert", test_pos_by_revert),
-        ("layer pos.to()", test_layer_pos_to),
-        ("layer pos.to() revert", test_layer_pos_to_revert),
-        ("layer pos.by()", test_layer_pos_by),
+        ("layer pos.override.to()", test_layer_pos_to),
+        ("layer pos.override.to() revert", test_layer_pos_to_revert),
+        ("layer pos.offset.by()", test_layer_pos_by),
         ("pos.by() twice", test_pos_by_twice),
         ("pos.to() then by()", test_pos_to_then_by),
     ]
@@ -232,9 +232,9 @@ class Actions:
             ("pos.by() with revert", test_pos_by_revert),
 
             # Layer position operations
-            ("layer pos.to()", test_layer_pos_to),
-            ("layer pos.to() with revert", test_layer_pos_to_revert),
-            ("layer pos.by()", test_layer_pos_by),
+            ("layer pos.override.to()", test_layer_pos_to),
+            ("layer pos.override.to() with revert", test_layer_pos_to_revert),
+            ("layer pos.offset.by()", test_layer_pos_by),
 
             # Multiple operations
             ("pos.by() twice", test_pos_by_twice),
@@ -454,12 +454,12 @@ def test_pos_by_revert(on_success, on_failure):
 # ============================================================================
 
 def test_layer_pos_to(on_success, on_failure):
-    """Test: layer().pos.to(x, y).hold(ms)"""
+    """Test: layer().pos.override.to(x, y).hold(ms)"""
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y - TEST_OFFSET
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.to(target_x, target_y).hold(500)
+    rig.layer("test").pos.override.to(target_x, target_y)
 
     # Check if reached target
     def check_target():
@@ -480,12 +480,12 @@ def test_layer_pos_to(on_success, on_failure):
     cron.after("200ms", check_target)
 
 def test_layer_pos_to_revert(on_success, on_failure):
-    """Test: layer().pos.to(x, y).hold(ms).revert(ms)"""
+    """Test: layer().pos.override.to(x, y).hold(ms).revert(ms)"""
     target_x = CENTER_X - TEST_OFFSET
     target_y = CENTER_Y + TEST_OFFSET
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.to(target_x, target_y).hold(300).revert(300)
+    rig.layer("test").pos.override.to(target_x, target_y).hold(300).revert(300)
 
     # Check if reached target
     def check_target():
@@ -510,12 +510,12 @@ def test_layer_pos_to_revert(on_success, on_failure):
     cron.after("200ms", check_target)
 
 def test_layer_pos_by(on_success, on_failure):
-    """Test: layer().pos.by(dx, dy).hold(ms)"""
+    """Test: layer().pos.offset.by(dx, dy).hold(ms)"""
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, 0
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.by(dx, dy).hold(500)
+    rig.layer("test").pos.offset.by(dx, dy).hold(500)
 
     # Check if reached target
     def check_target():
