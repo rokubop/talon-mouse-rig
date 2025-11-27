@@ -70,6 +70,77 @@ class RigState:
             return self._active_builders[layer].time_alive()
         return None
 
+    def _handle_user_layer_behavior(self, builder: 'ActiveBuilder', existing: 'ActiveBuilder', behavior: str) -> bool:
+        """Handle behavior for existing user layer
+
+        Returns True if handled (early return), False if should continue processing
+        """
+        layer = builder.config.layer_name
+
+        if behavior == "reset":
+            self.remove_builder(layer)
+            return False  # Continue processing as new builder
+        elif behavior == "extend":
+            if existing.lifecycle.hold_ms is not None:
+                existing.lifecycle.hold_ms += builder.config.hold_ms or 0
+            return True  # Handled, early return
+        elif behavior == "throttle":
+            throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
+            if layer in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
+                if elapsed < throttle_ms:
+                    return True  # Throttled, early return
+            self._throttle_times[layer] = time.perf_counter()
+            existing.add_child(builder)
+            return True  # Handled, early return
+        elif behavior == "ignore":
+            return True  # Ignored, early return
+        else:
+            # Stack or queue - add as child
+            existing.add_child(builder)
+            return True  # Handled, early return
+
+    def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str):
+        """Handle behavior for base/final layer operations"""
+        layer = builder.config.layer_name
+
+        if behavior == "reset" and layer in ("__base__", "__final__"):
+            # For .to() operator, cancel all base/final builders with same property
+            if builder.config.property:
+                layers_to_remove = [
+                    l for l, b in self._active_builders.items()
+                    if l == layer and b.config.property == builder.config.property
+                ]
+                for l in layers_to_remove:
+                    self.remove_builder(l)
+        elif behavior == "throttle":
+            throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
+            if layer in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
+                if elapsed < throttle_ms:
+                    return  # Early return handled by caller
+            self._throttle_times[layer] = time.perf_counter()
+
+    def _handle_instant_completion(self, builder: 'ActiveBuilder', layer: str):
+        """Handle builders that complete instantly (no lifecycle)"""
+        # For synchronous operations, execute immediately if frame loop isn't running
+        if builder.config.is_synchronous and self._frame_loop_job is None:
+            builder.execute_synchronous()
+            # Synchronous execution already updated state, just cleanup
+            if builder.config.is_anonymous():
+                del self._active_builders[layer]
+                if layer in self._throttle_times:
+                    del self._throttle_times[layer]
+            return
+
+        # Non-synchronous instant completion (bake the value)
+        if builder.config.is_anonymous():
+            if builder.config.get_effective_bake():
+                self._bake_builder(builder, removing_layer=layer)
+            del self._active_builders[layer]
+            if layer in self._throttle_times:
+                del self._throttle_times[layer]
+
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add an active builder to state
 
@@ -83,103 +154,31 @@ class RigState:
             self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() and layer != "__final__" else None)
             return
 
-        # Handle behavior modes
         behavior = builder.config.get_effective_behavior()
 
-        # User layers: add as child to existing parent
         if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
-            existing = self._active_builders[layer]
-
-            if behavior == "reset":
-                # Reset entire builder
-                self.remove_builder(layer)
-            elif behavior == "extend":
-                # Extend hold duration of parent
-                if existing.lifecycle.hold_ms is not None:
-                    existing.lifecycle.hold_ms += builder.config.hold_ms or 0
-                return
-            elif behavior == "throttle":
-                # Check throttle timing
-                throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-                if layer in self._throttle_times:
-                    elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
-                    if elapsed < throttle_ms:
-                        return  # Ignore this call
-                # Update throttle time
-                self._throttle_times[layer] = time.perf_counter()
-                # Add as child
-                existing.add_child(builder)
-                return
-            elif behavior == "ignore":
-                # Ignore if already active
-                return
-            else:
-                # Stack or queue - add as child
-                existing.add_child(builder)
+            if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
                 return
 
-        # Base/final layer operations
-        if behavior == "reset" and layer in ("__base__", "__final__"):
-            # For .to() operator, cancel all base/final builders with same property
-            if builder.config.property:
-                layers_to_remove = [
-                    l for l, b in self._active_builders.items()
-                    if l == layer and b.config.property == builder.config.property
-                ]
-                for l in layers_to_remove:
-                    self.remove_builder(l)
+        self._handle_base_layer_behavior(builder, behavior)
 
-        elif behavior == "throttle":
-            # Check throttle timing
-            throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-            if layer in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
-                if elapsed < throttle_ms:
-                    return  # Ignore this call
-            # Update throttle time
-            self._throttle_times[layer] = time.perf_counter()
+        self._active_builders[layer] = builder
 
-        # Add builder to active set
-        self._active_builders[layer]= builder
-
-        # Track order: explicit order, or auto-assign based on creation order
+        # Track layer order
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
         elif layer not in ("__base__", "__final__"):
-            # Auto-assign order if not explicit (preserves creation order)
             if layer not in self._layer_orders:
                 self._layer_orders[layer] = self._next_auto_order
                 self._next_auto_order += 1
 
-        # Start frame loop if not running (BEFORE checking lifecycle completion)
-        # This ensures _base_pos is synced to current mouse position before builder calculates offsets
+        # Start frame loop if builder has lifecycle
         if not builder.lifecycle.is_complete():
             self._ensure_frame_loop_running()
-
-        # Check if this builder completes instantly (no lifecycle)
-        if builder.lifecycle.is_complete():
-            # For synchronous operations, execute immediately if frame loop isn't running
-            # If frame loop is active, it will handle the movement smoothly
-            if builder.config.is_synchronous and self._frame_loop_job is None:
-                builder.execute_synchronous()
-                # Synchronous execution already updated state, just cleanup
-                if builder.config.is_anonymous():
-                    del self._active_builders[layer]
-                    if layer in self._throttle_times:
-                        del self._throttle_times[layer]
-                return
-
-            # Non-synchronous instant completion (bake the value)
-            if builder.config.is_anonymous():
-                if builder.config.get_effective_bake():
-                    self._bake_builder(builder, removing_layer=layer)
-                del self._active_builders[layer]
-                if layer in self._throttle_times:
-                    del self._throttle_times[layer]
-            else:
-                # User/final layers without lifecycle should stay active
-                pass
             return
+
+        # Handle instant completion
+        self._handle_instant_completion(builder, layer)
 
     def remove_builder(self, layer: str, bake: bool = False):
         """Remove an active builder"""
