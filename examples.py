@@ -227,8 +227,20 @@ class Actions:
         rig.layer("test").override.direction(-1, 0)  # Force left
 
     # =========================================================================
-    # 7. BEHAVIOR TYPES - QUEUE, EXTEND, THROTTLE, IGNORE
+    # 7. BEHAVIOR TYPES - STACK, RESET, QUEUE, EXTEND, THROTTLE, IGNORE
     # =========================================================================
+
+    def test_behavior_stack():
+        """Stack behavior - add operations together (default for add/mul/div)"""
+        rig = actions.user.mouse_rig()
+        rig.layer("boost").speed.add(5)
+        rig.layer("boost").speed.stack.add(3)  # Stacks to +8 total
+
+    def test_behavior_reset():
+        """Reset behavior - replace operation (default for .to())"""
+        rig = actions.user.mouse_rig()
+        rig.layer("move").speed.to(10)
+        rig.layer("move").speed.reset.to(5)  # Replaces with 5
 
     def test_behavior_queue():
         """Queue behavior - wait for current operation to finish"""
@@ -243,16 +255,16 @@ class Actions:
         rig.layer("boost").speed.extend.hold(500)  # Adds 500ms to hold
 
     def test_behavior_throttle():
-        """Throttle behavior - rate limit updates"""
+        """Throttle behavior - rate limit updates (with ms) or ignore (no ms)"""
         rig = actions.user.mouse_rig()
         rig.layer("smooth").direction.by(10)
         rig.layer("smooth").direction.throttle(200).by(10)  # Max every 200ms
 
-    def test_behavior_ignore():
-        """Ignore behavior - ignore new operations while active"""
+    def test_behavior_throttle_ignore():
+        """Throttle behavior - ignore new operations while active (no ms arg)"""
         rig = actions.user.mouse_rig()
         rig.layer("lock").speed.to(10).over(1000)
-        rig.layer("lock").speed.ignore.to(5)  # Ignored while first operation active
+        rig.layer("lock").speed.throttle.to(5)  # Ignored while first operation active
 
     # =========================================================================
     # 8. HOLD - SUSTAIN VALUE AFTER TRANSITION

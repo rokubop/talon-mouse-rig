@@ -40,7 +40,7 @@ VALID_EASINGS = [
     'ease_in_4', 'ease_out_4', 'ease_in_out_4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp']
-VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']
+VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']  # ignore is internal for throttle()
 
 # Method signatures for validation
 METHOD_SIGNATURES = {
@@ -89,7 +89,7 @@ for behavior in VALID_BEHAVIORS:
     if behavior == 'throttle':
         METHOD_SIGNATURES[behavior] = {
             'params': ['ms'],
-            'signature': f'{behavior}(ms)',
+            'signature': f'{behavior}(ms=None)',
             'validations': {}
         }
     elif behavior == 'stack':
@@ -124,12 +124,12 @@ VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
     'final', 'override',  # Layer accessors
-    'stack', 'reset', 'queue', 'extend', 'throttle', 'ignore',
+    'stack', 'reset', 'queue', 'extend', 'throttle',
 ]
 
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake',
-    'stack', 'reset', 'queue', 'extend', 'throttle', 'ignore',
+    'stack', 'reset', 'queue', 'extend', 'throttle',
 ]
 
 
@@ -313,8 +313,7 @@ class BehaviorMethods(Protocol):
     def reset(self): ...
     def queue(self): ...
     def extend(self): ...
-    def throttle(self, ms: float): ...
-    def ignore(self): ...
+    def throttle(self, ms: Optional[float] = None): ...
 
 
 class Updatable(ABC):

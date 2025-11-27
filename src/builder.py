@@ -281,16 +281,6 @@ class RigBuilder:
             self.config.behavior_args = (ms,)
         return self
 
-    @property
-    def ignore(self) -> BehaviorProxy:
-        """Ignore while active - use .ignore or .ignore()"""
-        return BehaviorProxy(self, 'ignore')
-
-    def _set_ignore(self) -> 'RigBuilder':
-        """Internal: Set ignore behavior"""
-        self.config.behavior = "ignore"
-        return self
-
     # ========================================================================
     # BAKE CONTROL
     # ========================================================================

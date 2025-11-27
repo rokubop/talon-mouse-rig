@@ -159,11 +159,6 @@ class Rig:
         """Throttle behavior accessor"""
         return _BehaviorAccessor(self._state, "throttle")
 
-    @property
-    def ignore(self):
-        """Ignore behavior accessor"""
-        return _BehaviorAccessor(self._state, "ignore")
-
     # ========================================================================
     # SPECIAL OPERATIONS
     # ========================================================================
