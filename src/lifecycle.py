@@ -186,6 +186,14 @@ class Lifecycle:
             self.revert_ms >= 0
         )
 
+    def is_animating(self) -> bool:
+        """Check if lifecycle is currently in an active animation phase.
+
+        Returns True if in OVER or REVERT phase (actively animating).
+        Returns False if in HOLD phase (static) or complete (phase is None).
+        """
+        return self.phase in (LifecyclePhase.OVER, LifecyclePhase.REVERT)
+
     def should_be_garbage_collected(self) -> bool:
         """Check if builder should be removed from active builders.
 

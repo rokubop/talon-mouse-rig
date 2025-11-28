@@ -342,7 +342,7 @@ class RigState:
                 if l in self._active_builders:
                     del self._active_builders[l]
 
-    def _compute_current_state(self) -> tuple[Vec2, float, Vec2]:
+    def _compute_current_state(self) -> tuple[Vec2, float, Vec2, bool]:
         """Compute current state by applying all active layers to base.
 
         Computation order:
@@ -352,12 +352,14 @@ class RigState:
         4. Process final layer operations
 
         Returns:
-            (position, speed, direction)
+            (position, speed, direction, pos_is_override)
+            pos_is_override is True if any position builder used override mode
         """
         # Start with base
         pos = Vec2(self._base_pos.x, self._base_pos.y)
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
+        pos_is_override = False
 
         # Separate builders by layer type
         base_builders = []   # Anonymous layers (base operations)
@@ -381,16 +383,19 @@ class RigState:
 
         # Process in layer order: base → user layers → final
         for builder in base_builders:
-            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
+            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
+            pos_is_override = pos_is_override or override
 
         for builder in user_builders:
-            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
+            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
+            pos_is_override = pos_is_override or override
 
         for builder in final_builders:
-            pos, speed, direction = self._apply_layer(builder, pos, speed, direction)
+            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
+            pos_is_override = pos_is_override or override
 
 
-        return (pos, speed, direction)
+        return (pos, speed, direction, pos_is_override)
 
     def _apply_layer(
         self,
@@ -398,7 +403,7 @@ class RigState:
         pos: Vec2,
         speed: float,
         direction: Vec2
-    ) -> tuple[Vec2, float, Vec2]:
+    ) -> tuple[Vec2, float, Vec2, bool]:
         """Apply a layer's operations
 
         Args:
@@ -406,7 +411,8 @@ class RigState:
             pos, speed, direction: Current accumulated state values
 
         Returns:
-            Updated (pos, speed, direction)
+            Updated (pos, speed, direction, pos_is_override)
+            pos_is_override is True if this layer used override mode for position
 
         Mode behavior:
         - offset: current_value is a CONTRIBUTION (added to accumulated)
@@ -416,6 +422,7 @@ class RigState:
         prop = builder.config.property
         mode = builder.config.mode
         current_value = builder.get_current_value()
+        pos_is_override = False
 
         if prop == "speed":
             speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
@@ -428,8 +435,9 @@ class RigState:
 
         elif prop == "pos":
             pos = mode_operations.apply_position_mode(mode, current_value, pos)
+            pos_is_override = (mode == "override")
 
-        return pos, speed, direction
+        return pos, speed, direction, pos_is_override
 
     def _apply_velocity_movement(self, speed: float, direction: Vec2):
         """Apply velocity-based movement to internal position"""
@@ -527,15 +535,22 @@ class RigState:
         if manual_movement_detected:
             return
 
-        pos, speed, direction = self._compute_current_state()
+        pos, speed, direction, pos_is_override = self._compute_current_state()
 
         self._apply_velocity_movement(speed, direction)
-        self._apply_position_offset(pos)
 
-        # Update _base_pos to track accumulated position from velocity movement
-        # This ensures position offsets are calculated from the current actual position
-        # Otherwise position builders can "snap" at the end when they don't account for velocity
-        self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+        # Handle position based on mode
+        if pos_is_override:
+            # Override mode: pos is absolute, set it directly
+            self._internal_pos = Vec2(pos.x, pos.y)
+            self._base_pos = Vec2(pos.x, pos.y)
+            self._last_position_offset = Vec2(0, 0)
+        else:
+            # Offset/scale mode: pos is relative contribution
+            self._apply_position_offset(pos)
+            # Update _base_pos to track accumulated position from velocity movement
+            # This ensures position offsets are calculated from the current actual position
+            self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
 
         new_x = int(round(self._internal_pos.x))
         new_y = int(round(self._internal_pos.y))
@@ -585,8 +600,24 @@ class RigState:
         return self._base_speed != 0
 
     def _should_frame_loop_be_active(self) -> bool:
-        """Check if frame loop should be running (movement or active builders)"""
-        return self._has_movement() or len(self._active_builders) > 0
+        """Check if frame loop should be running (movement or animating builders)
+
+        Frame loop runs when:
+        1. There's velocity movement (speed > 0), OR
+        2. Any builder has an incomplete lifecycle (in OVER, HOLD, or REVERT phase)
+
+        Frame loop stops when:
+        - No velocity AND all builders have completed their lifecycle
+        """
+        if self._has_movement():
+            return True
+
+        # Check if any builder has an incomplete lifecycle
+        for builder in self._active_builders.values():
+            if not builder.lifecycle.is_complete():
+                return True
+
+        return False
 
     def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
         """Get cardinal/intercardinal direction name from direction vector
