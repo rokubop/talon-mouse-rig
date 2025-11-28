@@ -14,6 +14,7 @@ from talon import cron, ctrl
 from .core import Vec2, SubpixelAdjuster, mouse_move
 from .queue import QueueManager
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
+from . import mode_operations
 
 if TYPE_CHECKING:
     from .builder import ActiveBuilder
@@ -251,48 +252,15 @@ class RigState:
 
         if prop == "vector":
             # Decompose vector into speed and direction
-            if mode == "offset":
-                self._base_speed += current_value.magnitude()
-                try:
-                    self._base_direction = (self._base_direction + current_value.normalized()).normalized()
-                except:
-                    self._base_direction = current_value.normalized()
-            elif mode == "override":
-                self._base_speed = current_value.magnitude()
-                self._base_direction = current_value.normalized()
-            elif mode == "scale":
-                self._base_speed *= current_value.magnitude()
-                self._base_direction = (self._base_direction * current_value.magnitude()).normalized()
+            self._base_speed, self._base_direction = mode_operations.apply_vector_mode(
+                mode, current_value, self._base_speed, self._base_direction
+            )
 
         elif prop == "speed":
-            if mode == "offset":
-                self._base_speed += current_value
-            elif mode == "override":
-                self._base_speed = current_value
-            elif mode == "scale":
-                self._base_speed *= current_value
+            self._base_speed = mode_operations.apply_scalar_mode(mode, current_value, self._base_speed)
 
         elif prop == "direction":
-            if mode == "offset":
-                # For offset mode, current_value is either an angle or a direction vector
-                if isinstance(current_value, (int, float)):
-                    # It's an angle, rotate the base direction
-                    angle_rad = math.radians(current_value)
-                    cos_a = math.cos(angle_rad)
-                    sin_a = math.sin(angle_rad)
-                    new_x = self._base_direction.x * cos_a - self._base_direction.y * sin_a
-                    new_y = self._base_direction.x * sin_a + self._base_direction.y * cos_a
-                    self._base_direction = Vec2(new_x, new_y).normalized()
-                else:
-                    # It's a vector, add and normalize
-                    try:
-                        self._base_direction = (self._base_direction + current_value).normalized()
-                    except:
-                        self._base_direction = current_value.normalized()
-            elif mode == "override":
-                self._base_direction = current_value
-            elif mode == "scale":
-                self._base_direction = Vec2(self._base_direction.x * current_value, self._base_direction.y * current_value).normalized()
+            self._base_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_direction)
 
         elif prop == "pos":
             if mode == "offset":
@@ -450,67 +418,16 @@ class RigState:
         current_value = builder.get_current_value()
 
         if prop == "speed":
-            if mode == "offset":
-                # Offset: current_value is contribution, add to accumulated
-                speed += current_value
-            elif mode == "override":
-                # Override: current_value is absolute value, replace accumulated
-                speed = current_value
-            elif mode == "scale":
-                # Scale: current_value is multiplier, multiply accumulated
-                speed *= current_value
+            speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
 
         elif prop == "direction":
-            if mode == "offset":
-                # Offset: current_value is rotation/delta to apply
-                if isinstance(current_value, (int, float)):
-                    # It's an angle in degrees, rotate direction
-                    angle_rad = math.radians(current_value)
-                    cos_a = math.cos(angle_rad)
-                    sin_a = math.sin(angle_rad)
-                    new_x = direction.x * cos_a - direction.y * sin_a
-                    new_y = direction.x * sin_a + direction.y * cos_a
-                    direction = Vec2(new_x, new_y).normalized()
-                else:
-                    # It's a vector, add and normalize
-                    try:
-                        direction = (direction + current_value).normalized()
-                    except Exception:
-                        direction = current_value.normalized()
-            elif mode == "override":
-                # Override: current_value is absolute direction, replace accumulated
-                direction = current_value
-            elif mode == "scale":
-                # Scale: current_value is multiplier on components
-                direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
+            direction = mode_operations.apply_direction_mode(mode, current_value, direction)
 
         elif prop == "vector":
-            if mode == "offset":
-                # Offset: additive contribution (current_value is a vector contribution)
-                speed += current_value.magnitude()
-                try:
-                    direction = (direction + current_value.normalized()).normalized()
-                except:
-                    direction = current_value.normalized()
-            elif mode == "override":
-                # Override: replace accumulated value
-                speed = current_value.magnitude()
-                direction = current_value.normalized()
-            elif mode == "scale":
-                # Scale: multiplicative factor
-                speed *= current_value.magnitude()
-                direction = (direction * current_value.magnitude()).normalized()
+            speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
 
         elif prop == "pos":
-            if mode == "offset":
-                # Offset: current_value is offset vector, add to accumulated position
-                pos = pos + current_value
-            elif mode == "override":
-                # Override: current_value is absolute position, replace accumulated
-                pos = current_value
-            elif mode == "scale":
-                # Scale: current_value is multiplier on position components
-                pos = Vec2(pos.x * current_value, pos.y * current_value)
+            pos = mode_operations.apply_position_mode(mode, current_value, pos)
 
         return pos, speed, direction
 

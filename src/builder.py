@@ -9,6 +9,7 @@ from .core import Vec2, EPSILON
 from .contracts import BuilderConfig, LifecyclePhase
 from .lifecycle import Lifecycle, PropertyAnimator
 from . import rate_utils
+from . import mode_operations
 
 if TYPE_CHECKING:
     from .state import RigState
@@ -692,120 +693,13 @@ class ActiveBuilder:
             return None
 
         if self.config.property == "speed":
-            if mode == "scale":
-                # Scale mode: always store the multiplier
-                if operator == "to":
-                    return value  # Direct multiplier
-                elif operator in ("by", "add"):
-                    return 1.0 + value  # Add to multiplier (1.0 + delta)
-                elif operator == "sub":
-                    return 1.0 - value  # Subtract from multiplier
-                elif operator == "mul":
-                    return value  # Direct multiplier
-                elif operator == "div":
-                    return 1.0 / value if value != 0 else 1.0  # Inverse multiplier
-            elif mode == "override":
-                # Override mode: store absolute target value
-                if operator == "to":
-                    return value  # Direct absolute value
-                elif operator in ("by", "add"):
-                    return current + value  # Absolute from base + delta
-                elif operator == "sub":
-                    return current - value  # Absolute from base - delta
-                elif operator == "mul":
-                    return current * value  # Absolute from base * multiplier
-                elif operator == "div":
-                    return current / value if value != 0 else current  # Absolute from base / divisor
-            else:  # offset mode
-                # Offset mode: store contribution value
-                if operator == "to":
-                    return value  # Contribution amount
-                elif operator in ("by", "add"):
-                    return value  # Delta contribution
-                elif operator == "sub":
-                    return -value  # Negative contribution
-                elif operator == "mul":
-                    return current * (value - 1)  # Convert multiplier to additive contribution
-                elif operator == "div":
-                    return current * (1 - 1/value) if value != 0 else 0  # Convert divisor to additive contribution
+            return mode_operations.calculate_scalar_target(operator, value, current, mode)
 
         elif self.config.property == "direction":
-            if mode == "scale":
-                # Scale mode for direction: store multiplier (applied to components)
-                if operator == "to":
-                    return value
-                elif operator in ("by", "add"):
-                    return 1.0 + value
-                elif operator == "mul":
-                    return value
-            elif mode == "override":
-                # Override mode: store absolute target direction
-                if operator == "to":
-                    return Vec2.from_tuple(value).normalized()
-                elif operator in ("by", "add"):
-                    # For add/by, calculate absolute target from rotation
-                    if isinstance(value, tuple) and len(value) == 2:
-                        delta = Vec2.from_tuple(value)
-                        return (current + delta).normalized()
-                    else:
-                        angle_deg = value[0] if isinstance(value, tuple) else value
-                        angle_rad = math.radians(angle_deg)
-                        cos_a = math.cos(angle_rad)
-                        sin_a = math.sin(angle_rad)
-                        new_x = current.x * cos_a - current.y * sin_a
-                        new_y = current.x * sin_a + current.y * cos_a
-                        return Vec2(new_x, new_y).normalized()
-                elif operator == "sub":
-                    if isinstance(value, tuple) and len(value) == 2:
-                        delta = Vec2.from_tuple(value)
-                        return (current - delta).normalized()
-                    else:
-                        angle_deg = value[0] if isinstance(value, tuple) else value
-                        angle_rad = math.radians(-angle_deg)
-                        cos_a = math.cos(angle_rad)
-                        sin_a = math.sin(angle_rad)
-                        new_x = current.x * cos_a - current.y * sin_a
-                        new_y = current.x * sin_a + current.y * cos_a
-                        return Vec2(new_x, new_y).normalized()
-            else:  # offset mode
-                # Offset mode: store the rotation/delta
-                if operator == "to":
-                    return Vec2.from_tuple(value).normalized()  # Direction contribution
-                elif operator in ("by", "add"):
-                    # Store rotation as is (will be applied during _apply_layer)
-                    if isinstance(value, tuple) and len(value) == 2:
-                        return Vec2.from_tuple(value)
-                    else:
-                        # Store angle for rotation
-                        angle_deg = value[0] if isinstance(value, tuple) else value
-                        return angle_deg  # Store angle directly
-                elif operator == "sub":
-                    if isinstance(value, tuple) and len(value) == 2:
-                        return -Vec2.from_tuple(value)
-                    else:
-                        angle_deg = value[0] if isinstance(value, tuple) else value
-                        return -angle_deg
+            return mode_operations.calculate_direction_target(operator, value, current, mode)
 
         elif self.config.property == "pos":
-            if mode == "scale":
-                # Scale mode: store multiplier
-                if operator == "to":
-                    return value
-                elif operator in ("by", "add"):
-                    return 1.0 + value
-            elif mode == "override":
-                # Override mode: store absolute position
-                if operator == "to":
-                    return Vec2.from_tuple(value)  # Absolute position
-                elif operator in ("by", "add"):
-                    return current + Vec2.from_tuple(value)  # Absolute from base + offset
-            else:  # offset mode
-                # Offset mode: store offset vector
-                if operator == "to":
-                    # For offset.to(), the value IS the offset contribution
-                    return Vec2.from_tuple(value)
-                elif operator in ("by", "add"):
-                    return Vec2.from_tuple(value)  # Offset delta
+            return mode_operations.calculate_position_target(operator, value, current, mode)
 
         return current
 
@@ -824,24 +718,10 @@ class ActiveBuilder:
             mode = self.config.mode
             current_value = self.target_value
 
-            if mode == "offset":
-                # Offset mode: add the offset vector to current position
-                self.rig_state._internal_pos = Vec2(
-                    self.rig_state._internal_pos.x + current_value.x,
-                    self.rig_state._internal_pos.y + current_value.y
-                )
-                self.rig_state._base_pos = Vec2(self.rig_state._internal_pos.x, self.rig_state._internal_pos.y)
-            elif mode == "override":
-                # Override mode: set to absolute position
-                self.rig_state._internal_pos = Vec2(current_value.x, current_value.y)
-                self.rig_state._base_pos = Vec2(current_value.x, current_value.y)
-            elif mode == "scale":
-                # Scale mode: multiply current position by factor
-                self.rig_state._internal_pos = Vec2(
-                    self.rig_state._internal_pos.x * current_value,
-                    self.rig_state._internal_pos.y * current_value
-                )
-                self.rig_state._base_pos = Vec2(self.rig_state._internal_pos.x, self.rig_state._internal_pos.y)
+            # Apply mode to current internal position
+            new_pos = mode_operations.apply_position_mode(mode, current_value, self.rig_state._internal_pos)
+            self.rig_state._internal_pos = new_pos
+            self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
 
             # Move mouse immediately
             from .core import mouse_move
