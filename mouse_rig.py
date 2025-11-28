@@ -2,7 +2,6 @@ from talon import settings, actions
 from .settings import mod
 from .src import rig as get_rig, reload_rig
 from .src.mouse_api import MOUSE_APIS
-from qa import ALL_TESTS
 
 @mod.action_class
 class Actions:
@@ -65,4 +64,5 @@ class Actions:
 
     def mouse_rig_test_toggle_ui():
         """Show the QA test UI with buttons"""
-        actions.user.mouse_rig_test_toggle_ui(ALL_TESTS)
+        from .qa.main import toggle_test_ui
+        toggle_test_ui()
