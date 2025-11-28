@@ -8,6 +8,7 @@ Unified state manager with:
 """
 
 import time
+import math
 from typing import Optional, TYPE_CHECKING
 from talon import cron, ctrl
 from .core import Vec2, SubpixelAdjuster, mouse_move
@@ -231,6 +232,11 @@ class RigState:
         Args:
             builder: The builder to bake
             removing_layer: Layer being removed (to exclude from active count check)
+
+        Baking applies the layer's contribution to base state:
+        - offset mode: add contribution to base
+        - override mode: replace base with absolute value
+        - scale mode: multiply base by factor
         """
         # If builder has reverted, don't bake (it's already back to base)
         if builder.lifecycle.has_reverted():
@@ -239,53 +245,80 @@ class RigState:
         # Get aggregated value (includes own value + children)
         current_value = builder.get_current_value()
 
-        # Get property and operator from builder config (not children)
+        # Get property and mode from builder config
         prop = builder.config.property
-        operator = builder.config.operator
+        mode = builder.config.mode
 
         if prop == "vector":
             # Decompose vector into speed and direction
-            self._base_speed = current_value.magnitude()
-            self._base_direction = current_value.normalized()
+            if mode == "offset":
+                self._base_speed += current_value.magnitude()
+                try:
+                    self._base_direction = (self._base_direction + current_value.normalized()).normalized()
+                except:
+                    self._base_direction = current_value.normalized()
+            elif mode == "override":
+                self._base_speed = current_value.magnitude()
+                self._base_direction = current_value.normalized()
+            elif mode == "scale":
+                self._base_speed *= current_value.magnitude()
+                self._base_direction = (self._base_direction * current_value.magnitude()).normalized()
+
         elif prop == "speed":
-            if operator == "to":
-                self._base_speed = current_value
-            elif operator in ("add", "by"):
+            if mode == "offset":
                 self._base_speed += current_value
-            elif operator == "sub":
-                self._base_speed -= current_value
-            elif operator == "mul":
+            elif mode == "override":
+                self._base_speed = current_value
+            elif mode == "scale":
                 self._base_speed *= current_value
-            elif operator == "div":
-                self._base_speed /= current_value if current_value != 0 else 1
+
         elif prop == "direction":
-            # current_value is already the final direction (operation already applied in target_value)
-            self._base_direction = current_value
+            if mode == "offset":
+                # For offset mode, current_value is either an angle or a direction vector
+                if isinstance(current_value, (int, float)):
+                    # It's an angle, rotate the base direction
+                    angle_rad = math.radians(current_value)
+                    cos_a = math.cos(angle_rad)
+                    sin_a = math.sin(angle_rad)
+                    new_x = self._base_direction.x * cos_a - self._base_direction.y * sin_a
+                    new_y = self._base_direction.x * sin_a + self._base_direction.y * cos_a
+                    self._base_direction = Vec2(new_x, new_y).normalized()
+                else:
+                    # It's a vector, add and normalize
+                    try:
+                        self._base_direction = (self._base_direction + current_value).normalized()
+                    except:
+                        self._base_direction = current_value.normalized()
+            elif mode == "override":
+                self._base_direction = current_value
+            elif mode == "scale":
+                self._base_direction = Vec2(self._base_direction.x * current_value, self._base_direction.y * current_value).normalized()
+
         elif prop == "pos":
-            # For position.to(), check if we should snap to exact target
-            if operator == "to":
-                # Only snap to exact target if there's no velocity movement
-                # If there's velocity, use current position to avoid jumps
-                if self._base_speed == 0:
-                    # No velocity - snap to exact target position
-                    target_pos = builder.config.value
-                    self._base_pos = Vec2(target_pos[0], target_pos[1]) if isinstance(target_pos, (tuple, list)) else target_pos
-                    self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
-                else:
-                    # Velocity is active - use current position to avoid jump
-                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
-            elif operator in ("add", "by"):
-                # For add/by operations, check if it was animated or instant
+            if mode == "offset":
+                # Offset mode: current_value is an offset vector, add to base position
+                # Check if animated or instant
                 if builder.lifecycle.over_ms is not None and builder.lifecycle.over_ms > 0:
-                    # Was animated with .over() - position already at target, just use current position
+                    # Was animated - position tracking already moved, just sync base
                     self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
                 else:
-                    # Instant operation - apply the offset to current position
-                    self._base_pos = Vec2(self._internal_pos.x + current_value.x, self._internal_pos.y + current_value.y)
+                    # Instant operation - apply offset
+                    self._base_pos = Vec2(self._base_pos.x + current_value.x, self._base_pos.y + current_value.y)
                     self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
-            else:
-                # For other operations, use current internal position
-                self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+            elif mode == "override":
+                # Override mode: current_value is absolute position, set base to it
+                if self._base_speed == 0:
+                    # No velocity - snap to exact position
+                    self._base_pos = Vec2(current_value.x, current_value.y)
+                    self._internal_pos = Vec2(current_value.x, current_value.y)
+                else:
+                    # Velocity active - use current internal position to avoid jump
+                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+            elif mode == "scale":
+                # Scale mode: current_value is multiplier, scale base position
+                self._base_pos = Vec2(self._base_pos.x * current_value, self._base_pos.y * current_value)
+                self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
+
             # Reset position offset tracking
             self._last_position_offset = Vec2(0, 0)
 
@@ -406,85 +439,61 @@ class RigState:
 
         Returns:
             Updated (pos, speed, direction)
+
+        Mode behavior:
+        - offset: current_value is a CONTRIBUTION (added to accumulated)
+        - override: current_value is ABSOLUTE (replaces accumulated)
+        - scale: current_value is a MULTIPLIER (multiplies accumulated)
         """
         prop = builder.config.property
-        operator = builder.config.operator
         mode = builder.config.mode
         current_value = builder.get_current_value()
 
-        # For anonymous layers (base/__final__), default to offset mode behavior
-        if mode is None:
-            mode = "offset"
-
         if prop == "speed":
             if mode == "offset":
-                # Offset: additive contribution
-                if operator == "to":
-                    speed += current_value
-                elif operator in ("add", "by"):
-                    speed += current_value
-                elif operator == "sub":
-                    speed -= current_value
-                elif operator == "mul":
-                    speed *= current_value
-                elif operator == "div":
-                    speed /= current_value if current_value != 0 else 1
+                # Offset: current_value is contribution, add to accumulated
+                speed += current_value
             elif mode == "override":
-                # Override: replace accumulated value with absolute value
-                # For override, we need to convert operations to absolute values
-                if operator == "to":
-                    speed = current_value
-                elif operator in ("add", "by"):
-                    # Override with add: set to (base + animated_delta)
-                    speed = builder.base_value + current_value
-                elif operator == "sub":
-                    # Override with sub: set to (base - animated_delta)
-                    speed = builder.base_value - current_value
-                elif operator == "mul":
-                    # Override with mul: set to (base * animated_multiplier)
-                    speed = builder.base_value * current_value
-                elif operator == "div":
-                    # Override with div: set to (base / animated_divisor)
-                    speed = builder.base_value / current_value if current_value != 0 else builder.base_value
+                # Override: current_value is absolute value, replace accumulated
+                speed = current_value
             elif mode == "scale":
-                # Scale: multiplicative factor
+                # Scale: current_value is multiplier, multiply accumulated
                 speed *= current_value
 
         elif prop == "direction":
             if mode == "offset":
-                # Offset: additive contribution
-                if operator == "to":
+                # Offset: current_value is rotation/delta to apply
+                if isinstance(current_value, (int, float)):
+                    # It's an angle in degrees, rotate direction
+                    angle_rad = math.radians(current_value)
+                    cos_a = math.cos(angle_rad)
+                    sin_a = math.sin(angle_rad)
+                    new_x = direction.x * cos_a - direction.y * sin_a
+                    new_y = direction.x * sin_a + direction.y * cos_a
+                    direction = Vec2(new_x, new_y).normalized()
+                else:
+                    # It's a vector, add and normalize
                     try:
                         direction = (direction + current_value).normalized()
                     except Exception:
-                        direction = current_value
-                elif operator in ("add", "by"):
-                    direction = current_value
-                elif operator == "mul":
-                    direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
+                        direction = current_value.normalized()
             elif mode == "override":
-                # Override: replace accumulated value
-                # For direction, current_value from builder is already the absolute target
+                # Override: current_value is absolute direction, replace accumulated
                 direction = current_value
             elif mode == "scale":
-                # Scale: multiplicative factor on components
+                # Scale: current_value is multiplier on components
                 direction = Vec2(direction.x * current_value, direction.y * current_value).normalized()
 
         elif prop == "vector":
             if mode == "offset":
-                # Offset: additive contribution
-                if operator == "to":
-                    speed += current_value.magnitude()
+                # Offset: additive contribution (current_value is a vector contribution)
+                speed += current_value.magnitude()
+                try:
                     direction = (direction + current_value.normalized()).normalized()
-                elif operator in ("add", "by"):
-                    speed += current_value.magnitude()
-                    direction = (direction + current_value.normalized()).normalized()
-                elif operator == "sub":
-                    speed -= current_value.magnitude()
-                    direction = (direction - current_value.normalized()).normalized()
+                except:
+                    direction = current_value.normalized()
             elif mode == "override":
                 # Override: replace accumulated value
-                # For vector, current_value is the absolute vector
                 speed = current_value.magnitude()
                 direction = current_value.normalized()
             elif mode == "scale":
@@ -494,23 +503,13 @@ class RigState:
 
         elif prop == "pos":
             if mode == "offset":
-                # Offset: additive contribution (offset from current position)
-                if operator == "to":
-                    # For offset.to(), current_value is an offset, add it
-                    pos = pos + current_value
-                elif operator in ("add", "by"):
-                    pos = pos + current_value
+                # Offset: current_value is offset vector, add to accumulated position
+                pos = pos + current_value
             elif mode == "override":
-                # Override: replace accumulated value (absolute position)
-                if operator == "to":
-                    # For override.to(), builder stores offset but we want absolute
-                    # current_value is animated offset, add to base to get absolute
-                    pos = builder.base_value + current_value
-                elif operator in ("add", "by"):
-                    # For override with add/by, add to base for absolute position
-                    pos = builder.base_value + current_value
+                # Override: current_value is absolute position, replace accumulated
+                pos = current_value
             elif mode == "scale":
-                # Scale: multiplicative factor on position components
+                # Scale: current_value is multiplier on position components
                 pos = Vec2(pos.x * current_value, pos.y * current_value)
 
         return pos, speed, direction

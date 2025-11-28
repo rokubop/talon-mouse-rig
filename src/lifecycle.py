@@ -225,59 +225,33 @@ class PropertyAnimator:
         target_value: float,
         phase: Optional[str],
         progress: float,
-        operator: str,
         has_reverted: bool = False
     ) -> float:
         """Animate a scalar property value.
 
         Args:
-            base_value: The base/starting value
-            target_value: The target value (delta for add/sub, multiplier for mul/div, absolute for to)
+            base_value: The neutral/starting value (depends on mode: 0 for offset, 1 for scale, base for override)
+            target_value: The target value to animate to
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
-            operator: The operator used (to, add, mul, etc.)
             has_reverted: Whether this lifecycle completed via revert
 
         Returns:
-            Current animated value (returns delta for add/sub, multiplier for mul/div, absolute for to)
+            Current animated value
         """
         if phase is None:
-            # Lifecycle complete - return appropriate value
+            # Lifecycle complete
             if has_reverted:
-                # Revert complete - return neutral value
-                if operator in ("mul", "div"):
-                    return 1  # Multiplicative neutral
-                elif operator in ("add", "by", "sub"):
-                    return 0  # Additive neutral
-                else:  # "to"
-                    return base_value  # Return to original
-            # Instant application or hold complete
+                return base_value  # Return to neutral
             return target_value
 
-        # Determine neutral value based on operator
-        if operator in ("mul", "div"):
-            neutral = 1  # Multiplicative neutral
-        elif operator in ("add", "by", "sub"):
-            neutral = 0  # Additive neutral
-        else:  # "to"
-            neutral = base_value  # Revert to original base value
-
-        if operator == "to":
-            # For 'to', animate from base to target absolute value
-            if phase == LifecyclePhase.OVER:
-                return lerp(base_value, target_value, progress)
-            elif phase == LifecyclePhase.HOLD:
-                return target_value
-            elif phase == LifecyclePhase.REVERT:
-                return lerp(target_value, base_value, progress)
-        else:
-            # For add/by/sub/mul/div, animate the delta/multiplier itself
-            if phase == LifecyclePhase.OVER:
-                return lerp(neutral, target_value, progress)
-            elif phase == LifecyclePhase.HOLD:
-                return target_value
-            elif phase == LifecyclePhase.REVERT:
-                return lerp(target_value, neutral, progress)
+        # Animate from base to target
+        if phase == LifecyclePhase.OVER:
+            return lerp(base_value, target_value, progress)
+        elif phase == LifecyclePhase.HOLD:
+            return target_value
+        elif phase == LifecyclePhase.REVERT:
+            return lerp(target_value, base_value, progress)
 
         return target_value
 

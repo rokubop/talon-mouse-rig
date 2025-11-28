@@ -612,6 +612,15 @@ class ActiveBuilder:
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
 
+        # For anonymous layers, set mode based on operator semantics
+        if config.mode is None and is_anonymous:
+            if config.operator == "to":
+                config.mode = "override"  # Absolute value
+            elif config.operator in ("mul", "div"):
+                config.mode = "scale"  # Multiplicative
+            else:
+                config.mode = "offset"  # Additive contribution
+
         # Children list - starts empty, only actual children added
         self.children: list['ActiveBuilder'] = []
 
@@ -665,10 +674,17 @@ class ActiveBuilder:
         return 0
 
     def _calculate_target_value(self) -> Any:
-        """Calculate target value after operator is applied"""
+        """Calculate target value after operator is applied
+
+        The stored value depends on the mode:
+        - offset mode: stores the CONTRIBUTION value (what gets added)
+        - override mode: stores the ABSOLUTE target value
+        - scale mode: stores the MULTIPLIER
+        """
         operator = self.config.operator
         value = self.config.value
         current = self.base_value
+        mode = self.config.mode
 
         # Bake operation: immediately set base to current computed value
         if operator == "bake":
@@ -676,57 +692,120 @@ class ActiveBuilder:
             return None
 
         if self.config.property == "speed":
-            if operator == "to":
-                return value
-            elif operator in ("by", "add"):
-                return value  # Return the delta, not absolute
-            elif operator == "sub":
-                return value  # Return the delta, not absolute
-            elif operator == "mul":
-                return value  # Return the multiplier
-            elif operator == "div":
-                return value  # Return the divisor
+            if mode == "scale":
+                # Scale mode: always store the multiplier
+                if operator == "to":
+                    return value  # Direct multiplier
+                elif operator in ("by", "add"):
+                    return 1.0 + value  # Add to multiplier (1.0 + delta)
+                elif operator == "sub":
+                    return 1.0 - value  # Subtract from multiplier
+                elif operator == "mul":
+                    return value  # Direct multiplier
+                elif operator == "div":
+                    return 1.0 / value if value != 0 else 1.0  # Inverse multiplier
+            elif mode == "override":
+                # Override mode: store absolute target value
+                if operator == "to":
+                    return value  # Direct absolute value
+                elif operator in ("by", "add"):
+                    return current + value  # Absolute from base + delta
+                elif operator == "sub":
+                    return current - value  # Absolute from base - delta
+                elif operator == "mul":
+                    return current * value  # Absolute from base * multiplier
+                elif operator == "div":
+                    return current / value if value != 0 else current  # Absolute from base / divisor
+            else:  # offset mode
+                # Offset mode: store contribution value
+                if operator == "to":
+                    return value  # Contribution amount
+                elif operator in ("by", "add"):
+                    return value  # Delta contribution
+                elif operator == "sub":
+                    return -value  # Negative contribution
+                elif operator == "mul":
+                    return current * (value - 1)  # Convert multiplier to additive contribution
+                elif operator == "div":
+                    return current * (1 - 1/value) if value != 0 else 0  # Convert divisor to additive contribution
 
         elif self.config.property == "direction":
-            if operator == "to":
-                return Vec2.from_tuple(value).normalized()
-            elif operator in ("by", "add"):
-                # Support both rotation by degrees and vector addition
-                if isinstance(value, tuple) and len(value) == 2:
-                    # Vector addition: add delta vector to current direction
-                    delta = Vec2.from_tuple(value)
-                    return (current + delta).normalized()
-                else:
-                    # Rotation by degrees (single value)
-                    angle_deg = value[0] if isinstance(value, tuple) else value
-                    angle_rad = math.radians(angle_deg)
-                    cos_a = math.cos(angle_rad)
-                    sin_a = math.sin(angle_rad)
-                    new_x = current.x * cos_a - current.y * sin_a
-                    new_y = current.x * sin_a + current.y * cos_a
-                    return Vec2(new_x, new_y).normalized()
-            elif operator == "sub":
-                # Vector subtraction: subtract delta vector from current direction
-                if isinstance(value, tuple) and len(value) == 2:
-                    delta = Vec2.from_tuple(value)
-                    return (current - delta).normalized()
-                else:
-                    # Rotation by negative degrees (single value)
-                    angle_deg = value[0] if isinstance(value, tuple) else value
-                    angle_rad = math.radians(-angle_deg)  # Negative for subtraction
-                    cos_a = math.cos(angle_rad)
-                    sin_a = math.sin(angle_rad)
-                    new_x = current.x * cos_a - current.y * sin_a
-                    new_y = current.x * sin_a + current.y * cos_a
-                    return Vec2(new_x, new_y).normalized()
+            if mode == "scale":
+                # Scale mode for direction: store multiplier (applied to components)
+                if operator == "to":
+                    return value
+                elif operator in ("by", "add"):
+                    return 1.0 + value
+                elif operator == "mul":
+                    return value
+            elif mode == "override":
+                # Override mode: store absolute target direction
+                if operator == "to":
+                    return Vec2.from_tuple(value).normalized()
+                elif operator in ("by", "add"):
+                    # For add/by, calculate absolute target from rotation
+                    if isinstance(value, tuple) and len(value) == 2:
+                        delta = Vec2.from_tuple(value)
+                        return (current + delta).normalized()
+                    else:
+                        angle_deg = value[0] if isinstance(value, tuple) else value
+                        angle_rad = math.radians(angle_deg)
+                        cos_a = math.cos(angle_rad)
+                        sin_a = math.sin(angle_rad)
+                        new_x = current.x * cos_a - current.y * sin_a
+                        new_y = current.x * sin_a + current.y * cos_a
+                        return Vec2(new_x, new_y).normalized()
+                elif operator == "sub":
+                    if isinstance(value, tuple) and len(value) == 2:
+                        delta = Vec2.from_tuple(value)
+                        return (current - delta).normalized()
+                    else:
+                        angle_deg = value[0] if isinstance(value, tuple) else value
+                        angle_rad = math.radians(-angle_deg)
+                        cos_a = math.cos(angle_rad)
+                        sin_a = math.sin(angle_rad)
+                        new_x = current.x * cos_a - current.y * sin_a
+                        new_y = current.x * sin_a + current.y * cos_a
+                        return Vec2(new_x, new_y).normalized()
+            else:  # offset mode
+                # Offset mode: store the rotation/delta
+                if operator == "to":
+                    return Vec2.from_tuple(value).normalized()  # Direction contribution
+                elif operator in ("by", "add"):
+                    # Store rotation as is (will be applied during _apply_layer)
+                    if isinstance(value, tuple) and len(value) == 2:
+                        return Vec2.from_tuple(value)
+                    else:
+                        # Store angle for rotation
+                        angle_deg = value[0] if isinstance(value, tuple) else value
+                        return angle_deg  # Store angle directly
+                elif operator == "sub":
+                    if isinstance(value, tuple) and len(value) == 2:
+                        return -Vec2.from_tuple(value)
+                    else:
+                        angle_deg = value[0] if isinstance(value, tuple) else value
+                        return -angle_deg
 
         elif self.config.property == "pos":
-            if operator == "to":
-                # Return offset from current position
-                target_pos = Vec2.from_tuple(value)
-                return target_pos - current
-            elif operator in ("by", "add"):
-                return Vec2.from_tuple(value)
+            if mode == "scale":
+                # Scale mode: store multiplier
+                if operator == "to":
+                    return value
+                elif operator in ("by", "add"):
+                    return 1.0 + value
+            elif mode == "override":
+                # Override mode: store absolute position
+                if operator == "to":
+                    return Vec2.from_tuple(value)  # Absolute position
+                elif operator in ("by", "add"):
+                    return current + Vec2.from_tuple(value)  # Absolute from base + offset
+            else:  # offset mode
+                # Offset mode: store offset vector
+                if operator == "to":
+                    # For offset.to(), the value IS the offset contribution
+                    return Vec2.from_tuple(value)
+                elif operator in ("by", "add"):
+                    return Vec2.from_tuple(value)  # Offset delta
 
         return current
 
@@ -735,24 +814,32 @@ class ActiveBuilder:
 
         Applies the operation immediately and updates internal state.
         Only called for synchronous operations (no .over() or .revert()).
+
+        Mode-aware execution:
+        - offset: target_value is offset to add
+        - override: target_value is absolute position
+        - scale: target_value is multiplier
         """
         if self.config.property == "pos":
-            # Apply position operation immediately
-            current_value = self.target_value  # This is the offset for position
+            mode = self.config.mode
+            current_value = self.target_value
 
-            if self.config.operator == "to":
-                # For .to(), target_value is offset from current position
-                # Apply it to get to the target
-                target_pos = self.config.value
-                target_vec = Vec2.from_tuple(target_pos) if isinstance(target_pos, (tuple, list)) else target_pos
-                self.rig_state._internal_pos = target_vec
-                self.rig_state._base_pos = Vec2(target_vec.x, target_vec.y)
-            elif self.config.operator in ("add", "by"):
-                # For add/by, apply the offset
-                offset = Vec2.from_tuple(self.config.value) if isinstance(self.config.value, (tuple, list)) else self.config.value
+            if mode == "offset":
+                # Offset mode: add the offset vector to current position
                 self.rig_state._internal_pos = Vec2(
-                    self.rig_state._internal_pos.x + offset.x,
-                    self.rig_state._internal_pos.y + offset.y
+                    self.rig_state._internal_pos.x + current_value.x,
+                    self.rig_state._internal_pos.y + current_value.y
+                )
+                self.rig_state._base_pos = Vec2(self.rig_state._internal_pos.x, self.rig_state._internal_pos.y)
+            elif mode == "override":
+                # Override mode: set to absolute position
+                self.rig_state._internal_pos = Vec2(current_value.x, current_value.y)
+                self.rig_state._base_pos = Vec2(current_value.x, current_value.y)
+            elif mode == "scale":
+                # Scale mode: multiply current position by factor
+                self.rig_state._internal_pos = Vec2(
+                    self.rig_state._internal_pos.x * current_value,
+                    self.rig_state._internal_pos.y * current_value
                 )
                 self.rig_state._base_pos = Vec2(self.rig_state._internal_pos.x, self.rig_state._internal_pos.y)
 
@@ -810,16 +897,28 @@ class ActiveBuilder:
         """Get just this builder's own value (not including children)
 
         Used for aggregation where each child contributes its own value.
+        The returned value depends on mode:
+        - offset: returns contribution value to add
+        - override: returns absolute value to use
+        - scale: returns multiplier to apply
         """
         phase, progress = self.lifecycle.update(0)
+        mode = self.config.mode
 
         if self.config.property == "speed":
+            # Get neutral value based on mode
+            if mode == "scale":
+                neutral = 1.0  # Scale neutral is 1.0 (no scaling)
+            elif mode == "offset":
+                neutral = 0.0  # Offset neutral is 0.0 (no contribution)
+            else:  # override
+                neutral = self.base_value  # Override neutral is base value
+
             return PropertyAnimator.animate_scalar(
-                self.base_value,
+                neutral,
                 self.target_value,
                 phase,
                 progress,
-                self.config.operator,
                 self.lifecycle.has_reverted()
             )
         elif self.config.property == "direction":
@@ -828,22 +927,90 @@ class ActiveBuilder:
             if phase == LifecyclePhase.REVERT:
                 interpolation = self.config.revert_interpolation
 
-            return PropertyAnimator.animate_direction(
-                self.base_value,
-                self.target_value,
-                phase,
-                progress,
-                self.lifecycle.has_reverted(),
-                interpolation
-            )
+            # For direction, neutral depends on mode
+            if mode == "offset":
+                # For offset mode with angle rotation, animate the angle
+                if isinstance(self.target_value, (int, float)):
+                    # Animate angle from 0 to target angle
+                    neutral_angle = 0.0
+                    return PropertyAnimator.animate_scalar(
+                        neutral_angle,
+                        self.target_value,
+                        phase,
+                        progress,
+                        self.lifecycle.has_reverted()
+                    )
+                else:
+                    # Animate direction vector - use base as neutral for offset
+                    return PropertyAnimator.animate_direction(
+                        self.base_value,
+                        self.target_value,
+                        phase,
+                        progress,
+                        self.lifecycle.has_reverted(),
+                        interpolation
+                    )
+            elif mode == "scale":
+                # Scale mode: animate the multiplier from 1.0
+                return PropertyAnimator.animate_scalar(
+                    1.0,
+                    self.target_value,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted()
+                )
+            else:  # override
+                # Override: animate from base to absolute target
+                return PropertyAnimator.animate_direction(
+                    self.base_value,
+                    self.target_value,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted(),
+                    interpolation
+                )
         elif self.config.property == "pos":
-            return PropertyAnimator.animate_position(
-                self.base_value,
-                self.target_value,
-                phase,
-                progress,
-                self.lifecycle.has_reverted()
-            )
+            # For position, neutral depends on mode
+            if mode == "scale":
+                # Scale mode: animate multiplier from 1.0
+                return PropertyAnimator.animate_scalar(
+                    1.0,
+                    self.target_value,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted()
+                )
+            elif mode == "offset":
+                # Offset mode: animate offset from zero
+                neutral = Vec2(0, 0)
+                if phase is None:
+                    if self.lifecycle.has_reverted():
+                        return neutral
+                    return self.target_value
+                elif phase == LifecyclePhase.OVER:
+                    return self.target_value * progress
+                elif phase == LifecyclePhase.HOLD:
+                    return self.target_value
+                elif phase == LifecyclePhase.REVERT:
+                    return self.target_value * (1.0 - progress)
+            else:  # override
+                # Override mode: animate absolute position from base
+                if phase is None:
+                    if self.lifecycle.has_reverted():
+                        return self.base_value
+                    return self.target_value
+                elif phase == LifecyclePhase.OVER:
+                    return Vec2(
+                        self.base_value.x + (self.target_value.x - self.base_value.x) * progress,
+                        self.base_value.y + (self.target_value.y - self.base_value.y) * progress
+                    )
+                elif phase == LifecyclePhase.HOLD:
+                    return self.target_value
+                elif phase == LifecyclePhase.REVERT:
+                    return Vec2(
+                        self.target_value.x + (self.base_value.x - self.target_value.x) * progress,
+                        self.target_value.y + (self.base_value.y - self.target_value.y) * progress
+                    )
 
         return self.target_value
 
@@ -867,7 +1034,6 @@ class ActiveBuilder:
                     self.group_target_value,
                     phase,
                     progress,
-                    "to",  # Group revert is always absolute
                     self.group_lifecycle.has_reverted()
                 )
             elif property_type == "direction":
