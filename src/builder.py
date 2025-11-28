@@ -341,13 +341,11 @@ class RigBuilder:
             # Incomplete builder, ignore
             return
 
-        # Validate mode is set for user layers
         self.config.validate_mode()
+        self.config.validate_hold()
 
-        # Calculate rate-based durations
         self._calculate_rate_durations()
 
-        # Create ActiveBuilder and add to state
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
         self.rig_state.add_builder(active)
 

@@ -30,8 +30,8 @@ def test_pos_to():
 
     x, y = ctrl.mouse_pos()
 
-    assert abs(x - target_x) < 10, f"X position wrong: expected {target_x}, got {x}"
-    assert abs(y - target_y) < 10, f"Y position wrong: expected {target_y}, got {y}"
+    assert x == target_x, f"X position wrong: expected {target_x}, got {x}"
+    assert y == target_y, f"Y position wrong: expected {target_y}, got {y}"
 
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
@@ -41,33 +41,29 @@ def test_pos_to():
 
 def test_pos_to_over(on_success, on_failure):
     """Test: rig.pos.to(x, y).over(ms) - smooth transition"""
-    from .main import wait_for_position_async
-
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y + TEST_OFFSET
 
+    def check_final():
+        x, y = ctrl.mouse_pos()
+        if x != target_x or y != target_y:
+            on_failure(f"Final position wrong: expected ({target_x}, {target_y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
+
     rig = actions.user.mouse_rig()
-    rig.pos.to(target_x, target_y).over(1000)
-
-    # Should reach target within reasonable time - use async wait
-    def on_position_success():
-        # Wait a bit for cleanup, then check state with fresh rig reference
-        def check_state():
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        cron.after("200ms", check_state)
-
-    wait_for_position_async(target_x, target_y, tolerance=10, timeout_ms=5000,
-                           on_success=on_position_success, on_failure=on_failure)
+    rig.pos.to(target_x, target_y).over(1000).then(check_final)
 
 
 def test_pos_to_over_hold_revert(on_success, on_failure):
@@ -75,41 +71,36 @@ def test_pos_to_over_hold_revert(on_success, on_failure):
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y
 
-    rig = actions.user.mouse_rig()
-    rig.pos.to(target_x, target_y).over(300).hold(300).revert(300)
-
-    # Wait for transition to target
     def check_target():
         x, y = ctrl.mouse_pos()
-        if abs(x - target_x) < 10 and abs(y - target_y) < 10:
-            # Reached target, now wait through hold and check revert
-            cron.after("400ms", check_revert)
-        else:
-            on_failure(f"Failed to reach target ({target_x}, {target_y}), stuck at ({x}, {y})")
+        if x != target_x or y != target_y:
+            on_failure(f"After over: expected ({target_x}, {target_y}), got ({x}, {y})")
+
+    def check_hold():
+        x, y = ctrl.mouse_pos()
+        if x != target_x or y != target_y:
+            on_failure(f"After hold: expected ({target_x}, {target_y}), got ({x}, {y})")
 
     def check_revert():
-        # Check if reverted back to center
-        cron.after("400ms", verify_revert)
-
-    def verify_revert():
         x, y = ctrl.mouse_pos()
-        if abs(x - CENTER_X) < 10 and abs(y - CENTER_Y) < 10:
-            # State checks with fresh rig reference
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        else:
-            on_failure(f"Failed to revert to center ({CENTER_X}, {CENTER_Y}), stuck at ({x}, {y})")
+        if x != CENTER_X or y != CENTER_Y:
+            on_failure(f"After revert: expected ({CENTER_X}, {CENTER_Y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
 
-    cron.after("400ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.pos.to(target_x, target_y).over(300).then(check_target).hold(300).then(check_hold).revert(300).then(check_revert)
 
 
 def test_pos_to_revert(on_success, on_failure):
@@ -117,37 +108,26 @@ def test_pos_to_revert(on_success, on_failure):
     target_x = CENTER_X - TEST_OFFSET
     target_y = CENTER_Y
 
-    rig = actions.user.mouse_rig()
-    rig.pos.to(target_x, target_y).revert(400)
-
-    # Wait a moment for rig to process, then verify at target
-    def check_target():
-        x, y = ctrl.mouse_pos()
-        if abs(x - target_x) > 50:
-            on_failure(f"Not at target position ({target_x}, {target_y}), at ({x}, {y})")
-            return
-        # Now wait for the 400ms revert to complete
-        cron.after("600ms", check_revert)
-
     def check_revert():
         x, y = ctrl.mouse_pos()
-        if abs(x - CENTER_X) < 50 and abs(y - CENTER_Y) < 50:
-            # State checks with fresh rig reference
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        else:
-            on_failure(f"Failed to revert to center ({CENTER_X}, {CENTER_Y}), stuck at ({x}, {y})")
+        if x != CENTER_X or y != CENTER_Y:
+            on_failure(f"After revert: expected ({CENTER_X}, {CENTER_Y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
 
-    cron.after("100ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.pos.to(target_x, target_y).revert(400).then(check_revert)
 
 
 # ============================================================================
@@ -167,7 +147,7 @@ def test_pos_by(on_success, on_failure):
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx
         expected_y = start_y + dy
-        if abs(x - expected_x) < 10 and abs(y - expected_y) < 10:
+        if x == expected_x and y == expected_y:
             # State checks with fresh rig reference
             rig_check = actions.user.mouse_rig()
             if len(rig_check.state.layers) != 0:
@@ -188,35 +168,31 @@ def test_pos_by(on_success, on_failure):
 
 def test_pos_by_over(on_success, on_failure):
     """Test: rig.pos.by(dx, dy).over(ms) - relative smooth transition"""
-    from .main import wait_for_position_async
-
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = -TEST_OFFSET, TEST_OFFSET
     target_x = start_x + dx
     target_y = start_y + dy
 
+    def check_final():
+        x, y = ctrl.mouse_pos()
+        if x != target_x or y != target_y:
+            on_failure(f"Final position wrong: expected ({target_x}, {target_y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
+
     rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy).over(500)
-
-    # Should reach target within reasonable time
-    def on_position_success():
-        # Wait a bit for cleanup, then check state with fresh rig reference
-        def check_state():
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        cron.after("200ms", check_state)
-
-    wait_for_position_async(target_x, target_y, tolerance=10, timeout_ms=5000,
-                           on_success=on_position_success, on_failure=on_failure)
+    rig.pos.by(dx, dy).over(500).then(check_final)
 
 
 def test_pos_by_over_hold_revert(on_success, on_failure):
@@ -224,30 +200,36 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, TEST_OFFSET
 
-    rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy).over(300).hold(300).revert(300)
-
-    # Check if reached target
     def check_target():
         x, y = ctrl.mouse_pos()
-        if abs(x - (start_x + dx)) < 10 and abs(y - (start_y + dy)) < 10:
-            # Wait through hold
-            cron.after("400ms", check_revert)
-        else:
-            on_failure(f"Failed to reach target ({start_x + dx}, {start_y + dy}), at ({x}, {y})")
+        if x != (start_x + dx) or y != (start_y + dy):
+            on_failure(f"After over: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+
+    def check_hold():
+        x, y = ctrl.mouse_pos()
+        if x != (start_x + dx) or y != (start_y + dy):
+            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
 
     def check_revert():
-        # Check if reverted to start
-        cron.after("400ms", verify_revert)
-
-    def verify_revert():
         x, y = ctrl.mouse_pos()
-        if abs(x - start_x) < 10 and abs(y - start_y) < 10:
-            on_success()
-        else:
-            on_failure(f"Failed to revert to start ({start_x}, {start_y}), stuck at ({x}, {y})")
+        if x != start_x or y != start_y:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
 
-    cron.after("400ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.pos.by(dx, dy).over(300).then(check_target).hold(300).then(check_hold).revert(300).then(check_revert)
 
 
 def test_pos_by_revert(on_success, on_failure):
@@ -255,37 +237,26 @@ def test_pos_by_revert(on_success, on_failure):
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = -TEST_OFFSET, -TEST_OFFSET
 
-    rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy).revert(400)
-
-    # Wait a moment for rig to process, then verify at offset position
-    def check_target():
-        x, y = ctrl.mouse_pos()
-        if abs(x - (start_x + dx)) > 50 or abs(y - (start_y + dy)) > 50:
-            on_failure(f"Not at offset position ({start_x + dx}, {start_y + dy}), at ({x}, {y})")
-            return
-        # Now wait for the 400ms revert to complete
-        cron.after("600ms", check_revert)
-
     def check_revert():
         x, y = ctrl.mouse_pos()
-        if abs(x - start_x) < 50 and abs(y - start_y) < 50:
-            # State checks with fresh rig reference
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        else:
-            on_failure(f"Failed to revert to start ({start_x}, {start_y}), stuck at ({x}, {y})")
+        if x != start_x or y != start_y:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+            return
+        # State checks with fresh rig reference
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
 
-    cron.after("100ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.pos.by(dx, dy).revert(400).then(check_revert)
 
 
 # ============================================================================
@@ -293,26 +264,24 @@ def test_pos_by_revert(on_success, on_failure):
 # ============================================================================
 
 def test_layer_pos_to(on_success, on_failure):
-    """Test: layer().pos.override.to(x, y).hold(ms)"""
+    """Test: layer().pos.override.to(x, y) - without revert keeps position"""
     target_x = CENTER_X + TEST_OFFSET
     target_y = CENTER_Y - TEST_OFFSET
 
-    rig = actions.user.mouse_rig()
-    rig.layer("test").pos.override.to(target_x, target_y).over(300)
-
     def verify_final():
         x, y = ctrl.mouse_pos()
-        if abs(x - target_x) < 20 and abs(y - target_y) < 20:
-            # State checks - layer should still be active since no revert
-            rig_check = actions.user.mouse_rig()
-            if "test" not in rig_check.state.layers:
-                on_failure(f"Expected 'test' layer to be active, got: {rig_check.state.layers}")
-                return
-            on_success()
-        else:
-            on_failure(f"Position drifted after hold, expected ({target_x}, {target_y}), at ({x}, {y})")
+        if x != target_x or y != target_y:
+            on_failure(f"Final position wrong: expected ({target_x}, {target_y}), got ({x}, {y})")
+            return
+        # State checks - layer should still be active since no revert
+        rig_check = actions.user.mouse_rig()
+        if "test" not in rig_check.state.layers:
+            on_failure(f"Expected 'test' layer to be active, got: {rig_check.state.layers}")
+            return
+        on_success()
 
-    cron.after("400ms", verify_final)
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.override.to(target_x, target_y).over(300).then(verify_final)
 
 
 def test_layer_pos_to_revert(on_success, on_failure):
@@ -320,65 +289,84 @@ def test_layer_pos_to_revert(on_success, on_failure):
     target_x = CENTER_X - TEST_OFFSET
     target_y = CENTER_Y + TEST_OFFSET
 
-    rig = actions.user.mouse_rig()
-    rig.layer("test").pos.override.to(target_x, target_y).hold(300).revert(300)
-
-    # Check if reached target
-    def check_target():
+    def check_hold():
         x, y = ctrl.mouse_pos()
-        if abs(x - target_x) < 10 and abs(y - target_y) < 10:
-            # Wait through hold
-            cron.after("400ms", check_revert)
-        else:
-            on_failure(f"Failed to reach target ({target_x}, {target_y}), at ({x}, {y})")
+        if x != target_x or y != target_y:
+            on_failure(f"After hold: expected ({target_x}, {target_y}), got ({x}, {y})")
 
     def check_revert():
-        # Check after revert should complete
-        cron.after("400ms", verify_revert)
-
-    def verify_revert():
         x, y = ctrl.mouse_pos()
-        if abs(x - CENTER_X) < 10 and abs(y - CENTER_Y) < 10:
-            # State checks - layer should be cleaned up after revert
-            rig_check = actions.user.mouse_rig()
-            if len(rig_check.state.layers) != 0:
-                on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
-                return
-            if rig_check._state._frame_loop_job is not None:
-                on_failure("Frame loop should be stopped")
-                return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
-                return
-            on_success()
-        else:
-            on_failure(f"Failed to revert to center ({CENTER_X}, {CENTER_Y}), stuck at ({x}, {y})")
+        if x != CENTER_X or y != CENTER_Y:
+            on_failure(f"After revert: expected ({CENTER_X}, {CENTER_Y}), got ({x}, {y})")
+            return
+        # State checks - layer should be cleaned up after revert
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
 
-    cron.after("200ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.override.to(target_x, target_y).hold(300).then(check_hold).revert(300).then(check_revert)
 
 
 def test_layer_pos_by(on_success, on_failure):
-    """Test: layer().pos.offset.by(dx, dy).hold(ms)"""
+    """Test: layer().pos.offset.by(dx, dy) - without revert keeps offset"""
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, 0
 
-    rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx, dy).hold(500)
-
-    # Check if reached target
     def check_target():
         x, y = ctrl.mouse_pos()
-        if abs(x - (start_x + dx)) < 10 and abs(y - (start_y + dy)) < 10:
-            # State checks - layer should still be active during hold
-            rig_check = actions.user.mouse_rig()
-            if "test" not in rig_check.state.layers:
-                on_failure(f"Expected 'test' layer to be active, got: {rig_check.state.layers}")
-                return
-            on_success()
-        else:
-            on_failure(f"Failed to reach target ({start_x + dx}, {start_y + dy}), at ({x}, {y})")
+        if x != (start_x + dx) or y != (start_y + dy):
+            on_failure(f"Final position wrong: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+            return
+        # State checks - layer should still be active since no revert
+        rig_check = actions.user.mouse_rig()
+        if "test" not in rig_check.state.layers:
+            on_failure(f"Expected 'test' layer to be active, got: {rig_check.state.layers}")
+            return
+        on_success()
 
-    cron.after("200ms", check_target)
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.offset.by(dx, dy).over(300).then(check_target)
+
+
+def test_layer_pos_by_revert(on_success, on_failure):
+    """Test: layer().pos.offset.by(dx, dy).hold(ms).revert(ms)"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx, dy = TEST_OFFSET, 0
+
+    def check_hold():
+        x, y = ctrl.mouse_pos()
+        if x != (start_x + dx) or y != (start_y + dy):
+            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+
+    def check_revert():
+        x, y = ctrl.mouse_pos()
+        if x != start_x or y != start_y:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+            return
+        # State checks - layer should be cleaned up after revert
+        rig_check = actions.user.mouse_rig()
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is not None:
+            on_failure("Frame loop should be stopped")
+            return
+        if len(rig_check._state._active_builders) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.offset.by(dx, dy).hold(500).then(check_hold).revert(300).then(check_revert)
 
 
 # ============================================================================
@@ -401,8 +389,8 @@ def test_pos_by_twice():
     expected_x = start_x + dx1 + dx2
     expected_y = start_y + dy1 + dy2
 
-    assert abs(x - expected_x) < 10, f"X position wrong: expected {expected_x}, got {x}"
-    assert abs(y - expected_y) < 10, f"Y position wrong: expected {expected_y}, got {y}"
+    assert x == expected_x, f"X position wrong: expected {expected_x}, got {x}"
+    assert y == expected_y, f"Y position wrong: expected {expected_y}, got {y}"
 
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
@@ -427,8 +415,8 @@ def test_pos_to_then_by():
     expected_x = target_x + dx
     expected_y = target_y + dy
 
-    assert abs(x - expected_x) < 10, f"X position wrong: expected {expected_x}, got {x}"
-    assert abs(y - expected_y) < 10, f"Y position wrong: expected {expected_y}, got {y}"
+    assert x == expected_x, f"X position wrong: expected {expected_x}, got {x}"
+    assert y == expected_y, f"Y position wrong: expected {expected_y}, got {y}"
 
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
@@ -452,6 +440,7 @@ POSITION_TESTS = [
     ("layer pos.override.to()", test_layer_pos_to),
     ("layer pos.override.to() revert", test_layer_pos_to_revert),
     ("layer pos.offset.by()", test_layer_pos_by),
+    ("layer pos.offset.by() revert", test_layer_pos_by_revert),
     ("pos.by() twice", test_pos_by_twice),
     ("pos.to() then by()", test_pos_to_then_by),
 ]

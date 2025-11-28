@@ -708,9 +708,9 @@ class RigState:
             return self._builder.config.property
 
         @property
-        def operator(self) -> str:
-            """Operation type: 'to', 'add', 'by', 'mul', 'div', 'sub'"""
-            return self._builder.config.operator
+        def mode(self) -> Optional[str]:
+            """Layer mode: 'offset', 'override', 'scale', or None"""
+            return self._builder.config.mode
 
         @property
         def value(self):
@@ -754,6 +754,30 @@ class RigState:
             builder.revert(ms, easing)
             # Force immediate execution (since it won't have __del__ called naturally)
             builder._execute()
+
+        def __getattr__(self, name: str):
+            """Provide helpful error messages for invalid attributes"""
+            valid_attrs = ['prop', 'mode', 'value', 'phase', 'speed', 'direction', 'pos', 'time_alive', 'revert']
+
+            # Check for common mistakes
+            if name in ['direction_x', 'direction_y']:
+                raise AttributeError(
+                    f"LayerState has no attribute '{name}'. "
+                    f"Use 'direction' to get the Vec2 object, then access '.x' or '.y': "
+                    f"layer_state.direction.x"
+                )
+            elif name in ['speed_value', 'pos_offset']:
+                prop = name.split('_')[0]
+                raise AttributeError(
+                    f"LayerState has no attribute '{name}'. "
+                    f"Use 'value' or the property name directly: "
+                    f"layer_state.{prop} or layer_state.value"
+                )
+
+            raise AttributeError(
+                f"LayerState has no attribute '{name}'. "
+                f"Available attributes: {', '.join(valid_attrs)}"
+            )
 
     def layer(self, layer_name: str) -> Optional['RigState.LayerState']:
         """Get state information for a specific ---layer

@@ -516,3 +516,19 @@ class BuilderConfig:
                 f"Invalid mode: {repr(self.mode)}\n"
                 f"Valid modes: {valid_str}"
             )
+
+    def validate_hold(self) -> None:
+        """Validate that .hold() is followed by .revert() or .then()
+
+        Raises:
+            ConfigError: If .hold() is used without .revert() or .then()
+        """
+        if self.hold_ms is not None and self.revert_ms is None:
+            # Check if there's a .then() callback specifically after the HOLD phase
+            has_hold_callback = any(stage == LifecyclePhase.HOLD for stage, _ in self.then_callbacks)
+            if not has_hold_callback:
+                raise ConfigError(
+                    ".hold() must be followed by .revert() or .then()\n\n"
+                    ".hold() is only useful when you need to wait before reverting or calling a callback.\n"
+                    "If you want to keep the value, simply don't use .hold() at all, and you can .revert() later.\n\n"
+                )

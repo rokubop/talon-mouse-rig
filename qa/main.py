@@ -39,18 +39,24 @@ def toggle_test_ui(show: bool = None):
     from .position import POSITION_TESTS
     from .speed import SPEED_TESTS
     from .direction import DIRECTION_TESTS
+    from .validation import VALIDATION_TESTS
 
-    all_tests = POSITION_TESTS + SPEED_TESTS + DIRECTION_TESTS
+    test_groups = [
+        ("Position", POSITION_TESTS),
+        ("Speed", SPEED_TESTS),
+        ("Direction", DIRECTION_TESTS),
+        ("Validation", VALIDATION_TESTS)
+    ]
 
     show = show if show is not None else not actions.user.ui_elements_get_trees()
 
     if show:
-        actions.user.ui_elements_show(lambda: test_buttons_ui(all_tests))
+        actions.user.ui_elements_show(lambda: test_buttons_ui(test_groups))
         actions.user.ui_elements_show(test_result_ui)
         actions.user.ui_elements_show(test_status_ui)
         actions.user.ui_elements_show(test_summary_ui)
     else:
-        actions.user.ui_elements_hide(lambda: test_buttons_ui(all_tests))
+        actions.user.ui_elements_hide(lambda: test_buttons_ui(test_groups))
         actions.user.ui_elements_hide(test_result_ui)
         actions.user.ui_elements_hide(test_status_ui)
         actions.user.ui_elements_hide(test_summary_ui)
@@ -128,6 +134,9 @@ def run_single_test(test_name, test_func, on_complete=None):
     actions.user.ui_elements_set_state("test_result", None)
 
     def on_test_success():
+        # Always stop the rig after test completes
+        actions.user.mouse_rig().stop()
+
         # Show success
         actions.user.ui_elements_set_state("test_result", {
             "success": True,
@@ -144,6 +153,9 @@ def run_single_test(test_name, test_func, on_complete=None):
         cron.after("1s", clear_and_complete)
 
     def on_test_failure(error_msg):
+        # Always stop the rig after test completes
+        actions.user.mouse_rig().stop()
+
         # Show failure
         actions.user.ui_elements_set_state("test_result", {
             "success": False,
@@ -226,11 +238,14 @@ def run_all_tests(tests):
         _test_runner_state["current_test_index"] += 1
 
         def on_test_complete(success):
+            # Always stop the rig after each test to ensure clean state
+            actions.user.mouse_rig().stop()
+
             if success:
                 _test_runner_state["passed_count"] += 1
             else:
                 _test_runner_state["failed_count"] += 1
-                
+
             if not success:
                 # Stop on failure and show summary
                 print("Stopping test run due to failure")
@@ -249,27 +264,27 @@ def show_summary():
     passed = _test_runner_state["passed_count"]
     failed = _test_runner_state["failed_count"]
     total = passed + failed
-    
+
     all_passed = failed == 0
-    
+
     actions.user.ui_elements_set_state("test_summary", {
         "passed": passed,
         "failed": failed,
         "total": total,
         "all_passed": all_passed
     })
-    
+
     print(f"\n{'='*50}")
     print(f"Test Run Complete: {passed}/{total} passed")
     if failed > 0:
         print(f"Failed: {failed}")
     print(f"{'='*50}\n")
-    
+
     # Clear summary after 3 seconds
     def clear_summary():
         actions.user.ui_elements_set_state("test_summary", None)
         stop_all_tests()
-    
+
     cron.after("3s", clear_summary)
 
 
@@ -284,16 +299,22 @@ def stop_all_tests():
     _test_runner_state["current_test_index"] = 0
     _test_runner_state["tests"] = []
 
-    actions.user.ui_elements_set_state("run_all_active", False)
+    actions.user.ui_elements_set_state("run_all_Position", False)
+    actions.user.ui_elements_set_state("run_all_Speed", False)
+    actions.user.ui_elements_set_state("run_all_Direction", False)
+    actions.user.ui_elements_set_state("run_all_Validation", False)
     actions.user.ui_elements_set_state("current_test", None)
 
 
-def toggle_run_all(tests):
-    """Toggle running all tests"""
-    if _test_runner_state["running"]:
+def toggle_run_all(tests, group_name):
+    """Toggle running all tests in a group"""
+    state_key = f"run_all_{group_name}"
+    if _test_runner_state["running"] and actions.user.ui_elements_get_state(state_key, False):
         _test_runner_state["stop_requested"] = True
         stop_all_tests()
+        actions.user.ui_elements_set_state(state_key, False)
     else:
+        actions.user.ui_elements_set_state(state_key, True)
         run_all_tests(tests)
 
 
@@ -301,63 +322,117 @@ def toggle_run_all(tests):
 # UI COMPONENTS
 # ============================================================================
 
-def test_buttons_ui(tests):
-    """UI element showing all test buttons on left side"""
+def test_buttons_ui(test_groups):
+    """UI element showing all test buttons grouped by category"""
     screen, window, div, button, state, icon, text = actions.user.ui_elements(
         ["screen", "window", "div", "button", "state", "icon", "text"]
     )
 
-    run_all_active = state.get("run_all_active", False)
-    run_all_icon = "stop" if run_all_active else "play"
-    run_all_label = "Stop All" if run_all_active else "Run All"
-    run_all_color = "#ff5555" if run_all_active else "#00aa00"
+    groups = []
 
-    buttons = [
-        button(
-            padding=10,
-            margin=2,
-            margin_bottom=8,
-            background_color=run_all_color,
-            border_radius=5,
+    for group_name, tests in test_groups:
+        state_key = f"run_all_{group_name}"
+        run_all_active = state.get(state_key, False)
+        is_collapsed, set_collapsed = state.use(f"collapsed_{group_name}", False)
+        run_all_icon = "stop" if run_all_active else "play"
+        run_all_label = f"Run All {group_name}"
+        run_all_color = "#ff5555" if run_all_active else "#00aa00"
+        chevron_icon = "chevron_right" if is_collapsed else "chevron_down"
+
+        # Unified header with collapse+title button and Run All button
+        group_header = div(
             flex_direction="row",
+            gap=10,
             align_items="center",
-            gap=8,
-            on_click=lambda e: toggle_run_all(tests)
+            padding=8,
+            background_color="#222222",
+            border_radius=4
         )[
-            icon(run_all_icon, size=16, color="white"),
-            text(run_all_label, color="white", font_weight="bold")
-        ]
-    ]
-
-    for test_name, test_func in tests:
-        buttons.append(
             button(
-                test_name,
                 padding=8,
-                margin=2,
-                background_color="#333333",
-                color="white",
-                border_radius=5,
-                on_click=lambda e, f=test_func, n=test_name: run_single_test(n, f)
+                padding_right=12,
+                background_color="#2a2a2a",
+                flex_direction="row",
+                align_items="center",
+                gap=8,
+                flex=1,
+                border_radius=3,
+                on_click=lambda e, sc=set_collapsed, ic=is_collapsed: sc(not ic)
+            )[
+                icon(chevron_icon, size=14, color="white"),
+                text(group_name, color="white", font_weight="bold", font_size=14)
+            ],
+            button(
+                padding=8,
+                padding_left=12,
+                padding_right=12,
+                background_color=run_all_color,
+                flex_direction="row",
+                align_items="center",
+                gap=8,
+                border_radius=3,
+                on_click=lambda e, t=tests, g=group_name: toggle_run_all(t, g)
+            )[
+                icon(run_all_icon, size=14, color="white"),
+                text(run_all_label, color="white", font_weight="bold", font_size=13)
+            ]
+        ]
+
+        test_buttons = []
+        if not is_collapsed:
+            # Test list container with subtle border and spacing
+            test_items = []
+            for test_name, test_func in tests:
+                test_items.append(
+                    button(
+                        test_name,
+                        padding=8,
+                        padding_left=16,
+                        margin_bottom=2,
+                        background_color="#2a2a2a",
+                        color="#cccccc",
+                        font_size=13,
+                        border_radius=2,
+                        on_click=lambda e, f=test_func, n=test_name: run_single_test(n, f)
+                    )
+                )
+
+            test_buttons.append(
+                div(
+                    flex_direction="column",
+                    padding=8,
+                    padding_top=4,
+                    background_color="#1a1a1a",
+                    border_radius=4
+                )[
+                    *test_items
+                ]
             )
+
+        groups.append(
+            div(
+                flex_direction="column",
+                margin_bottom=16
+            )[
+                group_header,
+                *test_buttons
+            ]
         )
 
-    return screen(align_items="flex_start", justify_content="flex_end")[
+    return screen(align_items="flex_start", justify_content="flex_start")[
         window(
             title="Mouse Rig Tests",
             on_close=lambda e: (
                 e.prevent_default(),
                 toggle_test_ui(show=False),
             ),
-            padding=10,
-            background_color="#04120A",
-            border_radius=4,
-            # margin_bottom=10,
-            # margin_left=10,
+            padding=12,
+            margin=10,
+            background_color="#1a1a1a",
             overflow_y="auto",
             max_height=1000
         )[
-            *buttons
+            *groups
         ]
     ]
 
@@ -427,7 +502,7 @@ def test_summary_ui():
     all_passed = summary.get("all_passed", False)
 
     bg_color = "#00aa00dd" if all_passed else "#ff8800dd"
-    
+
     return screen(align_items="center", justify_content="center")[
         div(
             padding=40,
