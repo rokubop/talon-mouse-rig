@@ -22,16 +22,16 @@ class Actions:
         """
         return get_rig()
 
-    def mouse_rig_stop(ms: float = None, easing: str = None) -> None:
+    def mouse_rig_stop(over_ms: float = None, easing: str = None) -> None:
         """Stop the mouse rig and remove all layers, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
         if easing is not None:
-            rig.stop(ms, easing)
+            rig.stop(over_ms, easing)
         else:
-            rig.stop(ms)
+            rig.stop(over_ms)
 
     def mouse_rig_set_api(api: str) -> None:
         """Set mouse movement API
@@ -102,79 +102,84 @@ class Actions:
         rig.direction(0, 1)
         rig.speed(rig.state.speed or initial_speed)
 
-    def mouse_rig_speed_to(speed: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_speed_to(speed: float, over_ms: int = None, easing: str = None) -> None:
         """Set speed to absolute value, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.speed.to(speed).over(ms, easing)
+        if over_ms is not None:
+            rig.speed.to(speed).over(over_ms, easing)
         else:
             rig.speed.to(speed)
 
-    def mouse_rig_speed_by(delta: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_speed_by(delta: float, over_ms: int = None, easing: str = None) -> None:
         """Add to current speed, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.speed.by(delta).over(ms, easing)
+        if over_ms is not None:
+            rig.speed.by(delta).over(over_ms, easing)
         else:
             rig.speed.by(delta)
 
-    def mouse_rig_speed_mul(multiplier: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_speed_mul(multiplier: float, over_ms: int = None, easing: str = None) -> None:
         """Multiply current speed, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.speed.mul(multiplier).over(ms, easing)
+        if over_ms is not None:
+            rig.speed.mul(multiplier).over(over_ms, easing)
         else:
             rig.speed.mul(multiplier)
 
-    def mouse_rig_pos_to(x: float, y: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_pos_to(x: float, y: float, over_ms: int = None, easing: str = None) -> None:
         """Move mouse to absolute position, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.pos.to(x, y).over(ms, easing)
+        if over_ms is not None:
+            rig.pos.to(x, y).over(over_ms, easing)
         else:
             rig.pos.to(x, y)
 
-    def mouse_rig_pos_by(dx: float, dy: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_pos_by(dx: float, dy: float, over_ms: int = None, easing: str = None) -> None:
         """Move mouse by relative offset, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.pos.by(dx, dy).over(ms, easing)
+        if over_ms is not None:
+            rig.pos.by(dx, dy).over(over_ms, easing)
         else:
             rig.pos.by(dx, dy)
 
-    def mouse_rig_direction_to(x: float, y: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_direction_to(x: float, y: float, over_ms: int = None, easing: str = None) -> None:
         """Set direction to absolute vector or angle, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.direction.to(x, y).over(ms, easing)
+        if over_ms is not None:
+            rig.direction.to(x, y).over(over_ms, easing)
         else:
             rig.direction.to(x, y)
 
-    def mouse_rig_direction_by(angle: float, ms: int = None, easing: str = None) -> None:
+    def mouse_rig_direction_by(angle: float, over_ms: int = None, easing: str = None) -> None:
         """Rotate direction by angle (degrees), optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        if ms is not None:
-            rig.direction.by(angle).over(ms, easing)
+        if over_ms is not None:
+            rig.direction.by(angle).over(over_ms, easing)
         else:
             rig.direction.by(angle)
+
+    def mouse_rig_boost(speed_increase: float, over_ms: int = None, revert_ms: int = None) -> None:
+        """Temporarily boost speed"""
+        rig = get_rig()
+        rig.speed.add(speed_increase).over(over_ms).revert(revert_ms)

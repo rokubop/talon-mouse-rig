@@ -129,15 +129,6 @@ class Rig:
         return RigBuilder(self._state).direction
 
     # ========================================================================
-    # LAYER ACCESSORS
-    # ========================================================================
-
-    @property
-    def final(self):
-        """Final layer accessor - operations at the end of processing chain"""
-        return RigBuilder(self._state, layer=self._state._generate_final_layer_name())
-
-    # ========================================================================
     # LAYER METHOD
     # ========================================================================
 

@@ -84,10 +84,6 @@ class RigState:
         """Return base layer name"""
         return "__base__"
 
-    def _generate_final_layer_name(self) -> str:
-        """Return final layer name"""
-        return "__final__"
-
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
 
@@ -128,11 +124,11 @@ class RigState:
             return True  # Handled, early return
 
     def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str):
-        """Handle behavior for base/final layer operations"""
+        """Handle behavior for base layer operations"""
         layer = builder.config.layer_name
 
-        if behavior == "reset" and layer in ("__base__", "__final__"):
-            # For .to() operator, cancel all base/final builders with same property
+        if behavior == "reset" and layer == "__base__":
+            # For .to() operator, cancel all base builders with same property
             if builder.config.property:
                 layers_to_remove = [
                     l for l, b in self._active_builders.items()
@@ -172,17 +168,17 @@ class RigState:
         """Add an active builder to state
 
         For user layers, if layer exists, add as child to existing builder.
-        For base/final layers, operations execute with their configured lifecycle.
+        For base layers, operations execute with their configured lifecycle.
         """
         layer = builder.config.layer_name
 
         # Handle bake operation immediately
         if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() and layer != "__final__" else None)
+            self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() else None)
             return
 
         # Validate mode consistency for user layers
-        if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
+        if not builder.config.is_anonymous() and layer in self._active_builders:
             existing_builder = self._active_builders[layer]
             existing_mode = existing_builder.config.mode
             new_mode = builder.config.mode
@@ -201,7 +197,7 @@ class RigState:
 
         behavior = builder.config.get_effective_behavior()
 
-        if not builder.config.is_anonymous() and layer != "__final__" and layer in self._active_builders:
+        if not builder.config.is_anonymous() and layer in self._active_builders:
             if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
                 return
 
@@ -212,7 +208,7 @@ class RigState:
         # Track layer order
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
-        elif layer not in ("__base__", "__final__"):
+        elif layer != "__base__":
             if layer not in self._layer_orders:
                 self._layer_orders[layer] = self._next_auto_order
                 self._next_auto_order += 1
@@ -246,7 +242,7 @@ class RigState:
 
             # Notify queue system
             queue_key = layer
-            if layer in ("__base__", "__final__"):
+            if layer == "__base__":
                 queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
             self._queue_manager.on_builder_complete(queue_key)
 
@@ -374,7 +370,6 @@ class RigState:
         1. Start with base values
         2. Process base layer operations
         3. Process user layers (in order)
-        4. Process final layer operations
 
         Returns:
             (position, speed, direction, pos_is_override)
@@ -389,13 +384,10 @@ class RigState:
         # Separate builders by layer type
         base_builders = []   # Anonymous layers (base operations)
         user_builders = []   # User layers
-        final_builders = []  # __final__ layer
 
         for layer_name, builder in self._active_builders.items():
             if layer_name == "__base__":
                 base_builders.append(builder)
-            elif layer_name == "__final__":
-                final_builders.append(builder)
             else:
                 user_builders.append(builder)
 
@@ -406,7 +398,7 @@ class RigState:
 
         user_builders = sorted(user_builders, key=get_layer_order)
 
-        # Process in layer order: base → user layers → final
+        # Process in layer order: base → user layers
         for builder in base_builders:
             pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
             pos_is_override = pos_is_override or override
@@ -414,11 +406,6 @@ class RigState:
         for builder in user_builders:
             pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
             pos_is_override = pos_is_override or override
-
-        for builder in final_builders:
-            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
-            pos_is_override = pos_is_override or override
-
 
         return (pos, speed, direction, pos_is_override)
 
@@ -757,16 +744,16 @@ class RigState:
 
     @property
     def layers(self) -> list[str]:
-        """List of active user layers (excludes anonymous and final)
+        """List of active user layers (excludes anonymous)
 
         Returns a list of layer names for currently active user layers.
-        Anonymous (base) and final layers are excluded.
+        Anonymous (base) layers are excluded.
 
         Example:
             rig.state.layers  # ["sprint", "drift"]
         """
         return [layer for layer, builder in self._active_builders.items()
-                if not builder.config.is_anonymous() and layer != "__final__"]
+                if not builder.config.is_anonymous()]
 
     # Layer state access
     class LayerState:

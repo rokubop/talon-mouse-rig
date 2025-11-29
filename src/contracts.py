@@ -123,7 +123,6 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction',
     'state', 'base',
-    'final',  # Layer accessor
     'stack', 'reset', 'queue', 'extend', 'throttle',
 ]
 
@@ -339,7 +338,7 @@ class BuilderConfig:
         self.order: Optional[int] = None  # Explicit layer ordering
 
         # Identity
-        self.layer_name: Optional[str] = None  # Layer name (__base__, user name, __final__)
+        self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
 
         # Behavior
         self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle, ignore
@@ -375,13 +374,9 @@ class BuilderConfig:
         """Check if this is a base layer (anonymous)"""
         return self.is_anonymous()
 
-    def is_final_layer(self) -> bool:
-        """Check if this is the final layer"""
-        return self.layer_name is not None and self.layer_name.startswith("__final_")
-
     def is_user_layer(self) -> bool:
-        """Check if this is a user layer (named layer, not base or final)"""
-        return not self.is_base_layer() and not self.is_final_layer()
+        """Check if this is a user layer (named layer, not base)"""
+        return not self.is_base_layer()
 
     def get_effective_behavior(self) -> str:
         """Get behavior with defaults applied"""
@@ -430,7 +425,8 @@ class BuilderConfig:
         for param, value in kwargs.items():
             if param in validations:
                 param_name, valid_options = validations[param]
-                if value not in valid_options:
+                # Skip validation for None values (optional parameters)
+                if value is not None and value not in valid_options:
                     invalid_values[param] = (value, valid_options)
 
         # Raise error if any issues found
@@ -491,7 +487,7 @@ class BuilderConfig:
         Raises:
             ConfigError: If mode is missing or invalid
         """
-        # Mode is only required for layer operations (not base/final)
+        # Mode is only required for layer operations (not base)
         if not self.is_user_layer():
             return
 
