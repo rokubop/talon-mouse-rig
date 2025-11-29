@@ -17,7 +17,11 @@ class Actions:
         rig.speed.to(5)
         rig.speed.add(2)
         rig.pos.to(500, 300).over(200, easing="ease_in_out")
+        rig.layer("my_layer").speed.offset(10).over(500)
+        rig.layer("my_layer").revert()
         rig.stop()
+        rig.stop(1000)
+        rig...over(ms).then(...).hold(ms).then(...).revert(ms).then(...)
         ```
         """
         return get_rig()
@@ -27,7 +31,7 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if easing is not None:
             rig.stop(over_ms, easing)
         else:
@@ -71,7 +75,7 @@ class Actions:
 
         Maintains current speed if already moving, otherwise uses initial_speed.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         rig.direction(-1, 0)
         rig.speed(rig.state.speed or initial_speed)
 
@@ -80,7 +84,7 @@ class Actions:
 
         Maintains current speed if already moving, otherwise uses initial_speed.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         rig.direction(1, 0)
         rig.speed(rig.state.speed or initial_speed)
 
@@ -89,7 +93,7 @@ class Actions:
 
         Maintains current speed if already moving, otherwise uses initial_speed.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         rig.direction(0, -1)
         rig.speed(rig.state.speed or initial_speed)
 
@@ -98,7 +102,7 @@ class Actions:
 
         Maintains current speed if already moving, otherwise uses initial_speed.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         rig.direction(0, 1)
         rig.speed(rig.state.speed or initial_speed)
 
@@ -107,29 +111,29 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.speed.to(speed).over(over_ms, easing)
         else:
             rig.speed.to(speed)
 
-    def mouse_rig_speed_by(delta: float, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_speed_add(delta: float, over_ms: int = None, easing: str = None) -> None:
         """Add to current speed, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
-            rig.speed.by(delta).over(over_ms, easing)
+            rig.speed.add(delta).over(over_ms, easing)
         else:
-            rig.speed.by(delta)
+            rig.speed.add(delta)
 
     def mouse_rig_speed_mul(multiplier: float, over_ms: int = None, easing: str = None) -> None:
         """Multiply current speed, optionally over time.
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.speed.mul(multiplier).over(over_ms, easing)
         else:
@@ -140,7 +144,7 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.pos.to(x, y).over(over_ms, easing)
         else:
@@ -151,7 +155,7 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.pos.by(dx, dy).over(over_ms, easing)
         else:
@@ -162,7 +166,7 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.direction.to(x, y).over(over_ms, easing)
         else:
@@ -173,7 +177,7 @@ class Actions:
 
         easing: "linear", "ease_in_out", etc.
         """
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         if over_ms is not None:
             rig.direction.by(angle).over(over_ms, easing)
         else:
@@ -181,5 +185,5 @@ class Actions:
 
     def mouse_rig_boost(speed_increase: float, over_ms: int = None, revert_ms: int = None) -> None:
         """Temporarily boost speed"""
-        rig = get_rig()
+        rig = actions.user.mouse_rig()
         rig.speed.add(speed_increase).over(over_ms).revert(revert_ms)
