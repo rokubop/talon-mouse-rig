@@ -4,6 +4,7 @@ All fluent API calls return RigBuilder. Execution happens on __del__.
 """
 
 import math
+import time
 from typing import Optional, Callable, Any, TYPE_CHECKING
 from .core import Vec2, EPSILON
 from .contracts import BuilderConfig, LifecyclePhase
@@ -657,6 +658,14 @@ class ActiveBuilder:
 
         self.target_value = self._calculate_target_value()
 
+    def __repr__(self) -> str:
+        phase = self.lifecycle.phase if self.lifecycle and self.lifecycle.phase else "instant"
+        return f"<ActiveBuilder '{self.layer}' {self.config.property}.{self.config.operator}({self.target_value}) mode={self.config.mode} phase={phase}>"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    @property
     def time_alive(self) -> float:
         """Get time in seconds since this builder was created"""
         import time
@@ -735,8 +744,11 @@ class ActiveBuilder:
         """
         self.children.append(child)
 
-    def advance(self, dt: float) -> bool:
+    def advance(self, current_time: float) -> bool:
         """Advance this builder and all children forward in time.
+
+        Args:
+            current_time: Current timestamp from perf_counter() (captured once per frame)
 
         Returns:
             True if still active, False if should be removed and garbage collected
@@ -744,7 +756,7 @@ class ActiveBuilder:
         # Update group lifecycle if active (for coordinated revert)
         group_reverted = False
         if self.group_lifecycle:
-            self.group_lifecycle.advance(dt)
+            self.group_lifecycle.advance(current_time)
             if self.group_lifecycle.is_complete():
                 # Check if it completed via revert
                 if self.group_lifecycle.has_reverted():
@@ -753,12 +765,12 @@ class ActiveBuilder:
                 return False  # Remove immediately when group revert completes
 
         # Update own lifecycle (only if no group lifecycle is active)
-        self.lifecycle.advance(dt)
+        self.lifecycle.advance(current_time)
 
         # Update children, remove completed ones
         active_children = []
         for child in self.children:
-            child.lifecycle.advance(dt)
+            child.lifecycle.advance(current_time)
             if not child.lifecycle.should_be_garbage_collected():
                 active_children.append(child)
 
@@ -780,7 +792,8 @@ class ActiveBuilder:
         - override: returns absolute value to use
         - scale: returns multiplier to apply
         """
-        phase, progress = self.lifecycle.advance(0)
+        current_time = time.perf_counter()
+        phase, progress = self.lifecycle.advance(current_time)
         mode = self.config.mode
 
         if self.config.property == "speed":
@@ -898,9 +911,10 @@ class ActiveBuilder:
         If group lifecycle is active (coordinated revert), use that.
         Otherwise aggregate all children's individual values.
         """
+        current_time = time.perf_counter()
         # Use group lifecycle if active (coordinated revert)
         if self.group_lifecycle and not self.group_lifecycle.is_complete():
-            phase, progress = self.group_lifecycle.advance(0)
+            phase, progress = self.group_lifecycle.advance(current_time)
 
             # Use builder's own property type (not children, which are cleared during revert)
             property_type = self.config.property

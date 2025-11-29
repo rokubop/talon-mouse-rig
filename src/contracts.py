@@ -132,6 +132,11 @@ VALID_BUILDER_METHODS = [
     'stack', 'reset', 'queue', 'extend', 'throttle',
 ]
 
+# Valid LayerState attributes (properties and methods)
+VALID_LAYER_STATE_ATTRS = [
+    'prop', 'mode', 'current_value', 'target_value', 'time_alive'
+]
+
 
 # ============================================================================
 # VALIDATION ERROR HANDLING

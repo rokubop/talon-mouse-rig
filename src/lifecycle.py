@@ -45,10 +45,14 @@ class Lifecycle:
             self.callbacks[phase] = []
         self.callbacks[phase].append(callback)
 
-    def start(self):
-        """Start the lifecycle"""
+    def start(self, current_time: float):
+        """Start the lifecycle
+
+        Args:
+            current_time: Current timestamp from perf_counter()
+        """
         self.started = True
-        self.phase_start_time = time.perf_counter()
+        self.phase_start_time = current_time
 
         # Determine starting phase
         if self.over_ms is not None and self.over_ms > 0:
@@ -61,21 +65,24 @@ class Lifecycle:
             # Instant application, no lifecycle
             self.phase = LifecyclePhase.OVER
 
-    def advance(self, dt: float) -> tuple[Optional[str], float]:
+    def advance(self, current_time: float) -> tuple[Optional[str], float]:
         """Advance lifecycle state forward in time.
+
+        Args:
+            current_time: Current timestamp from perf_counter() (captured once per frame)
 
         Returns:
             (current_phase, progress) where progress is [0, 1] with easing applied
             Returns (None, 1.0) if lifecycle is complete
         """
         if not self.started:
-            self.start()
+            self.start(current_time)
 
         if self.phase is None:
             # No lifecycle, instant application
             return (None, 1.0)
 
-        elapsed = (time.perf_counter() - self.phase_start_time) * 1000
+        elapsed = (current_time - self.phase_start_time) * 1000
 
         # Calculate progress for current phase
         if self.phase == LifecyclePhase.OVER:
@@ -90,8 +97,8 @@ class Lifecycle:
             if elapsed >= (self.over_ms or 0):
                 # Over phase complete - advance to next phase
                 # Callbacks will be executed by caller after state is applied
-                self._advance_to_next_phase()
-                return self.advance(0)  # Immediately check next phase
+                self._advance_to_next_phase(current_time)
+                return self.advance(current_time)  # Immediately check next phase
 
             return (LifecyclePhase.OVER, progress)
 
@@ -104,8 +111,8 @@ class Lifecycle:
             if elapsed >= (self.hold_ms or 0):
                 # Hold phase complete - advance to next phase
                 # Callbacks will be executed by caller after state is applied
-                self._advance_to_next_phase()
-                return self.advance(0)  # Immediately check next phase
+                self._advance_to_next_phase(current_time)
+                return self.advance(current_time)  # Immediately check next phase
 
             return (LifecyclePhase.HOLD, progress)
 
@@ -128,9 +135,13 @@ class Lifecycle:
 
         return (None, 1.0)
 
-    def _advance_to_next_phase(self):
-        """Move to the next lifecycle phase"""
-        self.phase_start_time = time.perf_counter()
+    def _advance_to_next_phase(self, current_time: float):
+        """Move to the next lifecycle phase
+
+        Args:
+            current_time: Current timestamp from perf_counter()
+        """
+        self.phase_start_time = current_time
 
         if self.phase == LifecyclePhase.OVER:
             if self.hold_ms is not None and self.hold_ms > 0:

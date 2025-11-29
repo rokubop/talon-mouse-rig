@@ -51,6 +51,14 @@ class Vec2:
     x: float
     y: float
 
+    def __repr__(self) -> str:
+        """Helpful representation showing x and y coordinates"""
+        return f"Vec2({self.x:.2f}, {self.y:.2f})"
+
+    def __str__(self) -> str:
+        """String representation"""
+        return f"({self.x:.2f}, {self.y:.2f})"
+
     def __add__(self, other: 'Vec2') -> 'Vec2':
         return Vec2(self.x + other.x, self.y + other.y)
 

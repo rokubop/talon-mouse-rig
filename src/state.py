@@ -55,6 +55,31 @@ class RigState:
         # Manual mouse movement timeout
         self._last_manual_movement_time: Optional[float] = None
         self._manual_movement_timeout_ms: float = 200  # Default 200ms delay
+
+    def __repr__(self) -> str:
+        pos = self.pos
+        speed = self.speed
+        direction = self.direction
+        layers = self.layers
+
+        lines = [
+            "RigState:",
+            f"  .pos = ({pos.x:.1f}, {pos.y:.1f})",
+            f"  .speed = {speed:.1f}",
+            f"  .direction = ({direction.x:.2f}, {direction.y:.2f})",
+            f"  .direction_cardinal = {self.direction_cardinal or 'None'}",
+            f"  .layers = {layers}",
+            f"  .base = <BaseState>",
+            f"  .layer(name) = <LayerState | None>",
+            "",
+            "Methods:",
+            "  .time_alive(layer) -> float | None",
+        ]
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
     def _generate_base_layer_name(self) -> str:
         """Return base layer name"""
         return "__base__"
@@ -69,7 +94,7 @@ class RigState:
         Returns None if layer doesn't exist
         """
         if layer in self._active_builders:
-            return self._active_builders[layer].time_alive()
+            return self._active_builders[layer].time_alive
         return None
 
     def _handle_user_layer_behavior(self, builder: 'ActiveBuilder', existing: 'ActiveBuilder', behavior: str) -> bool:
@@ -504,37 +529,44 @@ class RigState:
         return False
 
     def _tick_frame(self):
-        dt = self._calculate_delta_time()
+        current_time, dt = self._calculate_delta_time()
         if dt is None:
             return
 
         manual_movement_detected = self._sync_to_manual_mouse_movement()
-        phase_transitions = self._advance_all_builders(dt)
+        phase_transitions = self._advance_all_builders(current_time)
 
         if manual_movement_detected:
-            self._remove_completed_builders()
+            self._remove_completed_builders(current_time)
             self._execute_phase_callbacks(phase_transitions)
             self._stop_frame_loop_if_done()
             return
 
         self._compute_and_apply_state()
-        self._remove_completed_builders()
+        self._remove_completed_builders(current_time)
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
-    def _calculate_delta_time(self) -> Optional[float]:
-        """Calculate time since last frame. Returns None on first frame."""
+    def _calculate_delta_time(self) -> tuple[float, Optional[float]]:
+        """Calculate time since last frame.
+
+        Returns:
+            (current_time, dt) where dt is None on first frame
+        """
         now = time.perf_counter()
         if self._last_frame_time is None:
             self._last_frame_time = now
-            return None
+            return (now, None)
 
         dt = now - self._last_frame_time
         self._last_frame_time = now
-        return dt
+        return (now, dt)
 
-    def _advance_all_builders(self, dt: float) -> list[tuple['ActiveBuilder', str]]:
+    def _advance_all_builders(self, current_time: float) -> list[tuple['ActiveBuilder', str]]:
         """Advance all builders and track phase transitions.
+
+        Args:
+            current_time: Current timestamp from perf_counter() (captured once per frame)
 
         Returns:
             List of (builder, completed_phase) tuples for callbacks
@@ -543,7 +575,7 @@ class RigState:
 
         for layer, builder in list(self._active_builders.items()):
             old_phase = builder.lifecycle.phase
-            builder.advance(dt)
+            builder.advance(current_time)
             new_phase = builder.lifecycle.phase
 
             if old_phase != new_phase and old_phase is not None:
@@ -551,12 +583,16 @@ class RigState:
 
         return phase_transitions
 
-    def _remove_completed_builders(self):
-        """Remove builders that are no longer active"""
+    def _remove_completed_builders(self, current_time: float):
+        """Remove builders that are no longer active
+
+        Args:
+            current_time: Current timestamp from perf_counter() (captured once per frame)
+        """
         completed = []
 
         for layer, builder in list(self._active_builders.items()):
-            still_active = builder.advance(0)  # Check status without advancing time
+            still_active = builder.advance(current_time)  # Check status with current time
             if not still_active:
                 completed.append(layer)
 
@@ -738,81 +774,86 @@ class RigState:
         def __init__(self, builder: 'ActiveBuilder'):
             self._builder = builder
 
+        def __repr__(self) -> str:
+            builder = self._builder
+            phase = builder.lifecycle.phase if builder.lifecycle.phase else 'instant'
+            lifecycle = builder.lifecycle
+
+            # Format values based on type
+            def format_value(val):
+                if isinstance(val, Vec2):
+                    return f"({val.x:.1f}, {val.y:.1f})"
+                elif isinstance(val, float):
+                    return f"{val:.1f}"
+                else:
+                    return str(val)
+
+            lines = [
+                f"LayerState('{builder.config.layer_name}'):",
+                f"  prop: {builder.config.property}",
+                f"  mode: {builder.config.mode}",
+                f"  current_value: {format_value(builder.get_interpolated_value())}",
+                f"  target_value: {format_value(builder.target_value)}",
+            ]
+
+            # Add timing info
+            if lifecycle.over_ms:
+                lines.append(f"  over_ms: {lifecycle.over_ms}")
+            if lifecycle.hold_ms:
+                lines.append(f"  hold_ms: {lifecycle.hold_ms}")
+            if lifecycle.revert_ms:
+                lines.append(f"  revert_ms: {lifecycle.revert_ms}")
+
+            # Add children count if non-zero
+            children_count = len(builder.children)
+            if children_count > 0:
+                lines.append(f"  children: {children_count}")
+
+            # Add properties and methods section
+            from .contracts import VALID_LAYER_STATE_ATTRS
+            lines.extend([
+                "",
+                "Available attributes:",
+                f"  {', '.join(VALID_LAYER_STATE_ATTRS)}",
+            ])
+
+            return "\n".join(lines)
+
+        def __str__(self) -> str:
+            return self.__repr__()
+
         @property
         def prop(self) -> str:
             """What property this layer is affecting: 'speed', 'direction', 'pos'"""
             return self._builder.config.property
 
         @property
-        def mode(self) -> Optional[str]:
-            """Layer mode: 'offset', 'override', 'scale', or None"""
+        def mode(self) -> str:
+            """Mode of this layer: 'offset', 'override', 'scale'"""
             return self._builder.config.mode
 
         @property
-        def value(self):
-            """Current aggregated value (includes children)"""
+        def current_value(self):
+            """Current aggregated value (includes children) - always fresh"""
             return self._builder.get_interpolated_value()
 
         @property
-        def phase(self) -> Optional[str]:
-            """Current lifecycle phase: 'over', 'hold', 'revert', or None"""
-            return self._builder.lifecycle.phase.value if self._builder.lifecycle else None
+        def target_value(self):
+            """Target value this layer is moving toward"""
+            return self._builder.target_value
 
         @property
-        def speed(self) -> Optional[float]:
-            """Speed value if this layer affects speed, else None"""
-            return self.value if self.prop == 'speed' else None
-
-        @property
-        def direction(self) -> Optional[Vec2]:
-            """Direction value if this layer affects direction, else None"""
-            return self.value if self.prop == 'direction' else None
-
-        @property
-        def pos(self) -> Optional[Vec2]:
-            """Position offset if this layer affects position, else None"""
-            return self.value if self.prop == 'pos' else None
-
         def time_alive(self) -> float:
-            """Get time in seconds since this builder was created"""
-            return self._builder.time_alive()
-
-        def revert(self, ms: Optional[float] = None, easing: str = "linear"):
-            """Trigger a revert on this layer
-
-            Args:
-                ms: Duration in milliseconds for the revert
-                easing: Easing function for the revert
-            """
-            from .builder import RigBuilder
-            # Create a revert-only builder that will trigger the revert
-            builder = RigBuilder(self._builder.rig_state, self._builder.config.layer_name)
-            builder.revert(ms, easing)
-            # Force immediate execution (since it won't have __del__ called naturally)
-            builder._execute()
+            """Time in seconds since this builder was created"""
+            return self._builder.time_alive
 
         def __getattr__(self, name: str):
             """Provide helpful error messages for invalid attributes"""
-            valid_attrs = ['prop', 'mode', 'value', 'phase', 'speed', 'direction', 'pos', 'time_alive', 'revert']
-
-            # Check for common mistakes
-            if name in ['direction_x', 'direction_y']:
-                raise AttributeError(
-                    f"LayerState has no attribute '{name}'. "
-                    f"Use 'direction' to get the Vec2 object, then access '.x' or '.y': "
-                    f"layer_state.direction.x"
-                )
-            elif name in ['speed_value', 'pos_offset']:
-                prop = name.split('_')[0]
-                raise AttributeError(
-                    f"LayerState has no attribute '{name}'. "
-                    f"Use 'value' or the property name directly: "
-                    f"layer_state.{prop} or layer_state.value"
-                )
+            from .contracts import VALID_LAYER_STATE_ATTRS
 
             raise AttributeError(
                 f"LayerState has no attribute '{name}'. "
-                f"Available attributes: {', '.join(valid_attrs)}"
+                f"Available attributes: {', '.join(VALID_LAYER_STATE_ATTRS)}"
             )
 
     def layer(self, layer_name: str) -> Optional['RigState.LayerState']:
@@ -836,6 +877,22 @@ class RigState:
     class BaseState:
         def __init__(self, rig_state: 'RigState'):
             self._rig_state = rig_state
+
+        def __repr__(self) -> str:
+            pos = self.pos
+            speed = self.speed
+            direction = self.direction
+
+            lines = [
+                "BaseState:",
+                f"  .pos = ({pos.x:.1f}, {pos.y:.1f})",
+                f"  .speed = {speed:.1f}",
+                f"  .direction = ({direction.x:.2f}, {direction.y:.2f})",
+            ]
+            return "\n".join(lines)
+
+        def __str__(self) -> str:
+            return self.__repr__()
 
         @property
         def pos(self) -> Vec2:
@@ -913,13 +970,19 @@ class RigState:
         for layer in list(self._active_builders.keys()):
             self.remove_builder(layer, bake=True)
 
-    def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear"):
+    def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
         """Trigger revert on builder tree
 
         Strategy:
         1. Capture current aggregated value from all children
         2. Clear all children (bake the aggregate)
         3. Create group lifecycle that reverses from aggregate to neutral
+
+        Args:
+            layer: Layer name to revert
+            revert_ms: Duration in milliseconds for the revert
+            easing: Easing function for the revert
+            current_time: Current timestamp from perf_counter() (if called from frame loop)
         """
         if layer in self._active_builders:
             builder = self._active_builders[layer]
@@ -945,7 +1008,7 @@ class RigState:
             builder.group_lifecycle.revert_ms = revert_ms if revert_ms is not None else 0
             builder.group_lifecycle.revert_easing = easing
             builder.group_lifecycle.phase = LifecyclePhase.REVERT
-            builder.group_lifecycle.phase_start_time = time.perf_counter()
+            builder.group_lifecycle.phase_start_time = current_time if current_time is not None else time.perf_counter()
 
             # Store aggregate values for animation
             builder.group_base_value = base_value
