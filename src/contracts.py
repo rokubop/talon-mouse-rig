@@ -316,14 +316,6 @@ class BehaviorMethods(Protocol):
     def throttle(self, ms: Optional[float] = None): ...
 
 
-class Updatable(ABC):
-    """Interface for objects that update each frame"""
-    @abstractmethod
-    def update(self, dt: float) -> bool:
-        """Update state. Returns True if still active, False if complete."""
-        pass
-
-
 class LifecyclePhase:
     """Represents a phase in the lifecycle (over/hold/revert)"""
     OVER = "over"

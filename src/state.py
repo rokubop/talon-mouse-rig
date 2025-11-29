@@ -225,7 +225,7 @@ class RigState:
                 queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
             self._queue_manager.on_builder_complete(queue_key)
 
-        # Frame loop will be stopped by _update_frame after final mouse movement
+        # Frame loop will be stopped by _tick_frame after final mouse movement
 
     def _bake_builder(self, builder: 'ActiveBuilder', removing_layer: Optional[str] = None):
         """Merge builder's final aggregated value into base state
@@ -503,8 +503,8 @@ class RigState:
 
         return False
 
-    def _update_frame(self):
-        """Update all active builders and move mouse"""
+    def _tick_frame(self):
+        """Tick: Update all active builders and move mouse"""
         now = time.perf_counter()
         if self._last_frame_time is None:
             self._last_frame_time = now
@@ -520,12 +520,12 @@ class RigState:
         # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
         completed = []
         for layer, builder in list(self._active_builders.items()):
-            still_active = builder.update(dt)
+            still_active = builder.advance(dt)
             if not still_active:
                 completed.append(layer)
             else:
                 # Debug: why is it still active?
-                phase, progress = builder.lifecycle.update(0)
+                phase, progress = builder.lifecycle.advance(0)
 
         for layer in completed:
             self.remove_builder(layer)
@@ -569,7 +569,7 @@ class RigState:
         """Start frame loop if not already running"""
         if self._frame_loop_job is None:
             # 60 FPS = ~16.67ms per frame
-            self._frame_loop_job = cron.interval("16ms", self._update_frame)
+            self._frame_loop_job = cron.interval("16ms", self._tick_frame)
             self._last_frame_time = None
             # Sync to actual mouse position when starting (handles manual movements)
             current_mouse = Vec2(*ctrl.mouse_pos())

@@ -735,8 +735,8 @@ class ActiveBuilder:
         """
         self.children.append(child)
 
-    def update(self, dt: float) -> bool:
-        """Update this builder and all children.
+    def advance(self, dt: float) -> bool:
+        """Advance this builder and all children forward in time.
 
         Returns:
             True if still active, False if should be removed and garbage collected
@@ -744,7 +744,7 @@ class ActiveBuilder:
         # Update group lifecycle if active (for coordinated revert)
         group_reverted = False
         if self.group_lifecycle:
-            self.group_lifecycle.update(dt)
+            self.group_lifecycle.advance(dt)
             if self.group_lifecycle.is_complete():
                 # Check if it completed via revert
                 if self.group_lifecycle.has_reverted():
@@ -753,12 +753,12 @@ class ActiveBuilder:
                 return False  # Remove immediately when group revert completes
 
         # Update own lifecycle (only if no group lifecycle is active)
-        self.lifecycle.update(dt)
+        self.lifecycle.advance(dt)
 
         # Update children, remove completed ones
         active_children = []
         for child in self.children:
-            child.lifecycle.update(dt)
+            child.lifecycle.advance(dt)
             if not child.lifecycle.should_be_garbage_collected():
                 active_children.append(child)
 
@@ -780,7 +780,7 @@ class ActiveBuilder:
         - override: returns absolute value to use
         - scale: returns multiplier to apply
         """
-        phase, progress = self.lifecycle.update(0)
+        phase, progress = self.lifecycle.advance(0)
         mode = self.config.mode
 
         if self.config.property == "speed":
@@ -900,7 +900,7 @@ class ActiveBuilder:
         """
         # Use group lifecycle if active (coordinated revert)
         if self.group_lifecycle and not self.group_lifecycle.is_complete():
-            phase, progress = self.group_lifecycle.update(0)
+            phase, progress = self.group_lifecycle.advance(0)
 
             # Use builder's own property type (not children, which are cleared during revert)
             property_type = self.config.property

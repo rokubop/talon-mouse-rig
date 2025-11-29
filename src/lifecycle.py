@@ -59,10 +59,10 @@ class Lifecycle:
             self.phase = LifecyclePhase.REVERT
         else:
             # Instant application, no lifecycle
-            self.phase = None
+            self.phase = LifecyclePhase.OVER
 
-    def update(self, dt: float) -> tuple[Optional[str], float]:
-        """Update lifecycle state.
+    def advance(self, dt: float) -> tuple[Optional[str], float]:
+        """Advance lifecycle state forward in time.
 
         Returns:
             (current_phase, progress) where progress is [0, 1] with easing applied
@@ -91,7 +91,7 @@ class Lifecycle:
                 # Over phase complete
                 self._execute_callbacks(LifecyclePhase.OVER)
                 self._advance_to_next_phase()
-                return self.update(0)  # Immediately check next phase
+                return self.advance(0)  # Immediately check next phase
 
             return (LifecyclePhase.OVER, progress)
 
@@ -105,7 +105,7 @@ class Lifecycle:
                 # Hold phase complete
                 self._execute_callbacks(LifecyclePhase.HOLD)
                 self._advance_to_next_phase()
-                return self.update(0)  # Immediately check next phase
+                return self.advance(0)  # Immediately check next phase
 
             return (LifecyclePhase.HOLD, progress)
 
