@@ -504,7 +504,6 @@ class RigState:
         return False
 
     def _tick_frame(self):
-        """Tick: Update all active builders and move mouse"""
         dt = self._calculate_delta_time()
         if dt is None:
             return
@@ -513,9 +512,13 @@ class RigState:
         phase_transitions = self._advance_all_builders(dt)
 
         if manual_movement_detected:
+            self._remove_completed_builders()
+            self._execute_phase_callbacks(phase_transitions)
+            self._stop_frame_loop_if_done()
             return
 
         self._compute_and_apply_state()
+        self._remove_completed_builders()
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
@@ -536,24 +539,29 @@ class RigState:
         Returns:
             List of (builder, completed_phase) tuples for callbacks
         """
-        completed = []
         phase_transitions = []
 
         for layer, builder in list(self._active_builders.items()):
             old_phase = builder.lifecycle.phase
-            still_active = builder.advance(dt)
+            builder.advance(dt)
             new_phase = builder.lifecycle.phase
 
             if old_phase != new_phase and old_phase is not None:
                 phase_transitions.append((builder, old_phase))
 
+        return phase_transitions
+
+    def _remove_completed_builders(self):
+        """Remove builders that are no longer active"""
+        completed = []
+
+        for layer, builder in list(self._active_builders.items()):
+            still_active = builder.advance(0)  # Check status without advancing time
             if not still_active:
                 completed.append(layer)
 
         for layer in completed:
             self.remove_builder(layer)
-
-        return phase_transitions
 
     def _compute_and_apply_state(self):
         """Compute current state and move mouse to new position"""
