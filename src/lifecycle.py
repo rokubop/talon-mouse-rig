@@ -88,8 +88,8 @@ class Lifecycle:
                 progress = easing_fn(progress)
 
             if elapsed >= (self.over_ms or 0):
-                # Over phase complete
-                self._execute_callbacks(LifecyclePhase.OVER)
+                # Over phase complete - advance to next phase
+                # Callbacks will be executed by caller after state is applied
                 self._advance_to_next_phase()
                 return self.advance(0)  # Immediately check next phase
 
@@ -102,8 +102,8 @@ class Lifecycle:
                 progress = 1.0  # Hold is always at full value
 
             if elapsed >= (self.hold_ms or 0):
-                # Hold phase complete
-                self._execute_callbacks(LifecyclePhase.HOLD)
+                # Hold phase complete - advance to next phase
+                # Callbacks will be executed by caller after state is applied
                 self._advance_to_next_phase()
                 return self.advance(0)  # Immediately check next phase
 
@@ -120,7 +120,7 @@ class Lifecycle:
 
             if elapsed >= (self.revert_ms or 0):
                 # Revert phase complete
-                self._execute_callbacks(LifecyclePhase.REVERT)
+                # Callbacks will be executed by caller after state is applied
                 self.phase = None  # Lifecycle complete
                 return (None, 1.0)
 
@@ -149,7 +149,11 @@ class Lifecycle:
         elif self.phase == LifecyclePhase.REVERT:
             self.phase = None
 
-    def _execute_callbacks(self, phase: str):
+    def get_phase_callbacks(self, phase: str) -> list:
+        """Get callbacks for a specific phase"""
+        return self.callbacks.get(phase, [])
+
+    def execute_callbacks(self, phase: str):
         """Execute all callbacks for a phase"""
         for callback in self.callbacks.get(phase, []):
             try:

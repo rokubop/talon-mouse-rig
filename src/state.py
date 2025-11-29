@@ -505,53 +505,76 @@ class RigState:
 
     def _tick_frame(self):
         """Tick: Update all active builders and move mouse"""
+        dt = self._calculate_delta_time()
+        if dt is None:
+            return
+
+        manual_movement_detected = self._sync_to_manual_mouse_movement()
+        phase_transitions = self._advance_all_builders(dt)
+
+        if manual_movement_detected:
+            return
+
+        self._compute_and_apply_state()
+        self._execute_phase_callbacks(phase_transitions)
+        self._stop_frame_loop_if_done()
+
+    def _calculate_delta_time(self) -> Optional[float]:
+        """Calculate time since last frame. Returns None on first frame."""
         now = time.perf_counter()
         if self._last_frame_time is None:
             self._last_frame_time = now
-            return
+            return None
 
         dt = now - self._last_frame_time
         self._last_frame_time = now
+        return dt
 
-        # Sync to any manual mouse movements by the user
-        manual_movement_detected = self._sync_to_manual_mouse_movement()
+    def _advance_all_builders(self, dt: float) -> list[tuple['ActiveBuilder', str]]:
+        """Advance all builders and track phase transitions.
 
-        # Update all builders, remove completed ones
-        # Use list() to create a snapshot and avoid "dictionary changed size during iteration"
+        Returns:
+            List of (builder, completed_phase) tuples for callbacks
+        """
         completed = []
+        phase_transitions = []
+
         for layer, builder in list(self._active_builders.items()):
+            old_phase = builder.lifecycle.phase
             still_active = builder.advance(dt)
+            new_phase = builder.lifecycle.phase
+
+            if old_phase != new_phase and old_phase is not None:
+                phase_transitions.append((builder, old_phase))
+
             if not still_active:
                 completed.append(layer)
-            else:
-                # Debug: why is it still active?
-                phase, progress = builder.lifecycle.advance(0)
 
         for layer in completed:
             self.remove_builder(layer)
 
-        # If user manually moved mouse, skip applying rig movement this frame
-        # But we still updated the builders above so time progresses
-        if manual_movement_detected:
-            return
+        return phase_transitions
 
+    def _compute_and_apply_state(self):
+        """Compute current state and move mouse to new position"""
         pos, speed, direction, pos_is_override = self._compute_current_state()
 
         self._apply_velocity_movement(speed, direction)
+        self._apply_position_updates(pos, pos_is_override)
+        self._move_mouse_if_changed()
 
-        # Handle position based on mode
+    def _apply_position_updates(self, pos: Vec2, pos_is_override: bool):
+        """Apply position changes based on mode"""
         if pos_is_override:
-            # Override mode: pos is absolute, set it directly
             self._internal_pos = Vec2(pos.x, pos.y)
             self._base_pos = Vec2(pos.x, pos.y)
             self._last_position_offset = Vec2(0, 0)
         else:
-            # Offset/scale mode: pos is relative contribution
             self._apply_position_offset(pos)
-            # Update _base_pos to track accumulated position from velocity movement
-            # This ensures position offsets are calculated from the current actual position
             self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
 
+    def _move_mouse_if_changed(self):
+        """Move mouse if position has changed"""
         new_x = int(round(self._internal_pos.x))
         new_y = int(round(self._internal_pos.y))
 
@@ -559,8 +582,13 @@ class RigState:
         if new_x != current_x or new_y != current_y:
             mouse_move(new_x, new_y)
 
-        # Stop frame loop AFTER mouse movement if no longer needed
-        # This ensures final position is applied before stopping
+    def _execute_phase_callbacks(self, phase_transitions: list[tuple['ActiveBuilder', str]]):
+        """Execute callbacks for completed phases"""
+        for builder, completed_phase in phase_transitions:
+            builder.lifecycle.execute_callbacks(completed_phase)
+
+    def _stop_frame_loop_if_done(self):
+        """Stop frame loop if no longer needed"""
         if not self._should_frame_loop_be_active():
             self._stop_frame_loop()
 
