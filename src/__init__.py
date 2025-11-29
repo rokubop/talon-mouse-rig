@@ -193,7 +193,7 @@ class Rig:
         self._state.stop(ms, easing)
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
-        """Reverse direction (180° turn)"""
+        """Reverse direction (180 degrees turn)"""
         builder = RigBuilder(self._state)
         builder.config.property = "direction"
         builder.config.operator = "by"

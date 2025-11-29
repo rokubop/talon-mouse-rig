@@ -16,4 +16,4 @@ rig short down: user.mouse_rig_pos_by(0, 30)
 
 # Development
 rig [reload | reset]: user.mouse_rig_reload()
-rig test [show | hide]: user.mouse_rig_test_toggle_ui()
+rig test: user.mouse_rig_test_toggle_ui()

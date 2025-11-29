@@ -5,6 +5,7 @@ All fluent API calls return RigBuilder. Execution happens on __del__.
 
 import math
 import time
+from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
 from .core import Vec2, EPSILON
 from .contracts import BuilderConfig, LifecyclePhase
@@ -647,7 +648,6 @@ class ActiveBuilder:
             # This "bakes" the current state before transitioning to new target
             # EXCEPT for position - use actual mouse position instead of base
             if config.property == "pos":
-                from talon import ctrl
                 self.base_value = Vec2(*ctrl.mouse_pos())
             else:
                 self.base_value = getattr(rig_state, config.property)
@@ -724,6 +724,11 @@ class ActiveBuilder:
         if self.config.property == "pos":
             mode = self.config.mode
             current_value = self.target_value
+
+            # Sync to actual current mouse position (in case user manually moved it)
+            current_mouse_pos = ctrl.mouse_pos()
+            self.rig_state._internal_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
+            self.rig_state._base_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
 
             # Apply mode to current internal position
             new_pos = mode_operations.apply_position_mode(mode, current_value, self.rig_state._internal_pos)

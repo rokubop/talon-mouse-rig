@@ -287,7 +287,7 @@ def test_angle_normalization(on_success, on_failure):
         rig.pos.to(CENTER_X, CENTER_Y)
         actions.sleep("100ms")
 
-        # 720° = 2 full rotations = 0° final
+        # 720 degrees = 2 full rotations = 0 degrees final
         rig.speed(3)
         rig.layer("test").direction.to(1, 0).hold(200)
 
@@ -302,14 +302,14 @@ def test_angle_normalization(on_success, on_failure):
                     return
 
                 layer_state = list(rig_check.state.layers.values())[0]
-                # Should still be facing right (0°) after 720° rotation
+                # Should still be facing right (0 degrees) after 720 degrees rotation
                 from .direction import get_angle_from_vector, angle_difference
                 actual_angle = get_angle_from_vector(layer_state.direction_x, layer_state.direction_y)
 
                 if angle_difference(actual_angle, 0) < 5:
                     on_success()
                 else:
-                    on_failure(f"Angle not normalized correctly: {actual_angle}°, expected 0°")
+                    on_failure(f"Angle not normalized correctly: {actual_angle} degrees, expected 0 degrees")
 
             cron.after("300ms", check_angle)
 

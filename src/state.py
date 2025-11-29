@@ -705,11 +705,11 @@ class RigState:
             return None
 
         # Threshold for pure cardinal vs intercardinal
-        # tan(67.5°) ≈ 2.414, which is halfway between pure cardinal (90°) and diagonal (45°)
-        # This means directions within ±22.5° of an axis are considered pure cardinal
+        # tan(67.5 degrees) ≈ 2.414, which is halfway between pure cardinal (90 degrees) and diagonal (45 degrees)
+        # This means directions within ±22.5 degrees of an axis are considered pure cardinal
         threshold = 2.414
 
-        # Pure cardinal directions (within 22.5° of axis)
+        # Pure cardinal directions (within 22.5 degrees of axis)
         if abs(x) > abs(y) * threshold:
             return "right" if x > 0 else "left"
         if abs(y) > abs(x) * threshold:
@@ -961,7 +961,7 @@ class RigState:
             self._ensure_frame_loop_running()
 
     def reverse(self, transition_ms: Optional[float] = None):
-        """Reverse direction (180° turn)"""
+        """Reverse direction (180 degrees turn)"""
         # This will be implemented via builder in builder.py
         pass
 

@@ -97,26 +97,26 @@ class Vec2:
         or None if vector is zero.
 
         Uses a threshold to distinguish between pure cardinal directions
-        (within 22.5° of an axis) and intercardinal/diagonal directions.
+        (within 22.5 degrees of an axis) and intercardinal/diagonal directions.
 
         Examples:
             Vec2(1, 0).to_cardinal() -> "right"
             Vec2(-1, 0).to_cardinal() -> "left"
             Vec2(0, -1).to_cardinal() -> "up"
             Vec2(0, 1).to_cardinal() -> "down"
-            Vec2(1, -1).to_cardinal() -> "up_right"  # 45° diagonal
-            Vec2(0.9, -0.2).to_cardinal() -> "right"  # Within 22.5° of right
+            Vec2(1, -1).to_cardinal() -> "up_right"  # 45 degrees diagonal
+            Vec2(0.9, -0.2).to_cardinal() -> "right"  # Within 22.5 degrees of right
             Vec2(0, 0).to_cardinal() -> None
         """
         if self.x == 0 and self.y == 0:
             return None
 
         # Threshold for pure cardinal vs intercardinal
-        # tan(67.5°) ≈ 2.414, which is halfway between pure cardinal (90°) and diagonal (45°)
-        # This means directions within ±22.5° of an axis are considered pure cardinal
+        # tan(67.5 degrees) ≈ 2.414, which is halfway between pure cardinal (90 degrees) and diagonal (45 degrees)
+        # This means directions within ±22.5 degrees of an axis are considered pure cardinal
         threshold = 2.414
 
-        # Pure cardinal directions (within 22.5° of axis)
+        # Pure cardinal directions (within 22.5 degrees of axis)
         if abs(self.x) > abs(self.y) * threshold:
             return "right" if self.x > 0 else "left"
         if abs(self.y) > abs(self.x) * threshold:
