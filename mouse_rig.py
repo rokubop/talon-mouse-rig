@@ -1,11 +1,12 @@
 from talon import settings, actions
+from typing import Any
 from .settings import mod
 from .src import rig as get_rig, reload_rig
 from .src.mouse_api import MOUSE_APIS
 
 @mod.action_class
 class Actions:
-    def mouse_rig():
+    def mouse_rig() -> Any:
         """Get the mouse rig instance
         ```python
         rig = actions.user.mouse_rig()
@@ -22,17 +23,15 @@ class Actions:
         return get_rig()
 
     def mouse_rig_stop(ms: float = None, easing: str = None) -> None:
-        """Alias for `rig.stop(ms, easing)`
+        """Stop the mouse rig and remove all layers, optionally over time.
 
-        `rig.stop()` - Stop the mouse rig and remove all layers
-
-        `rig.stop(1000)` - Flatten all layers, and then stop over 1000ms
-
-        Easing values - `"ease_in_out"`, `"linear"`, `"ease_out"`, `"ease_in"`
-        Also can numbers 2, 3, 4 at the end of the easing to increase power e.g. `"ease_in_out2"`
+        easing: "linear", "ease_in_out", etc.
         """
         rig = get_rig()
-        rig.stop(ms, easing)
+        if easing is not None:
+            rig.stop(ms, easing)
+        else:
+            rig.stop(ms)
 
     def mouse_rig_set_api(api: str) -> None:
         """Set mouse movement API
@@ -66,3 +65,116 @@ class Actions:
         """Show the QA test UI with buttons"""
         from .qa.main import toggle_test_ui
         toggle_test_ui()
+
+    def mouse_rig_go_left(initial_speed: int = 3) -> None:
+        """Move continuously left at specified speed.
+
+        Maintains current speed if already moving, otherwise uses initial_speed.
+        """
+        rig = get_rig()
+        rig.direction(-1, 0)
+        rig.speed(rig.state.speed or initial_speed)
+
+    def mouse_rig_go_right(initial_speed: int = 3) -> None:
+        """Move continuously right at specified speed.
+
+        Maintains current speed if already moving, otherwise uses initial_speed.
+        """
+        rig = get_rig()
+        rig.direction(1, 0)
+        rig.speed(rig.state.speed or initial_speed)
+
+    def mouse_rig_go_up(initial_speed: int = 3) -> None:
+        """Move continuously up at specified speed.
+
+        Maintains current speed if already moving, otherwise uses initial_speed.
+        """
+        rig = get_rig()
+        rig.direction(0, -1)
+        rig.speed(rig.state.speed or initial_speed)
+
+    def mouse_rig_go_down(initial_speed: int = 3) -> None:
+        """Move continuously down at specified speed.
+
+        Maintains current speed if already moving, otherwise uses initial_speed.
+        """
+        rig = get_rig()
+        rig.direction(0, 1)
+        rig.speed(rig.state.speed or initial_speed)
+
+    def mouse_rig_speed_to(speed: float, ms: int = None, easing: str = None) -> None:
+        """Set speed to absolute value, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.speed.to(speed).over(ms, easing)
+        else:
+            rig.speed.to(speed)
+
+    def mouse_rig_speed_by(delta: float, ms: int = None, easing: str = None) -> None:
+        """Add to current speed, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.speed.by(delta).over(ms, easing)
+        else:
+            rig.speed.by(delta)
+
+    def mouse_rig_speed_mul(multiplier: float, ms: int = None, easing: str = None) -> None:
+        """Multiply current speed, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.speed.mul(multiplier).over(ms, easing)
+        else:
+            rig.speed.mul(multiplier)
+
+    def mouse_rig_pos_to(x: float, y: float, ms: int = None, easing: str = None) -> None:
+        """Move mouse to absolute position, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.pos.to(x, y).over(ms, easing)
+        else:
+            rig.pos.to(x, y)
+
+    def mouse_rig_pos_by(dx: float, dy: float, ms: int = None, easing: str = None) -> None:
+        """Move mouse by relative offset, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.pos.by(dx, dy).over(ms, easing)
+        else:
+            rig.pos.by(dx, dy)
+
+    def mouse_rig_direction_to(x: float, y: float, ms: int = None, easing: str = None) -> None:
+        """Set direction to absolute vector or angle, optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.direction.to(x, y).over(ms, easing)
+        else:
+            rig.direction.to(x, y)
+
+    def mouse_rig_direction_by(angle: float, ms: int = None, easing: str = None) -> None:
+        """Rotate direction by angle (degrees), optionally over time.
+
+        easing: "linear", "ease_in_out", etc.
+        """
+        rig = get_rig()
+        if ms is not None:
+            rig.direction.by(angle).over(ms, easing)
+        else:
+            rig.direction.by(angle)

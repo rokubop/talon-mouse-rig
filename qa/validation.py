@@ -22,7 +22,7 @@ def test_multiple_properties_not_allowed(on_success, on_failure):
     """Test: rig.speed().direction.to() should error - cannot combine multiple properties"""
     try:
         rig = actions.user.mouse_rig()
-        rig.speed(3).direction.to(1, 0).hold(1000)
+        rig.speed(3).direction.to(1, 0)
         on_failure("Expected error but operation succeeded")
     except Exception as e:
         error_msg = str(e).lower()

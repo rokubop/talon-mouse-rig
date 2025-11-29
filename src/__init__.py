@@ -184,7 +184,7 @@ class Rig:
     # ========================================================================
 
     def stop(self, ms: Optional[float] = None, easing: str = "linear"):
-        """Stop everything: bake all effects, clear builders, decelerate to 0
+        """Stop everything: bake all layers, clear builders, decelerate to 0
 
         Args:
             ms: Optional duration to decelerate over. If None, stops immediately.
