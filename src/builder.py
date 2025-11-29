@@ -892,8 +892,8 @@ class ActiveBuilder:
 
         return self.target_value
 
-    def get_current_value(self) -> Any:
-        """Get aggregated current value from all children
+    def get_interpolated_value(self) -> Any:
+        """Get aggregated interpolated value from all children
 
         If group lifecycle is active (coordinated revert), use that.
         Otherwise aggregate all children's individual values.

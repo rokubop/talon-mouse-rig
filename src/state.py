@@ -244,7 +244,7 @@ class RigState:
             return
 
         # Get aggregated value (includes own value + children)
-        current_value = builder.get_current_value()
+        current_value = builder.get_interpolated_value()
 
         # Get property and mode from builder config
         prop = builder.config.property
@@ -421,7 +421,7 @@ class RigState:
         """
         prop = builder.config.property
         mode = builder.config.mode
-        current_value = builder.get_current_value()
+        current_value = builder.get_interpolated_value()
         pos_is_override = False
 
         if prop == "speed":
@@ -715,7 +715,7 @@ class RigState:
         @property
         def value(self):
             """Current aggregated value (includes children)"""
-            return self._builder.get_current_value()
+            return self._builder.get_interpolated_value()
 
         @property
         def phase(self) -> Optional[str]:
@@ -889,7 +889,7 @@ class RigState:
             builder = self._active_builders[layer]
 
             # Capture current aggregated value
-            current_value = builder.get_current_value()
+            current_value = builder.get_interpolated_value()
 
             # Get base value (neutral/zero for the property type)
             # Use builder's own config since children might be empty after first revert
