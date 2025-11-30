@@ -1,9 +1,13 @@
 # User talon commands - Customize this file
 # Comment out, add to, or modify commands as desired.
-rig left: user.mouse_rig_go_left(3)
-rig right: user.mouse_rig_go_right(3)
-rig up: user.mouse_rig_go_up(3)
-rig down: user.mouse_rig_go_down(3)
+
+# Movement commands - composed from direction + speed
+# Uses current speed or 3 if not moving
+rig left: user.mouse_rig_go_left()
+rig right: user.mouse_rig_go_right()
+rig up: user.mouse_rig_go_up()
+rig down: user.mouse_rig_go_down()
+
 rig stop: user.mouse_rig_stop()
 rig stop smooth: user.mouse_rig_stop(1000)
 
@@ -32,12 +36,6 @@ rig big left: user.mouse_rig_pos_by(-300, 0)
 rig big right: user.mouse_rig_pos_by(300, 0)
 rig big up: user.mouse_rig_pos_by(0, -300)
 rig big down: user.mouse_rig_pos_by(0, 300)
-
-# Alternative movement commands (simpler, no speed preservation)
-rig go left: user.mouse_rig_go_left()
-rig go right: user.mouse_rig_go_right()
-rig go up: user.mouse_rig_go_up()
-rig go down: user.mouse_rig_go_down()
 
 # Direction rotation
 rig rotate <number>: user.mouse_rig_direction_by(number)
