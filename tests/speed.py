@@ -1,36 +1,48 @@
-"""Speed tests for Mouse Rig
-
-Tests for:
-- speed.to(value) - set speed to absolute value
-- speed.add(delta) - add to current speed
-- speed.mul(multiplier) - multiply current speed
-- stop(ms) - decelerate to stop over time
-- stop(ms).then(callback) - stop with callback
-"""
-
 from talon import actions, ctrl, cron
 
-
-# Test configuration
 CENTER_X = 960
 CENTER_Y = 540
-
 
 # ============================================================================
 # BASIC SPEED TESTS
 # ============================================================================
 
-def test_speed_to():
+def test_speed_to(on_success, on_failure):
     """Test: rig.speed.to(value) - instant speed change"""
     rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
 
     target_speed = 10
+    rig.direction.to(1, 0)  # Set direction for movement
+    start_pos = ctrl.mouse_pos()
     rig.speed.to(target_speed)
 
-    assert rig.state.speed == target_speed, f"Speed wrong: expected {target_speed}, got {rig.state.speed}"
-    assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
-    assert rig._state._frame_loop_job is None, "Frame loop should be stopped"
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        if rig_check.state.speed != target_speed:
+            on_failure(f"Speed wrong: expected {target_speed}, got {rig_check.state.speed}")
+            return
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+        if rig_check._state._frame_loop_job is None:
+            on_failure("Frame loop should be running with speed set")
+            return
+
+        # Verify actual movement occurred
+        distance_moved = end_pos[0] - start_pos[0]
+        if distance_moved < 10:  # Should have moved significantly
+            on_failure(f"Expected movement, only moved {distance_moved}px")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
 
 
 def test_speed_to_over(on_success, on_failure):
@@ -61,36 +73,82 @@ def test_speed_to_over(on_success, on_failure):
     cron.after("600ms", check_state)
 
 
-def test_speed_add():
+def test_speed_add(on_success, on_failure):
     """Test: rig.speed.add(delta) - add to current speed"""
     rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
 
     initial_speed = 10
     delta = 5
     expected_speed = initial_speed + delta
 
+    rig.direction.to(1, 0)
     rig.speed.to(initial_speed)
+    start_pos = ctrl.mouse_pos()
     rig.speed.add(delta)
 
-    assert abs(rig.state.speed - expected_speed) < 0.1, f"Speed wrong: expected {expected_speed}, got {rig.state.speed}"
-    assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        if abs(rig_check.state.speed - expected_speed) > 0.1:
+            on_failure(f"Speed wrong: expected {expected_speed}, got {rig_check.state.speed}")
+            return
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+
+        # Verify movement with increased speed
+        distance_moved = end_pos[0] - start_pos[0]
+        if distance_moved < 10:
+            on_failure(f"Expected movement with speed {expected_speed}, only moved {distance_moved}px")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
 
 
-def test_speed_mul():
+def test_speed_mul(on_success, on_failure):
     """Test: rig.speed.mul(multiplier) - multiply current speed"""
     rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
 
     initial_speed = 8
     multiplier = 2
     expected_speed = initial_speed * multiplier
 
+    rig.direction.to(1, 0)
     rig.speed.to(initial_speed)
+    start_pos = ctrl.mouse_pos()
     rig.speed.mul(multiplier)
 
-    assert abs(rig.state.speed - expected_speed) < 0.1, f"Speed wrong: expected {expected_speed}, got {rig.state.speed}"
-    assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        if abs(rig_check.state.speed - expected_speed) > 0.1:
+            on_failure(f"Speed wrong: expected {expected_speed}, got {rig_check.state.speed}")
+            return
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+            return
+
+        # Verify movement with multiplied speed
+        distance_moved = end_pos[0] - start_pos[0]
+        if distance_moved < 10:
+            on_failure(f"Expected movement with speed {expected_speed}, only moved {distance_moved}px")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
 
 
 # ============================================================================
@@ -206,12 +264,12 @@ def test_stop_callback_not_fired_on_interrupt(on_success, on_failure):
 # ============================================================================
 
 SPEED_TESTS = [
-    test_speed_to,
-    test_speed_to_over,
-    test_speed_add,
-    test_speed_mul,
-    test_stop_immediate,
-    test_stop_over,
-    test_stop_over_then_callback,
-    test_stop_callback_not_fired_on_interrupt,
+    ("speed.to()", test_speed_to),
+    ("speed.to() over", test_speed_to_over),
+    ("speed.add()", test_speed_add),
+    ("speed.mul()", test_speed_mul),
+    ("stop immediate", test_stop_immediate),
+    ("stop over", test_stop_over),
+    ("stop over then callback", test_stop_over_then_callback),
+    ("stop callback not fired on interrupt", test_stop_callback_not_fired_on_interrupt),
 ]

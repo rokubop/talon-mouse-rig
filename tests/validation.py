@@ -1,33 +1,22 @@
-"""Validation and Error tests for Mouse Rig
-
-Tests for:
-- Invalid operation sequences that should raise errors
-- Error messages are clear and helpful
-- Edge cases and boundary conditions
-"""
-
 from talon import actions, ctrl, cron
 
-
-# Test configuration
 CENTER_X = 960
 CENTER_Y = 540
-
 
 # ============================================================================
 # VALIDATION TESTS
 # ============================================================================
 
 def test_multiple_properties_not_allowed(on_success, on_failure):
-    """Test: rig.speed().direction.to() should error - cannot combine multiple properties"""
+    """Test: rig.speed(3).direction.to() should error - cannot combine multiple properties"""
     try:
         rig = actions.user.mouse_rig()
         rig.speed(3).direction.to(1, 0)
         on_failure("Expected error but operation succeeded")
     except Exception as e:
         error_msg = str(e).lower()
-        # Check if error message mentions combining properties or similar helpful info
-        if "combine" in error_msg or "multiple" in error_msg or "cannot" in error_msg or "property" in error_msg or "properties" in error_msg:
+        # Check if error message mentions combining properties
+        if "combine" in error_msg and "properties" in error_msg:
             on_success()
         else:
             on_failure(f"Error occurred but message unclear: {e}")

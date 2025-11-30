@@ -475,8 +475,20 @@ class PropertyBuilder:
     """Helper for property operations - thin wrapper that configures RigBuilder"""
 
     def __init__(self, rig_builder: RigBuilder, property_name: str):
+        from .contracts import ConfigError
+
         self.rig_builder = rig_builder
         self.property_name = property_name
+
+        # Check if a property is already set - can't chain multiple properties
+        if self.rig_builder.config.property is not None and self.rig_builder.config.property != property_name:
+            raise ConfigError(
+                f"Cannot combine multiple properties in one command.\n\n"
+                f"You're trying to set both '{self.rig_builder.config.property}' and '{property_name}' together.\n\n"
+                f"Use separate commands instead:\n\n"
+                f"  rig.{self.rig_builder.config.property}(...)\n"
+                f"  rig.{property_name}(...)"
+            )
 
         # Set property on builder
         self.rig_builder.config.property = property_name

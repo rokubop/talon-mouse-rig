@@ -1,16 +1,5 @@
-"""Position tests for Mouse Rig
-
-Tests for:
-- pos.to() - absolute positioning
-- pos.by() - relative positioning
-- layer pos.override.to() - layer absolute positioning
-- layer pos.offset.by() - layer relative positioning
-"""
-
 from talon import actions, ctrl, cron
 
-
-# Test configuration
 CENTER_X = 960
 CENTER_Y = 540
 TEST_OFFSET = 200

@@ -42,7 +42,7 @@ def reload_rig():
 
     Manually triggers reload by:
     1. Stopping active movements and clearing state
-    2. Touching all Python files in src/ and qa/ to trigger Talon's file watcher
+    2. Touching all Python files in src/ and tests/ to trigger Talon's file watcher
 
     Call this manually when you want to reload code changes.
     """
@@ -59,7 +59,7 @@ def reload_rig():
             print(f"Error stopping frame loop: {e}")
         _global_state = None
 
-    # Touch all Python files in src/ and qa/ to trigger Talon's file watcher
+    # Touch all Python files in src/ and tests/ to trigger Talon's file watcher
     # Touch src/__init__.py FIRST so module reinitializes properly
     import time
     src_dir = os.path.dirname(__file__)
@@ -86,17 +86,17 @@ def reload_rig():
             except Exception as e:
                 print(f"Error updating {filename}: {e}")
 
-    # Then touch qa/ files
-    qa_dir = os.path.join(parent_dir, 'qa')
-    if os.path.exists(qa_dir):
-        for filename in os.listdir(qa_dir):
+    # Then touch tests/ files
+    tests_dir = os.path.join(parent_dir, 'tests')
+    if os.path.exists(tests_dir):
+        for filename in os.listdir(tests_dir):
             if filename.endswith('.py'):
-                filepath = os.path.join(qa_dir, filename)
+                filepath = os.path.join(tests_dir, filename)
                 try:
                     os.utime(filepath, None)
                     touched_count += 1
                 except Exception as e:
-                    print(f"Error updating qa/{filename}: {e}")
+                    print(f"Error updating tests/{filename}: {e}")
 
     print(f"✓ Rig state cleared and {touched_count} files touched for reload")
 

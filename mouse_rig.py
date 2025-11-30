@@ -298,11 +298,16 @@ class Actions:
             hold_callback: callable = None,
             revert_ms: int = None,
             revert_easing: str = None,
-            revert_callback: callable = None
+            revert_callback: callable = None,
+            order: int = None
         ) -> None:
-        """Add speed offset for a named layer, stackable and revertible"""
+        """Layer that adds an offset to the base speed - stackable and revertible
+
+        Args:
+            order: Layer priority (higher numbers apply later, None = auto)
+        """
         rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.offset.add(delta)
+        builder = rig.layer(layer_name, order).speed.offset.add(delta)
         if to_ms is not None:
             builder = builder.over(to_ms, to_easing)
         if to_callback is not None:
@@ -327,14 +332,18 @@ class Actions:
             hold_callback: callable = None,
             revert_ms: int = None,
             revert_easing: str = None,
-            revert_callback: callable = None
+            revert_callback: callable = None,
+            order: int = None
         ) -> None:
-        """Sets the layer's speed offset to an exact value (rather than adding to it).
+        """Layer that adds an offset to the base speed.
+        Sets the layer's speed offset to an exact value (rather than adding to it).
 
-        easing: "linear", "ease_in_out", etc.
+        Args:
+            order: Layer priority (higher numbers apply later, None = auto)
+            easing: "linear", "ease_in_out", etc.
         """
         rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.offset.to(speed)
+        builder = rig.layer(layer_name, order).speed.offset.to(speed)
 
         if to_ms is not None:
             builder = builder.over(to_ms, to_easing)
@@ -360,19 +369,22 @@ class Actions:
             hold_callback: callable = None,
             revert_ms: int = None,
             revert_easing: str = None,
-            revert_callback: callable = None
+            revert_callback: callable = None,
+            order: int = None
         ) -> None:
         """Set speed override for a layer, replacing base speed entirely.
 
         Unlike offset which adds to the base speed, override ignores the base
-        speed and all other layers, setting an absolute speed value.
+        speed and previous layers, setting an absolute speed value.
 
         Can be reverted with user.mouse_rig_layer_revert(layer_name).
 
-        easing: "linear", "ease_in_out", etc.
+        Args:
+            order: Layer priority (higher numbers apply later, None = auto)
+            easing: "linear", "ease_in_out", etc.
         """
         rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.override.to(speed)
+        builder = rig.layer(layer_name, order).speed.override.to(speed)
 
         if to_ms is not None:
             builder = builder.over(to_ms, to_easing)
@@ -495,6 +507,6 @@ class Actions:
         reload_rig()
 
     def mouse_rig_test_toggle_ui():
-        """Show the QA test UI with buttons"""
-        from .qa.main import toggle_test_ui
+        """Show the QA UI for mouse rig development"""
+        from .tests.main import toggle_test_ui
         toggle_test_ui()

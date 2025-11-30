@@ -1,27 +1,11 @@
-"""Direction tests for Mouse Rig
-
-Tests for:
-- direction.to(x, y) - set direction via vector
-- direction.to(x, y).over(ms) - smooth rotation to direction
-- direction.by(degrees) - rotate by degrees
-- direction.by(degrees).over(ms) - smooth rotation by degrees
-- direction.add(degrees) - add degrees to current direction
-- direction.add(x, y) - add vector to current direction
-- layer().direction.offset.by(degrees) - layer direction offset
-- layer().direction.override.to(x, y) - layer absolute direction
-"""
-
 from talon import actions, ctrl, cron
 import math
 
-
-# Test configuration
 CENTER_X = 960
 CENTER_Y = 540
 TEST_SPEED = 3
 SAMPLE_INTERVAL_MS = 200
 MOVEMENT_TOLERANCE = 50
-
 
 # ============================================================================
 # HELPER FUNCTIONS

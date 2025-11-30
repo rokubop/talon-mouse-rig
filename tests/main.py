@@ -1,23 +1,11 @@
-"""QA Test Core - UI, Test Runner, and Helper Functions
-
-This module provides the core test infrastructure:
-- Test UI with buttons for running tests
-- Test result display
-- Async test runner with callbacks
-- Helper functions for test setup and validation
-"""
-
 from talon import actions, ctrl, cron
 import time
 import inspect
 
-
-# Test configuration
 CENTER_X = 960
 CENTER_Y = 540
-TIMEOUT = 5.0  # Max seconds to wait for position
+TIMEOUT = 5.0
 
-# Test runner state
 _test_runner_state = {
     "running": False,
     "current_test_index": 0,
@@ -27,7 +15,6 @@ _test_runner_state = {
     "passed_count": 0,
     "failed_count": 0
 }
-
 
 # ============================================================================
 # PUBLIC API
