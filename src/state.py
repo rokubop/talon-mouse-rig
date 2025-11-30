@@ -56,6 +56,9 @@ class RigState:
         self._last_manual_movement_time: Optional[float] = None
         self._manual_movement_timeout_ms: float = 200  # Default 200ms delay
 
+        # Stop callbacks (fired when frame loop stops)
+        self._stop_callbacks: list = []
+
     def __repr__(self) -> str:
         pos = self.pos
         speed = self.speed
@@ -654,6 +657,14 @@ class RigState:
                 self._base_pos = current_mouse
             self._last_position_offset = Vec2(0, 0)
 
+            # Execute stop callbacks when frame loop actually stops
+            for callback in self._stop_callbacks:
+                try:
+                    callback()
+                except Exception as e:
+                    print(f"Error in stop callback: {e}")
+            self._stop_callbacks.clear()
+
     def _has_movement(self) -> bool:
         """Check if there's any movement happening (base speed non-zero)"""
         return self._base_speed != 0
@@ -897,6 +908,10 @@ class RigState:
     def base(self) -> 'RigState.BaseState':
         """Access to base (baked) state only"""
         return RigState.BaseState(self)
+
+    def add_stop_callback(self, callback):
+        """Add a callback to fire when the frame loop stops"""
+        self._stop_callbacks.append(callback)
 
     def stop(self, transition_ms: Optional[float] = None, easing: str = "linear", **kwargs):
         """Stop everything: bake state, clear effects, decelerate to 0

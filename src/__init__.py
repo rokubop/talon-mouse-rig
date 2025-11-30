@@ -100,6 +100,28 @@ def reload_rig():
 
     print(f"✓ Rig state cleared and {touched_count} files touched for reload")
 
+
+class StopHandle:
+    """Handle returned by stop() that allows adding callbacks via .then()"""
+
+    def __init__(self, state: RigState):
+        self._state = state
+
+    def then(self, callback):
+        """Add a callback to be executed when the system fully stops
+
+        The callback will only fire when:
+        - The deceleration completes (if a transition time was specified)
+        - The frame loop stops naturally
+        - No other operations interrupt the stop
+
+        Args:
+            callback: Function to call when stopped
+        """
+        self._state.add_stop_callback(callback)
+        return self
+
+
 class Rig:
     """Main entry point for mouse rig operations
 
@@ -174,14 +196,19 @@ class Rig:
     # SPECIAL OPERATIONS
     # ========================================================================
 
-    def stop(self, ms: Optional[float] = None, easing: str = "linear"):
+    def stop(self, ms: Optional[float] = None, easing: str = "linear") -> StopHandle:
         """Stop everything: bake all layers, clear builders, decelerate to 0
 
         Args:
             ms: Optional duration to decelerate over. If None, stops immediately.
             easing: Easing function for gradual deceleration
+
+        Returns:
+            StopHandle: Handle that allows chaining .then(callback) to execute
+                       when the system fully stops
         """
         self._state.stop(ms, easing)
+        return StopHandle(self._state)
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
         """Reverse direction (180 degrees turn)"""
