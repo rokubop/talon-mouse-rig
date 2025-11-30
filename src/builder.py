@@ -332,7 +332,6 @@ class RigBuilder:
         """Validate and execute the builder"""
         self._executed = True
 
-
         # Special case: revert-only call (no property/operator set)
         if self.config.property is None and self.config.operator is None:
             if self.config.revert_ms is not None:

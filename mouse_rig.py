@@ -28,34 +28,6 @@ class Actions:
         """
         return get_rig()
 
-    def mouse_rig_go_left(initial_speed: int = 3) -> None:
-        """Move continuously left at current speed or initial speed."""
-        rig = actions.user.mouse_rig()
-        rig.direction(-1, 0)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-
-    def mouse_rig_go_right(initial_speed: int = 3) -> None:
-        """Move continuously right at current speed or initial speed."""
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-
-    def mouse_rig_go_up(initial_speed: int = 3) -> None:
-        """Move continuously up at current speed or initial speed."""
-        rig = actions.user.mouse_rig()
-        rig.direction(0, -1)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-
-    def mouse_rig_go_down(initial_speed: int = 3) -> None:
-        """Move continuously down at current speed or initial speed."""
-        rig = actions.user.mouse_rig()
-        rig.direction(0, 1)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-
     def mouse_rig_pos_to(
             x: float,
             y: float,
@@ -125,98 +97,86 @@ class Actions:
     def mouse_rig_speed_to(
             speed: float,
             to_ms: int = None,
-            to_easing: str = None,
-            to_callback: callable = None,
             hold_ms: int = None,
-            hold_easing: str = None,
-            hold_callback: callable = None,
-            revert_ms: int = None,
-            revert_easing: str = None,
-            revert_callback: callable = None
+            revert_ms: int = None
         ) -> None:
         """Set speed to absolute value, optionally over time.
 
-        easing: "linear", "ease_in_out", etc.
+        ```python
+        speed_to(10) # instant set
+        speed_to(10, 500) # animate to value over 500ms and stay
+        speed_to(10, 500, 1000) # animate, hold for 1s and stay
+        speed_to(10, 500, 1000, 0) # animate, hold for 1s and revert instantly
+        speed_to(10, 0, 1000, 0) # instant set, hold for 1s and revert instantly
+        speed_to(10, 500, 1000, 300) # animate, hold, revert over 300ms
+        speed_to(10, 0, 0, 1000) # instant set, then revert over 1s
+        ```
         """
         rig = actions.user.mouse_rig()
         builder = rig.speed.to(speed)
 
-        if to_ms is not None:
-            builder = builder.over(to_ms, to_easing)
-        if to_callback is not None:
-            builder = builder.then(to_callback)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms, hold_easing)
-        if hold_callback is not None:
-            builder = builder.then(hold_callback)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms, revert_easing)
-        if revert_callback is not None:
-            builder = builder.then(revert_callback)
+        if to_ms:
+            builder = builder.over(to_ms)
+        if hold_ms:
+            builder = builder.hold(hold_ms)
+        if revert_ms:
+            builder = builder.revert(revert_ms)
 
     def mouse_rig_speed_add(
             delta: float,
             to_ms: int = None,
-            to_easing: str = None,
-            to_callback: callable = None,
             hold_ms: int = None,
-            hold_easing: str = None,
-            hold_callback: callable = None,
-            revert_ms: int = None,
-            revert_easing: str = None,
-            revert_callback: callable = None,
+            revert_ms: int = None
         ) -> None:
         """Add to current speed, optionally over time.
 
-        easing: "linear", "ease_in_out", etc.
+        ```python
+        speed_add(2) # instant add
+        speed_add(2, 500) # animate increase over 500ms and stay
+        speed_add(2, 500, 1000) # animate, hold for 1s and stay
+        speed_add(2, 500, 1000, 0) # animate, hold for 1s and revert instantly
+        speed_add(2, 0, 1000, 0) # instant add, hold for 1s and revert instantly
+        speed_add(2, 500, 1000, 300) # animate, hold, revert over 300ms
+        speed_add(2, 0, 0, 1000) # instant add, then revert over 1s
+        ```
         """
         rig = actions.user.mouse_rig()
         builder = rig.speed.add(delta)
 
-        if to_ms is not None:
-            builder = builder.over(to_ms, to_easing)
-        if to_callback is not None:
-            builder = builder.then(to_callback)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms, hold_easing)
-        if hold_callback is not None:
-            builder = builder.then(hold_callback)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms, revert_easing)
-        if revert_callback is not None:
-            builder = builder.then(revert_callback)
+        if to_ms:
+            builder = builder.over(to_ms)
+        if hold_ms:
+            builder = builder.hold(hold_ms)
+        if revert_ms:
+            builder = builder.revert(revert_ms)
 
     def mouse_rig_speed_mul(
             multiplier: float,
             to_ms: int = None,
-            to_easing: str = None,
-            to_callback: callable = None,
             hold_ms: int = None,
-            hold_easing: str = None,
-            hold_callback: callable = None,
-            revert_ms: int = None,
-            revert_easing: str = None,
-            revert_callback: callable = None
+            revert_ms: int = None
         ) -> None:
         """Multiply current speed, optionally over time.
 
-        easing: "linear", "ease_in_out", etc.
+        ```python
+        speed_mul(2) # instant multiply
+        speed_mul(2, 500) # animate multiply over 500ms and stay
+        speed_mul(2, 500, 1000) # animate, hold for 1s and stay
+        speed_mul(2, 500, 1000, 0) # animate, hold for 1s and revert instantly
+        speed_mul(2, 0, 1000, 0) # instant multiply, hold for 1s and revert instantly
+        speed_mul(2, 500, 1000, 300) # animate, hold, revert over 300ms
+        speed_mul(2, 0, 0, 1000) # instant multiply, then revert over 1s
+        ```
         """
         rig = actions.user.mouse_rig()
         builder = rig.speed.mul(multiplier)
 
-        if to_ms is not None:
-            builder = builder.over(to_ms, to_easing)
-        if to_callback is not None:
-            builder = builder.then(to_callback)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms, hold_easing)
-        if hold_callback is not None:
-            builder = builder.then(hold_callback)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms, revert_easing)
-        if revert_callback is not None:
-            builder = builder.then(revert_callback)
+        if to_ms:
+            builder = builder.over(to_ms)
+        if hold_ms:
+            builder = builder.hold(hold_ms)
+        if revert_ms:
+            builder = builder.revert(revert_ms)
 
     def mouse_rig_direction_to(
             direction_x: float,
@@ -286,6 +246,34 @@ class Actions:
             builder = builder.revert(revert_ms, revert_easing)
         if revert_callback is not None:
             builder = builder.then(revert_callback)
+
+    def mouse_rig_go_left(initial_speed: int = 3) -> None:
+        """Move continuously left at current speed or initial speed."""
+        rig = actions.user.mouse_rig()
+        rig.direction(-1, 0)
+        if not rig.state.speed:
+            rig.speed(initial_speed)
+
+    def mouse_rig_go_right(initial_speed: int = 3) -> None:
+        """Move continuously right at current speed or initial speed."""
+        rig = actions.user.mouse_rig()
+        rig.direction(1, 0)
+        if not rig.state.speed:
+            rig.speed(initial_speed)
+
+    def mouse_rig_go_up(initial_speed: int = 3) -> None:
+        """Move continuously up at current speed or initial speed."""
+        rig = actions.user.mouse_rig()
+        rig.direction(0, -1)
+        if not rig.state.speed:
+            rig.speed(initial_speed)
+
+    def mouse_rig_go_down(initial_speed: int = 3) -> None:
+        """Move continuously down at current speed or initial speed."""
+        rig = actions.user.mouse_rig()
+        rig.direction(0, 1)
+        if not rig.state.speed:
+            rig.speed(initial_speed)
 
     def mouse_rig_layer_speed_offset_add(
             layer_name: str,

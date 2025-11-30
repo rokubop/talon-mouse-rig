@@ -142,8 +142,20 @@ VALID_LAYER_STATE_ATTRS = [
 # ============================================================================
 
 class ConfigError(TypeError):
-    """Configuration validation error with rich formatting"""
-    pass
+    """Configuration validation error with rich formatting
+
+    Automatically stops the mouse rig to prevent runaway movement
+    when validation fails during command building.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Auto-stop rig on validation errors to prevent runaway movement
+        try:
+            from talon import actions
+            actions.user.mouse_rig_stop()
+        except Exception:
+            # Fail silently if rig unavailable
+            pass
 
 
 class RigAttributeError(AttributeError):
