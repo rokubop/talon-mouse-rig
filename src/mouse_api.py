@@ -2,14 +2,18 @@
 
 Supports multiple mouse movement backends:
 - talon: Cross-platform using Talon's ctrl.mouse_move (default)
-- windows_raw: Windows win32api.mouse_event (absolute positioning, legacy API)
+- windows_raw: Windows win32api.mouse_event (legacy API)
 - windows_sendinput: Windows SendInput (modern, recommended for Windows)
 - macos: macOS CGWarpMouseCursorPosition
 - linux_x11: Linux X11 XWarpPointer
+
+Each API provides two movement modes:
+- Absolute: Move cursor to screen position (for desktop use, pos.to())
+- Relative: Move cursor by delta (for gaming with infinite rotation, pos.by())
 """
 
 import platform
-from typing import Callable
+from typing import Callable, Tuple
 from talon import ctrl, settings
 
 
@@ -58,18 +62,31 @@ elif platform.system() == "Linux":
         pass
 
 
-def _make_talon_mouse_move() -> Callable[[float, float], None]:
-    """Cross-platform Talon mouse movement"""
-    def move(x: float, y: float) -> None:
+def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """Cross-platform Talon mouse movement
+
+    Returns (absolute_func, relative_func)
+    Uses ctrl.mouse_move for absolute and actions.mouse_nudge for relative.
+    """
+    from talon import actions
+
+    def move_absolute(x: float, y: float) -> None:
         ctrl.mouse_move(int(x), int(y))
-    return move
+
+    def move_relative(dx: float, dy: float) -> None:
+        actions.mouse_nudge(int(dx), int(dy))
+
+    return move_absolute, move_relative
 
 
-def _make_windows_raw_mouse_move() -> Callable[[float, float], None]:
-    """Windows mouse_event (absolute movement using MOUSEEVENTF_ABSOLUTE)"""
+def _make_windows_raw_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """Windows mouse_event (legacy API)
+
+    Returns (absolute_func, relative_func)
+    """
     import win32api, win32con  # type: ignore
 
-    def move(x: float, y: float) -> None:
+    def move_absolute(x: float, y: float) -> None:
         # Get screen dimensions
         screen_width = win32api.GetSystemMetrics(0)
         screen_height = win32api.GetSystemMetrics(1)
@@ -84,11 +101,24 @@ def _make_windows_raw_mouse_move() -> Callable[[float, float], None]:
             abs_x,
             abs_y
         )
-    return move
+
+    def move_relative(dx: float, dy: float) -> None:
+        # Relative movement using mickeys (device units)
+        # No coordinate conversion needed
+        win32api.mouse_event(
+            win32con.MOUSEEVENTF_MOVE,
+            int(dx),
+            int(dy)
+        )
+
+    return move_absolute, move_relative
 
 
-def _make_windows_sendinput_mouse_move() -> Callable[[float, float], None]:
-    """Windows SendInput (modern, absolute positioning)"""
+def _make_windows_sendinput_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """Windows SendInput (modern, recommended for Windows)
+
+    Returns (absolute_func, relative_func)
+    """
     import ctypes
     from ctypes import wintypes
 
@@ -117,7 +147,7 @@ def _make_windows_sendinput_mouse_move() -> Callable[[float, float], None]:
             ("_input", _INPUT)
         ]
 
-    def move(x: float, y: float) -> None:
+    def move_absolute(x: float, y: float) -> None:
         # Convert to absolute coordinates (0-65535 range)
         screen_width = ctypes.windll.user32.GetSystemMetrics(0)
         screen_height = ctypes.windll.user32.GetSystemMetrics(1)
@@ -134,37 +164,72 @@ def _make_windows_sendinput_mouse_move() -> Callable[[float, float], None]:
 
         ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
 
-    return move
+    def move_relative(dx: float, dy: float) -> None:
+        # Relative movement (no ABSOLUTE flag)
+        input_struct = INPUT(type=INPUT_MOUSE)
+        input_struct.mi.dx = int(dx)
+        input_struct.mi.dy = int(dy)
+        input_struct.mi.dwFlags = MOUSEEVENTF_MOVE
+
+        ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
+
+    return move_absolute, move_relative
 
 
-def _make_macos_mouse_move() -> Callable[[float, float], None]:
-    """macOS CoreGraphics mouse movement"""
+def _make_macos_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """macOS CoreGraphics mouse movement
+
+    Returns (absolute_func, relative_func)
+    Note: macOS only supports absolute positioning, so relative mode
+    implements relative movement on top of absolute positioning.
+    """
     import Quartz  # type: ignore
 
-    def move(x: float, y: float) -> None:
+    def move_absolute(x: float, y: float) -> None:
         Quartz.CGWarpMouseCursorPosition((x, y))
 
-    return move
+    def move_relative(dx: float, dy: float) -> None:
+        # Get current position and add delta
+        from talon import ctrl
+        current_x, current_y = ctrl.mouse_pos()
+        Quartz.CGWarpMouseCursorPosition((current_x + dx, current_y + dy))
+
+    return move_absolute, move_relative
 
 
-def _make_linux_x11_mouse_move() -> Callable[[float, float], None]:
-    """Linux X11 mouse movement"""
+def _make_linux_x11_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """Linux X11 mouse movement
+
+    Returns (absolute_func, relative_func)
+    Note: X11 only supports absolute positioning, so relative mode
+    implements relative movement on top of absolute positioning.
+    """
     from Xlib import display  # type: ignore
 
     disp = display.Display()
     root = disp.screen().root
 
-    def move(x: float, y: float) -> None:
+    def move_absolute(x: float, y: float) -> None:
         root.warp_pointer(int(x), int(y))
         disp.sync()
 
-    return move
+    def move_relative(dx: float, dy: float) -> None:
+        # Get current position and add delta
+        from talon import ctrl
+        current_x, current_y = ctrl.mouse_pos()
+        root.warp_pointer(int(current_x + dx), int(current_y + dy))
+        disp.sync()
+
+    return move_absolute, move_relative
 
 
-def get_mouse_move_function() -> Callable[[float, float], None]:
-    """Get the appropriate mouse move function based on settings
+def get_mouse_move_functions() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+    """Get the appropriate mouse move functions based on settings
 
-    Returns a function that takes (x, y) coordinates and moves the mouse.
+    Returns tuple of (absolute_func, relative_func) where:
+    - absolute_func: Takes (x, y) screen coordinates for cursor positioning
+    - relative_func: Takes (dx, dy) delta for relative movement (gaming)
+
     Falls back to Talon's mouse_move if the requested API is unavailable.
     """
     api_type = settings.get("user.mouse_rig_api", "talon")

@@ -11,30 +11,46 @@ import math
 from typing import Tuple, Union, Optional, Callable
 from dataclasses import dataclass
 from talon import app
-from .mouse_api import get_mouse_move_function
+from .mouse_api import get_mouse_move_functions
 
 
 # ============================================================================
 # MOUSE MOVEMENT API
 # ============================================================================
 
-# Mouse move function - initialized after Talon is ready
-_mouse_move = None
+# Mouse move functions - initialized after Talon is ready
+_mouse_move_absolute = None
+_mouse_move_relative = None
 
 
 def _initialize_mouse_move():
-    global _mouse_move
-    _mouse_move = get_mouse_move_function()
+    global _mouse_move_absolute, _mouse_move_relative
+    _mouse_move_absolute, _mouse_move_relative = get_mouse_move_functions()
 
 
 app.register("ready", _initialize_mouse_move)
 
 
 def mouse_move(x: float, y: float) -> None:
-    """Move mouse to absolute position"""
-    if _mouse_move is None:
+    """Move mouse to absolute screen position
+
+    Used for continuous movement and pos.to() operations.
+    """
+    if _mouse_move_absolute is None:
         _initialize_mouse_move()
-    _mouse_move(x, y)
+    _mouse_move_absolute(x, y)
+
+
+def mouse_move_relative(dx: float, dy: float) -> None:
+    """Move mouse by relative delta
+
+    Used for pos.by() operations in gaming scenarios with infinite rotation.
+    This avoids the overhead of coordinate conversion when only relative
+    movement is needed.
+    """
+    if _mouse_move_relative is None:
+        _initialize_mouse_move()
+    _mouse_move_relative(dx, dy)
 
 
 # ============================================================================

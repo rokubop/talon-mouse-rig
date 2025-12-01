@@ -8,6 +8,8 @@ rig right: user.mouse_rig_go_right()
 rig up: user.mouse_rig_go_up()
 rig down: user.mouse_rig_go_down()
 
+test one: user.mouse_rig_test_one()
+
 rig stop: user.mouse_rig_stop()
 rig stop smooth: user.mouse_rig_stop(1000)
 
