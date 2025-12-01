@@ -67,6 +67,10 @@ def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[
 
     Returns (absolute_func, relative_func)
     Uses ctrl.mouse_move for absolute and actions.mouse_nudge for relative.
+
+    Note: int() wrapping is required because Talon's mouse APIs work in integer pixels.
+    Subpixel accumulation is handled by SubpixelAdjuster in core.py, which only calls
+    these functions when we've accumulated >= 1 pixel of movement.
     """
     from talon import actions
 

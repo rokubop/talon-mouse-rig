@@ -532,7 +532,12 @@ class RigState:
             self._stop_frame_loop_if_done()
             return
 
-        self._compute_and_apply_state()
+        pos, speed, direction, pos_is_override = self._compute_current_state()
+        self._apply_velocity_movement(speed, direction)
+        self._apply_position_updates(pos, pos_is_override)
+
+        self._move_mouse_if_changed()
+
         self._remove_completed_builders(current_time)
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
@@ -588,14 +593,6 @@ class RigState:
 
         for layer in completed:
             self.remove_builder(layer)
-
-    def _compute_and_apply_state(self):
-        """Compute current state and move mouse to new position"""
-        pos, speed, direction, pos_is_override = self._compute_current_state()
-
-        self._apply_velocity_movement(speed, direction)
-        self._apply_position_updates(pos, pos_is_override)
-        self._move_mouse_if_changed()
 
     def _apply_position_updates(self, pos: Vec2, pos_is_override: bool):
         """Apply position changes based on mode"""

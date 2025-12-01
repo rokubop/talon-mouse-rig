@@ -1,4 +1,4 @@
-from talon import settings, actions
+from talon import settings, actions, ctrl, actions
 from typing import Any
 from .settings import mod
 from .src import rig as get_rig, reload_rig
@@ -637,3 +637,11 @@ class Actions:
         """Show the QA UI for mouse rig development"""
         from .tests.main import toggle_test_ui
         toggle_test_ui()
+
+    def mouse_rig_test_one():
+        """Run test one from mouse rig tests"""
+        # print("x", actions.mouse_x())
+        # print("y", actions.mouse_y())
+        # print(ctrl.mouse_pos())
+        print(int(0.9))
+        actions.mouse_nudge(0.9,0)
