@@ -52,9 +52,8 @@ class RigState:
         # Auto-order counter for layers without explicit order
         self._next_auto_order: int = 0
 
-        # Manual mouse movement timeout
+        # Manual mouse movement detection
         self._last_manual_movement_time: Optional[float] = None
-        self._manual_movement_timeout_ms: float = 200  # Default 200ms delay
 
         # Stop callbacks (fired when frame loop stops)
         self._stop_callbacks: list = []
@@ -487,6 +486,10 @@ class RigState:
         Returns:
             True if we should skip rig movement (manual movement detected or in timeout), False otherwise
         """
+        # Check if manual mouse detection is enabled
+        if not settings.get("user.mouse_rig_pause_on_manual_movement", True):
+            return False
+
         current_x, current_y = ctrl.mouse_pos()
         expected_x = int(round(self._internal_pos.x))
         expected_y = int(round(self._internal_pos.y))
@@ -509,8 +512,9 @@ class RigState:
 
         # Check if we're still in timeout period after manual movement
         if self._last_manual_movement_time is not None:
+            timeout_ms = settings.get("user.mouse_rig_manual_movement_timeout_ms", 200)
             elapsed_ms = (time.perf_counter() - self._last_manual_movement_time) * 1000
-            if elapsed_ms < self._manual_movement_timeout_ms:
+            if elapsed_ms < timeout_ms:
                 return True  # Still in timeout, skip rig movement
             else:
                 # Timeout expired, allow rig to take control again

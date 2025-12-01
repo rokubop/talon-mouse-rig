@@ -15,6 +15,20 @@ mod.setting("mouse_rig_frame_interval",
 mod.setting(
     "mouse_rig_api",
     type=str,
-    default="windows_raw",
-    desc="Mouse API: 'talon', 'windows_raw', 'windows_sendinput', 'macos', 'linux_x11'"
+    default="talon",
+    desc="Options: 'talon', 'windows_raw', 'windows_sendinput', 'macos', 'linux_x11'"
+)
+
+mod.setting(
+    "mouse_rig_pause_on_manual_movement",
+    type=bool,
+    default=True,
+    desc="Whether manual mouse movement should pause the rig temporarily"
+)
+
+mod.setting(
+    "mouse_rig_manual_movement_timeout_ms",
+    type=int,
+    default=200,
+    desc="Timeout in milliseconds after manual mouse movement before rig resumes control"
 )
