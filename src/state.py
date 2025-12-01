@@ -10,7 +10,7 @@ Unified state manager with:
 import time
 import math
 from typing import Optional, TYPE_CHECKING
-from talon import cron, ctrl
+from talon import cron, ctrl, settings
 from .core import Vec2, SubpixelAdjuster, mouse_move
 from .queue import QueueManager
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
@@ -630,8 +630,8 @@ class RigState:
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
         if self._frame_loop_job is None:
-            # 60 FPS = ~16.67ms per frame
-            self._frame_loop_job = cron.interval("16ms", self._tick_frame)
+            frame_interval = settings.get("user.mouse_rig_frame_interval", 16)
+            self._frame_loop_job = cron.interval(f"{frame_interval}ms", self._tick_frame)
             self._last_frame_time = None
             # Sync to actual mouse position when starting (handles manual movements)
             current_mouse = Vec2(*ctrl.mouse_pos())

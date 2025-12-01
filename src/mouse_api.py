@@ -2,8 +2,8 @@
 
 Supports multiple mouse movement backends:
 - talon: Cross-platform using Talon's ctrl.mouse_move (default)
-- windows_raw: Windows win32api.mouse_event (relative movement)
-- windows_sendinput: Windows SendInput (modern, absolute positioning)
+- windows_raw: Windows win32api.mouse_event (absolute positioning, legacy API)
+- windows_sendinput: Windows SendInput (modern, recommended for Windows)
 - macos: macOS CGWarpMouseCursorPosition
 - linux_x11: Linux X11 XWarpPointer
 """
@@ -16,7 +16,7 @@ from talon import ctrl, settings
 # Available mouse APIs
 MOUSE_APIS = {
     'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
-    'windows_raw': 'Windows win32api.mouse_event (relative movement)',
+    'windows_raw': 'Windows win32api.mouse_event (absolute positioning, legacy API)',
     'windows_sendinput': 'Windows SendInput (modern, recommended for Windows)',
     'macos': 'macOS CGWarpMouseCursorPosition (direct positioning)',
     'linux_x11': 'Linux X11 XWarpPointer (direct positioning)',
@@ -66,14 +66,24 @@ def _make_talon_mouse_move() -> Callable[[float, float], None]:
 
 
 def _make_windows_raw_mouse_move() -> Callable[[float, float], None]:
-    """Windows mouse_event (relative movement)"""
+    """Windows mouse_event (absolute movement using MOUSEEVENTF_ABSOLUTE)"""
     import win32api, win32con  # type: ignore
 
     def move(x: float, y: float) -> None:
-        current_x, current_y = ctrl.mouse_pos()
-        dx = int(x - current_x)
-        dy = int(y - current_y)
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, dy)
+        # Get screen dimensions
+        screen_width = win32api.GetSystemMetrics(0)
+        screen_height = win32api.GetSystemMetrics(1)
+
+        # Convert to absolute coordinates (0-65535 range)
+        # mouse_event with ABSOLUTE flag uses normalized coordinates
+        abs_x = int(((x + 0.5) * 65536) / screen_width)
+        abs_y = int(((y + 0.5) * 65536) / screen_height)
+
+        win32api.mouse_event(
+            win32con.MOUSEEVENTF_ABSOLUTE | win32con.MOUSEEVENTF_MOVE,
+            abs_x,
+            abs_y
+        )
     return move
 
 
@@ -112,8 +122,10 @@ def _make_windows_sendinput_mouse_move() -> Callable[[float, float], None]:
         screen_width = ctypes.windll.user32.GetSystemMetrics(0)
         screen_height = ctypes.windll.user32.GetSystemMetrics(1)
 
-        abs_x = int((x * 65535) / screen_width)
-        abs_y = int((y * 65535) / screen_height)
+        # SendInput uses normalized coordinates where (0,0) is top-left and (65535,65535) is bottom-right
+        # Need to add 0.5 to x to center the pixel, and the range is 0-65535 not 0-65536
+        abs_x = int(((x + 0.5) * 65536) / screen_width)
+        abs_y = int(((y + 0.5) * 65536) / screen_height)
 
         input_struct = INPUT(type=INPUT_MOUSE)
         input_struct.mi.dx = abs_x

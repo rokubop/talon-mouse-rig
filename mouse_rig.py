@@ -419,25 +419,32 @@ class Actions:
         """
         actions.user.mouse_rig_go_direction(0, 1, initial_speed, target_speed, ms, easing)
 
-    def mouse_rig_layer_speed_offset_add(
+    def mouse_rig_layer_speed_offset_by(
             layer_name: str,
             delta: float | int,
             to_ms: int = None,
             hold_ms: int = None,
             revert_ms: int = None
         ) -> None:
-        """Add to current speed with a named layer - stackable and revertible.
+        """Create a named speed layer that offsets the base speed.
+        Multiple invocations stack and the layer can be reverted by name.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).speed.offset.by(delta).over(to_ms).hold(hold_ms).revert(revert_ms)
+        ```
 
         Examples:
         ```python
-        mouse_rig_layer_speed_offset_add("boost", 5)                 # instant add
-        mouse_rig_layer_speed_offset_add("boost", 5, 1000)           # add over 1s, stay
-        mouse_rig_layer_speed_offset_add("boost", 5, 1000, 0, 1000)  # add 1s, revert 1s
-        mouse_rig_layer_speed_offset_add("boost", 5, 0, 500, 0)      # instant, hold 500ms, revert
+        mouse_rig_layer_speed_offset_by("boost", 5)                 # instant add
+        mouse_rig_layer_speed_offset_by("boost", 5, 1000)           # add over 1s, stay
+        mouse_rig_layer_speed_offset_by("boost", 5, 1000, 0, 1000)  # add 1s, revert 1s
+        mouse_rig_layer_speed_offset_by("boost", 5, 0, 500, 0)      # instant, hold 500ms, revert
         ```
         """
         rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.offset.add(delta)
+        builder = rig.layer(layer_name).speed.offset.by(delta)
         if to_ms is not None:
             builder = builder.over(to_ms)
         if hold_ms is not None:
@@ -452,9 +459,14 @@ class Actions:
             hold_ms: int = None,
             revert_ms: int = None
         ) -> None:
-        """Set layer's speed offset to exact value - stackable and revertible.
+        """Create a named speed layer that offsets the base speed to an exact value.
+        Multiple layers combine and the layer can be reverted by name.
 
-        Unlike add which adds to the layer's current offset, this sets it directly.
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).speed.offset.to(offset).over(to_ms).hold(hold_ms).revert(revert_ms)
+        ```
 
         Examples:
         ```python
@@ -480,9 +492,13 @@ class Actions:
             hold_ms: int = None,
             revert_ms: int = None
         ) -> None:
-        """Override speed completely, replacing base speed and all offset layers.
+        """Create a named speed layer that overrides the current speed to an exact value.
 
-        Unlike offset which stacks on base speed, override ignores everything below.
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).speed.override.to(speed).over(to_ms).hold(hold_ms).revert(revert_ms)
+        ```
 
         Examples:
         ```python
@@ -508,6 +524,12 @@ class Actions:
             callback: callable = None
         ) -> None:
         """Revert a layer by name, optionally over time.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).revert(ms, easing).then(callback)
+        ```
 
         Examples:
         ```python
@@ -571,6 +593,12 @@ class Actions:
     def mouse_rig_stop(ms: float = None, easing: str = None, callback: callable = None) -> None:
         """Stop the mouse rig and remove all layers, optionally over time.
 
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.stop(ms, easing).then(callback)
+        ```
+
         Args:
             ms: Time in ms to decelerate to stop
             easing: Easing function - "linear", "ease_in_out", etc.
@@ -600,14 +628,6 @@ class Actions:
         print(f"Mouse API set to: {api}")
         # Reload to pick up the new API immediately
         reload_rig()
-
-    def mouse_rig_set_scale(scale: float) -> None:
-        """Set movement scale multiplier
-
-        Args:
-            scale: Scale factor (1.0 = normal, 2.0 = double, 0.5 = half)
-        """
-        settings.set("user.mouse_rig_scale", scale)
 
     def mouse_rig_reload() -> None:
         """Reload/reset rig. Useful for development"""

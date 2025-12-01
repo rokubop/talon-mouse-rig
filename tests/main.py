@@ -22,33 +22,42 @@ _test_runner_state = {
 
 def toggle_test_ui(show: bool = None):
     """Main entry point - toggle the QA test UI"""
-    # Import test lists directly to avoid circular import issues
-    from .position import POSITION_TESTS
-    from .speed import SPEED_TESTS
-    from .direction import DIRECTION_TESTS
-    from .validation import VALIDATION_TESTS
+    try:
+        # Import test lists directly to avoid circular import issues
+        from .position import POSITION_TESTS
+        from .speed import SPEED_TESTS
+        from .direction import DIRECTION_TESTS
+        from .validation import VALIDATION_TESTS
 
-    test_groups = [
-        ("Position", POSITION_TESTS),
-        ("Speed", SPEED_TESTS),
-        ("Direction", DIRECTION_TESTS),
-        ("Validation", VALIDATION_TESTS)
-    ]
+        test_groups = [
+            ("Position", POSITION_TESTS),
+            ("Speed", SPEED_TESTS),
+            ("Direction", DIRECTION_TESTS),
+            ("Validation", VALIDATION_TESTS)
+        ]
 
-    show = show if show is not None else not actions.user.ui_elements_get_trees()
+        show = show if show is not None else not actions.user.ui_elements_get_trees()
 
-    if show:
-        actions.user.ui_elements_show(lambda: test_buttons_ui(test_groups))
-        actions.user.ui_elements_show(test_result_ui)
-        actions.user.ui_elements_show(test_status_ui)
-        actions.user.ui_elements_show(test_summary_ui)
-    else:
-        actions.user.ui_elements_hide(lambda: test_buttons_ui(test_groups))
-        actions.user.ui_elements_hide(test_result_ui)
-        actions.user.ui_elements_hide(test_status_ui)
-        actions.user.ui_elements_hide(test_summary_ui)
-        actions.user.mouse_rig().stop()
-        stop_all_tests()
+        if show:
+            actions.user.ui_elements_show(lambda: test_buttons_ui(test_groups))
+            actions.user.ui_elements_show(test_result_ui)
+            actions.user.ui_elements_show(test_status_ui)
+            actions.user.ui_elements_show(test_summary_ui)
+        else:
+            actions.user.ui_elements_hide(lambda: test_buttons_ui(test_groups))
+            actions.user.ui_elements_hide(test_result_ui)
+            actions.user.ui_elements_hide(test_status_ui)
+            actions.user.ui_elements_hide(test_summary_ui)
+            actions.user.mouse_rig().stop()
+            stop_all_tests()
+    except KeyError as e:
+        if "ui_elements" in str(e):
+            print("\n" + "="*70)
+            print("ERROR: Mouse rig testing requires talon-ui-elements")
+            print("Get version 0.10.0 or higher from:")
+            print("https://github.com/rokubop/talon-ui-elements")
+            print("="*70 + "\n")
+        raise
 
 
 # ============================================================================
