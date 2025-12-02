@@ -775,48 +775,40 @@ class RigState:
 
         def __repr__(self) -> str:
             builder = self._builder
-            phase = builder.lifecycle.phase if builder.lifecycle.phase else 'instant'
             lifecycle = builder.lifecycle
 
             # Format values based on type
             def format_value(val):
                 if isinstance(val, Vec2):
-                    return f"({val.x:.1f}, {val.y:.1f})"
+                    return f"Vec2({val.x:.1f}, {val.y:.1f})"
                 elif isinstance(val, float):
-                    return f"{val:.1f}"
+                    return f"{val:.1f}"#
                 else:
                     return str(val)
 
-            lines = [
-                f"LayerState('{builder.config.layer_name}'):",
-                f"  prop: {builder.config.property}",
-                f"  mode: {builder.config.mode}",
-                f"  current_value: {format_value(builder.get_interpolated_value())}",
-                f"  target_value: {format_value(builder.target_value)}",
+            # Build parts list
+            parts = [
+                f"prop={builder.config.property}",
+                f"mode={builder.config.mode}",
+                f"current_value={format_value(builder.get_interpolated_value())}",
+                f"target_value={format_value(builder.target_value)}",
+                f"time_alive={builder.time_alive:.2f}s",
             ]
 
-            # Add timing info
+            # Add timing info if present
             if lifecycle.over_ms:
-                lines.append(f"  over_ms: {lifecycle.over_ms}")
+                parts.append(f"over_ms={lifecycle.over_ms}")
             if lifecycle.hold_ms:
-                lines.append(f"  hold_ms: {lifecycle.hold_ms}")
+                parts.append(f"hold_ms={lifecycle.hold_ms}")
             if lifecycle.revert_ms:
-                lines.append(f"  revert_ms: {lifecycle.revert_ms}")
+                parts.append(f"revert_ms={lifecycle.revert_ms}")
 
             # Add children count if non-zero
             children_count = len(builder.children)
             if children_count > 0:
-                lines.append(f"  children: {children_count}")
+                parts.append(f"children={children_count}")
 
-            # Add properties and methods section
-            from .contracts import VALID_LAYER_STATE_ATTRS
-            lines.extend([
-                "",
-                "Available attributes:",
-                f"  {', '.join(VALID_LAYER_STATE_ATTRS)}",
-            ])
-
-            return "\n".join(lines)
+            return f"LayerState('{builder.config.layer_name}', {', '.join(parts)})"
 
         def __str__(self) -> str:
             return self.__repr__()
