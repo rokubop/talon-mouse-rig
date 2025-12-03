@@ -453,6 +453,48 @@ class RigState:
 
         return pos, speed, direction, pos_is_override
 
+    def _compute_velocity(self) -> tuple[float, Vec2]:
+        """Compute current velocity from speed and direction builders.
+
+        Returns:
+            (speed, direction) tuple
+        """
+        speed = self._base_speed
+        direction = Vec2(self._base_direction.x, self._base_direction.y)
+
+        # Separate builders by layer type
+        base_builders = []
+        user_builders = []
+
+        for layer_name, builder in self._active_builders.items():
+            if builder.config.property in ("speed", "direction", "vector"):
+                if layer_name == "__base__":
+                    base_builders.append(builder)
+                else:
+                    user_builders.append(builder)
+
+        # Sort user layers by order
+        def get_layer_order(builder: 'ActiveBuilder') -> int:
+            layer_name = builder.config.layer_name
+            return self._layer_orders.get(layer_name, 999999)
+
+        user_builders = sorted(user_builders, key=get_layer_order)
+
+        # Apply all velocity builders
+        for builder in base_builders + user_builders:
+            prop = builder.config.property
+            mode = builder.config.mode
+            current_value = builder.get_interpolated_value()
+
+            if prop == "speed":
+                speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
+            elif prop == "direction":
+                direction = mode_operations.apply_direction_mode(mode, current_value, direction)
+            elif prop == "vector":
+                speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
+
+        return speed, direction
+
     def _apply_velocity_movement(self, speed: float, direction: Vec2):
         """Apply velocity-based movement to internal position"""
         if speed == 0:
@@ -480,8 +522,8 @@ class RigState:
     def _sync_to_manual_mouse_movement(self) -> bool:
         """Detect and sync to manual mouse movements by the user
 
-        If the actual mouse position differs from our expected internal position,
-        the user has manually moved the mouse.
+        Only works when absolute position builders are active (pos.to).
+        In pure relative mode, we can't detect manual movement.
 
         Returns:
             True if we should skip rig movement (manual movement detected or in timeout), False otherwise
@@ -489,6 +531,14 @@ class RigState:
         # Check if manual mouse detection is enabled
         if not settings.get("user.mouse_rig_pause_on_manual_movement", True):
             return False
+
+        # Only detect manual movement if we have absolute position builders
+        has_absolute_builder = any(
+            builder.config.property == "pos" and builder.config.movement_type == "absolute"
+            for builder in self._active_builders.values()
+        )
+        if not has_absolute_builder:
+            return False  # Pure relative mode - can't detect manual movement
 
         current_x, current_y = ctrl.mouse_pos()
         expected_x = int(round(self._internal_pos.x))
@@ -536,13 +586,98 @@ class RigState:
             self._stop_frame_loop_if_done()
             return
 
-        pos, speed, direction, pos_is_override = self._compute_current_state()
-        self._apply_velocity_movement(speed, direction)
-        self._apply_position_updates(pos, pos_is_override)
+        # NEW APPROACH: Gather contributions from all builders
+        frame_delta = Vec2(0, 0)
+        has_absolute_position = False
+        absolute_target = None
 
-        self._move_mouse_if_changed()
+        # 1. Compute velocity contribution (speed + direction) - always relative
+        speed, direction = self._compute_velocity()
+        if speed != 0:
+            velocity = direction * speed
+            dx, dy = self._subpixel_adjuster.adjust(velocity.x, velocity.y)
+            frame_delta += Vec2(dx, dy)
 
-        self._remove_completed_builders(current_time)
+        # 2. Process position builders - check movement type
+        relative_position_updates = []  # Track updates to apply after builder removal
+
+        for layer_name, builder in self._active_builders.items():
+            if builder.config.property != "pos":
+                continue
+
+            if builder.config.movement_type == "absolute":
+                # pos.to() - need absolute positioning
+                has_absolute_position = True
+                absolute_target = builder.get_interpolated_value()
+                # Note: only one absolute position builder should be active at a time
+                # If multiple exist, last one wins (this matches current override behavior)
+            else:
+                # pos.by() - pure delta contribution
+                # For relative with .over(), get_interpolated_value() returns the total interpolated offset
+                # We need to emit only the NEW delta since last frame
+                current_interpolated = builder.get_interpolated_value()
+
+                # Track last emitted value to compute frame delta
+                # We track both the interpolated value and the actual integer emitted
+                if not hasattr(builder, '_last_emitted_relative_pos'):
+                    builder._last_emitted_relative_pos = Vec2(0, 0)
+                if not hasattr(builder, '_total_emitted_int'):
+                    builder._total_emitted_int = Vec2(0, 0)
+
+                # Compute what we SHOULD emit (difference from last interpolated to current)
+                frame_delta_from_builder = current_interpolated - builder._last_emitted_relative_pos
+
+                # Compute integer delta accounting for accumulated error
+                target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
+                actual_delta_int = target_total_int - builder._total_emitted_int
+
+                frame_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
+
+                print(f"[TICK] layer={layer_name}, phase={builder.lifecycle.phase}, "
+                      f"current_interpolated={current_interpolated}, "
+                      f"target_total_int={target_total_int}, "
+                      f"total_emitted={builder._total_emitted_int}, "
+                      f"will_emit={actual_delta_int}, "
+                      f"is_complete={builder.lifecycle.is_complete()}")
+
+                # Store update to apply after builder removal check
+                relative_position_updates.append((builder, current_interpolated, target_total_int))
+
+        # 3. Decide how to move mouse based on what we have
+        if has_absolute_position:
+            # Mix absolute + relative deltas
+            final_pos = absolute_target + frame_delta
+            self._internal_pos = final_pos
+            from .core import mouse_move
+            new_x = int(round(final_pos.x))
+            new_y = int(round(final_pos.y))
+            current_x, current_y = ctrl.mouse_pos()
+            if new_x != current_x or new_y != current_y:
+                mouse_move(new_x, new_y)
+        else:
+            # Pure relative - emit accumulated delta
+            if frame_delta.x != 0 or frame_delta.y != 0:
+                from .core import mouse_move_relative
+                mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
+
+        # Remove completed builders (may emit additional final deltas for relative movement)
+        completed_layers = self._remove_completed_builders(current_time)
+
+        # NOW update relative position tracking after removal check
+        # Only update for builders that weren't removed
+        for builder, new_value, new_int_value in relative_position_updates:
+            # Check if builder's layer is still active (wasn't completed)
+            if builder.config.layer_name not in completed_layers:
+                builder._last_emitted_relative_pos = new_value
+                builder._total_emitted_int = new_int_value
+
+        # Update internal tracking AFTER handling completed builders
+        # This ensures stop() can bake correctly while still capturing final deltas
+        if not has_absolute_position:
+            current_mouse = Vec2(*ctrl.mouse_pos())
+            self._internal_pos = current_mouse
+            self._base_pos = current_mouse
+
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
@@ -582,21 +717,51 @@ class RigState:
 
         return phase_transitions
 
-    def _remove_completed_builders(self, current_time: float):
+    def _remove_completed_builders(self, current_time: float) -> set[str]:
         """Remove builders that are no longer active
 
         Args:
             current_time: Current timestamp from perf_counter() (captured once per frame)
+
+        Returns:
+            Set of layer names that were completed and removed
         """
         completed = []
 
         for layer, builder in list(self._active_builders.items()):
-            still_active = builder.advance(current_time)  # Check status with current time
+            # Final advance to ensure target achieved
+            still_active = builder.advance(current_time)
+
             if not still_active:
+                # For relative position builders, emit any remaining delta after final advance
+                if (builder.config.property == "pos" and
+                    builder.config.movement_type == "relative" and
+                    hasattr(builder, '_total_emitted_int')):
+
+                    # Get final value after completion
+                    final_value = builder.get_interpolated_value()
+                    final_target_int = Vec2(round(final_value.x), round(final_value.y))
+
+                    # Emit any remaining delta that wasn't captured in main tick
+                    # Compare integer targets to avoid rounding errors
+                    final_delta_int = final_target_int - builder._total_emitted_int
+
+                    print(f"[REMOVE] layer={layer}, final_value={final_value}, "
+                          f"final_target_int={final_target_int}, "
+                          f"total_emitted_int={builder._total_emitted_int}, "
+                          f"final_delta_int={final_delta_int}")
+
+                    if final_delta_int.x != 0 or final_delta_int.y != 0:
+                        from .core import mouse_move_relative
+                        mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
+                        print(f"[REMOVE] Emitted final delta: {int(final_delta_int.x)}, {int(final_delta_int.y)}")
+
                 completed.append(layer)
 
         for layer in completed:
             self.remove_builder(layer)
+
+        return set(completed)
 
     def _apply_position_updates(self, pos: Vec2, pos_is_override: bool):
         """Apply position changes based on mode"""
@@ -634,10 +799,15 @@ class RigState:
             frame_interval = settings.get("user.mouse_rig_frame_interval", 16)
             self._frame_loop_job = cron.interval(f"{frame_interval}ms", self._tick_frame)
             self._last_frame_time = None
-            # Sync to actual mouse position when starting (handles manual movements)
-            current_mouse = Vec2(*ctrl.mouse_pos())
-            self._internal_pos = current_mouse
-            self._base_pos = current_mouse
+            # Sync to actual mouse position only if we have absolute position builders
+            has_absolute_builder = any(
+                builder.config.property == "pos" and builder.config.movement_type == "absolute"
+                for builder in self._active_builders.values()
+            )
+            if has_absolute_builder:
+                current_mouse = Vec2(*ctrl.mouse_pos())
+                self._internal_pos = current_mouse
+                self._base_pos = current_mouse
             self._last_position_offset = Vec2(0, 0)
 
     def _stop_frame_loop(self):

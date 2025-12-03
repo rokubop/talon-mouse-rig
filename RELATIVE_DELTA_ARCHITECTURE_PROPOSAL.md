@@ -85,7 +85,7 @@ rig.speed.to(100)     # "Move at 100 px/s (produces deltas over time)"
 ```
 Position Operations:
 ├── calculate_position_target()  ← Assumes absolute coordinates
-├── apply_position_mode()        ← Assumes absolute coordinates  
+├── apply_position_mode()        ← Assumes absolute coordinates
 ├── _apply_position_offset()     ← Compares to _base_pos (absolute)
 ├── _apply_position_updates()    ← Sets _internal_pos (absolute)
 └── execute_synchronous()        ← Reads ctrl.mouse_pos()
@@ -110,7 +110,7 @@ speed.by(50)    # Adds 50 to current velocity
 - Operation: "Move to (600, 400)"
 - Needs: Read current position, write target position
 
-**Relative Position**:  
+**Relative Position**:
 - State: "I've moved (+100, +50) from where I started"
 - Operation: "Move by (+10, 0)"
 - Needs: Just produce delta, never know absolute position
@@ -140,7 +140,7 @@ Then branch at **key decision points** (not everywhere):
 # builder.py - ActiveBuilder.__init__
 def __init__(self, config, rig_state, is_anonymous):
     # ... existing setup ...
-    
+
     # ONLY branching point for reading absolute position
     if config.property == "pos":
         if rig_state._position_mode == "absolute":
@@ -163,7 +163,7 @@ class RigState:
         # Absolute mode state
         self._base_pos: Vec2 = Vec2(*ctrl.mouse_pos()) if mode == "absolute" else Vec2(0, 0)
         self._internal_pos: Vec2 = Vec2(*ctrl.mouse_pos()) if mode == "absolute" else Vec2(0, 0)
-        
+
         # Relative mode state (NEW)
         self._accumulated_delta: Vec2 = Vec2(0, 0)  # Total delta since start
 ```
@@ -197,7 +197,7 @@ def _sync_to_manual_mouse_movement(self) -> bool:
     # Only works in absolute mode
     if self._position_mode == "relative":
         return False  # Can't detect manual movement in relative mode
-    
+
     # ... existing absolute mode logic ...
 ```
 
@@ -259,7 +259,7 @@ user.mouse_rig_position_mode: str = "absolute"  # or "relative"
 
 ### Phase 2: Branch at 5 Key Points
 1. `builder.py` - `ActiveBuilder.__init__()` - base value selection
-2. `state.py` - `RigState.__init__()` - state variable initialization  
+2. `state.py` - `RigState.__init__()` - state variable initialization
 3. `state.py` - `_move_mouse_if_changed()` - mouse movement API
 4. `state.py` - `_sync_to_manual_mouse_movement()` - disable in relative
 5. `state.py` - `_ensure_frame_loop_running()` - disable sync in relative
@@ -303,7 +303,7 @@ rig.pos.by(100, 0)
 1. Never read ctrl.mouse_pos()
 2. Store delta: Vec2(100, 0) [relative]
 3. Animate delta from (0, 0) → (100, 0)
-4. Each frame: 
+4. Each frame:
    - Add animated delta to _accumulated_delta
    - When ready: mouse_move_relative(dx, dy)
    - Reset _accumulated_delta
@@ -369,7 +369,7 @@ rig_state._accumulated_delta += frame_delta
 # Absolute mode
 progress = (current_pos - start_pos) / (target_pos - start_pos)
 
-# Relative mode  
+# Relative mode
 progress = emitted_delta / target_delta
 ```
 
@@ -397,7 +397,7 @@ Both use the **same lifecycle/animation infrastructure**.
 ### Estimated Effort
 
 - **Absolute mode changes**: 5 strategic `if` statements
-- **Relative mode additions**: 
+- **Relative mode additions**:
   - Add `_accumulated_delta` state variable
   - Add delta tracking to ActiveBuilder
   - Update frame loop position application

@@ -4,7 +4,7 @@
 
 Each `ActiveBuilder` already tracks:
 - `base_value` - Starting value
-- `target_value` - Ending value  
+- `target_value` - Ending value
 - `lifecycle` - Current animation phase and progress
 - `_get_own_value()` - Returns current animated value
 
@@ -63,23 +63,23 @@ class BuilderConfig:
 def to(self, *args) -> RigBuilder:
     self.rig_builder.config.operator = "to"
     self.rig_builder.config.value = args[0] if len(args) == 1 else args
-    
+
     # Set movement type based on property and operator
     if self.rig_builder.config.property == "pos":
         # pos.to() is ALWAYS absolute
         self.rig_builder.config.movement_type = "absolute"
     # else: keep default "relative"
-    
+
     return self.rig_builder
 
 # In PropertyBuilder.by()
 def by(self, *args) -> RigBuilder:
     self.rig_builder.config.operator = "add"
     self.rig_builder.config.value = args[0] if len(args) == 1 else args
-    
+
     # pos.by() is ALWAYS relative (never needs absolute position)
     self.rig_builder.config.movement_type = "relative"
-    
+
     return self.rig_builder
 ```
 
@@ -116,7 +116,7 @@ if config.operator == "to":
     else:
         # speed.to(), direction.to() - use computed state (relative)
         self.base_value = getattr(rig_state, config.property)
-        
+
 elif config.operator in ("by", "add"):
     # pos.by(), speed.by(), direction.by() - NEVER read ctrl.mouse_pos()
     if config.property == "pos":
@@ -141,7 +141,7 @@ class RigState:
         # Absolute position tracking (ONLY for pos.to operations)
         self._base_pos: Vec2 = Vec2(0, 0)  # Only updated by pos.to
         self._internal_pos: Vec2 = Vec2(0, 0)  # Only used with absolute operations
-        
+
         # Relative delta tracking (for everything else)
         self._frame_delta: Vec2 = Vec2(0, 0)  # Accumulated dx, dy this frame
 ```
@@ -192,7 +192,7 @@ def _tick_frame(self):
     for layer, builder in self._active_builders.items():
         if builder.config.property != "pos":
             continue
-            
+
         if builder.config.movement_type == "absolute":
             # pos.to() - need absolute positioning
             has_absolute_position = True
@@ -316,11 +316,11 @@ class RigState:
         # Keep existing (used when pos.to is active)
         self._base_pos: Vec2
         self._internal_pos: Vec2
-        
+
         # Keep existing (already works for velocity)
         self._base_speed: float
         self._base_direction: Vec2
-        
+
         # No new state needed!
 ```
 

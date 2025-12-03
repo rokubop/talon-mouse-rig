@@ -349,6 +349,9 @@ class BuilderConfig:
         self.mode: Optional[str] = None  # 'offset', 'override', or 'scale'
         self.order: Optional[int] = None  # Explicit layer ordering
 
+        # Movement type (absolute vs relative positioning)
+        self.movement_type: str = "relative"  # 'relative' or 'absolute'
+
         # Identity
         self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
 

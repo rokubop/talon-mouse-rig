@@ -520,6 +520,9 @@ class PropertyBuilder:
         # Position operations are synchronous by default (instant execution)
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
+            # pos.to() needs absolute positioning (reads ctrl.mouse_pos())
+            self.rig_builder.config.movement_type = "absolute"
+        # else: keep default "relative" for speed.to(), direction.to()
 
         return self.rig_builder
 
@@ -532,6 +535,9 @@ class PropertyBuilder:
         # Position operations are synchronous by default (instant execution)
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
+
+        # All add/by operations use relative movement (pure deltas)
+        self.rig_builder.config.movement_type = "relative"
 
         return self.rig_builder
 
@@ -653,18 +659,30 @@ class ActiveBuilder:
         for stage, callback in config.then_callbacks:
             self.lifecycle.add_callback(stage, callback)
 
-        # Calculate values - use computed current state for 'to' operations
+        # Calculate values - branch on movement_type for position operations
         if config.operator == "to":
             # For 'to' operations, we need the current computed value
             # This "bakes" the current state before transitioning to new target
-            # EXCEPT for position - use actual mouse position instead of base
             if config.property == "pos":
-                self.base_value = Vec2(*ctrl.mouse_pos())
+                if config.movement_type == "absolute":
+                    # pos.to() - read absolute position from screen
+                    self.base_value = Vec2(*ctrl.mouse_pos())
+                else:
+                    # Shouldn't happen (pos.to is always absolute), but handle gracefully
+                    self.base_value = Vec2(0, 0)
             else:
+                # speed.to(), direction.to() - use computed state (relative)
                 self.base_value = getattr(rig_state, config.property)
+        elif config.operator in ("by", "add"):
+            # For relative operations
+            if config.property == "pos" and config.movement_type == "relative":
+                # pos.by() - pure delta, start at zero
+                self.base_value = Vec2(0, 0)
+            else:
+                # speed.by(), direction.by() - use base state
+                self.base_value = self._get_base_value()
         else:
-            # For all other operations (including direction.add), use base state
-            # This ensures stacked rotations all rotate from the same base
+            # For all other operations (sub, mul, div), use base state
             self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
@@ -733,22 +751,29 @@ class ActiveBuilder:
         - scale: target_value is multiplier
         """
         if self.config.property == "pos":
-            mode = self.config.mode
-            current_value = self.target_value
+            if self.config.movement_type == "absolute":
+                # Absolute positioning (pos.to)
+                mode = self.config.mode
+                current_value = self.target_value
 
-            # Sync to actual current mouse position (in case user manually moved it)
-            current_mouse_pos = ctrl.mouse_pos()
-            self.rig_state._internal_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
-            self.rig_state._base_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
+                # Sync to actual current mouse position (in case user manually moved it)
+                current_mouse_pos = ctrl.mouse_pos()
+                self.rig_state._internal_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
+                self.rig_state._base_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
 
-            # Apply mode to current internal position
-            new_pos = mode_operations.apply_position_mode(mode, current_value, self.rig_state._internal_pos)
-            self.rig_state._internal_pos = new_pos
-            self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
+                # Apply mode to current internal position
+                new_pos = mode_operations.apply_position_mode(mode, current_value, self.rig_state._internal_pos)
+                self.rig_state._internal_pos = new_pos
+                self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
 
-            # Move mouse immediately
-            from .core import mouse_move
-            mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
+                # Move mouse immediately
+                from .core import mouse_move
+                mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
+            else:
+                # Relative positioning (pos.by) - just emit the delta
+                delta = self.target_value  # This is the delta (dx, dy)
+                from .core import mouse_move_relative
+                mouse_move_relative(int(delta.x), int(delta.y))
 
         # Add other property types here as needed (speed, direction, etc.)
 

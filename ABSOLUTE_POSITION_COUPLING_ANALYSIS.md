@@ -361,16 +361,16 @@ Create `PositionTracker` interface:
 class PositionTracker(ABC):
     @abstractmethod
     def get_position(self) -> Vec2: ...
-    
+
     @abstractmethod
     def set_position(self, pos: Vec2) -> None: ...
-    
+
     @abstractmethod
     def move_by(self, delta: Vec2) -> None: ...
 
 class AbsolutePositionTracker(PositionTracker):
     """Uses ctrl.mouse_pos()"""
-    
+
 class RelativePositionTracker(PositionTracker):
     """Tracks deltas only, never knows absolute"""
 ```

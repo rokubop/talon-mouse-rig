@@ -156,11 +156,11 @@ You can't just add a mode flag - **the entire state model is absolute**.
 def _compute_current_state(self) -> tuple[Vec2, float, Vec2, bool]:
     # Start with base
     pos = Vec2(self._base_pos.x, self._base_pos.y)  # ABSOLUTE
-    
+
     # Apply layers
     for builder in builders:
         pos = apply_position_mode(mode, value, pos)  # pos is ABSOLUTE throughout
-    
+
     return pos  # Returns ABSOLUTE position
 ```
 
@@ -188,7 +188,7 @@ Even pure velocity movement is anchored to absolute position.
 class RigState:
     self._base_pos: Vec2       # Absolute
     self._internal_pos: Vec2   # Absolute
-    
+
 # Pure Delta Version: Relative-centric
 class RigState:
     self._accumulated_delta: Vec2      # Total delta emitted so far
@@ -248,7 +248,7 @@ def _emit_position_delta(self, delta: Vec2):
 class ActiveBuilder:
     self.base_value = Vec2(*ctrl.mouse_pos())  # Absolute
     self.target_value = calculate_target(base)  # Absolute
-    
+
 # Pure Delta Version: Store delta target only
 class ActiveBuilder:
     # No base_value needed!
@@ -268,7 +268,7 @@ def _sync_to_manual_mouse_movement(self) -> bool:
     expected = self._internal_pos  # Absolute
     if current != expected:
         # User moved mouse!
-        
+
 # Pure Delta Version: IMPOSSIBLE
 # Cannot detect manual movement without knowing absolute position
 ```
@@ -333,21 +333,21 @@ Create separate position systems:
 class AbsolutePositionSystem:
     _internal_pos: Vec2  # Absolute
     _base_pos: Vec2      # Absolute
-    
+
     def compute_position(self) -> Vec2:
         # Returns absolute position
-        
+
     def move_mouse(self, pos: Vec2):
         mouse_move(pos.x, pos.y)  # Absolute
 
-# Relative position (new system)  
+# Relative position (new system)
 class RelativePositionSystem:
     _accumulated_delta: Vec2  # Relative
     _pending_delta: Vec2      # Relative
-    
+
     def compute_delta(self) -> Vec2:
         # Returns delta to emit
-        
+
     def emit_delta(self, delta: Vec2):
         mouse_move_relative(delta.x, delta.y)  # Relative
 ```
@@ -423,7 +423,7 @@ Pure delta would:
 
 4. **Keep it simple** for delta mode:
    - No baking
-   - No manual movement detection  
+   - No manual movement detection
    - No absolute positioning features
    - Just: store delta goal, emit deltas, done when goal reached
 
