@@ -25,7 +25,7 @@ class RigState:
 
     def __init__(self):
         # Base state (baked values)
-        self._base_pos: Vec2 = Vec2(*ctrl.mouse_pos())
+        self._absolute_base_pos: Optional[Vec2] = None  # Baked screen position (lazy init - only for pos.to)
         self._base_speed: float = 0.0
         self._base_direction: Vec2 = Vec2(1, 0)
 
@@ -42,9 +42,8 @@ class RigState:
         self._frame_loop_job: Optional[cron.CronJob] = None
         self._last_frame_time: Optional[float] = None
         self._subpixel_adjuster = SubpixelAdjuster()
-        self._last_position_offset: Vec2 = Vec2(0, 0)
-        # Track our internal position with subpixel precision
-        self._internal_pos: Vec2 = Vec2(*ctrl.mouse_pos())
+        # Track current screen position with subpixel precision (lazy init - only for pos.to)
+        self._absolute_current_pos: Optional[Vec2] = None
 
         # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
@@ -287,31 +286,39 @@ class RigState:
 
         elif prop == "pos":
             if mode == "offset":
-                # Offset mode: current_value is an offset vector, add to base position
-                # Check if animated or instant
-                if builder.lifecycle.over_ms is not None and builder.lifecycle.over_ms > 0:
-                    # Was animated - position tracking already moved, just sync base
-                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
-                else:
-                    # Instant operation - apply offset
-                    self._base_pos = Vec2(self._base_pos.x + current_value.x, self._base_pos.y + current_value.y)
-                    self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
+                # Offset mode: current_value is an offset vector
+                # For relative movement (pos.by), we don't track absolute position
+                # Only update if we're in absolute mode (mixed with pos.to)
+                if self._absolute_current_pos is not None and self._absolute_base_pos is not None:
+                    # Check if animated or instant
+                    if builder.lifecycle.over_ms is not None and builder.lifecycle.over_ms > 0:
+                        # Was animated - position tracking already moved, just sync base
+                        self._absolute_base_pos = Vec2(self._absolute_current_pos.x, self._absolute_current_pos.y)
+                    else:
+                        # Instant operation - apply offset
+                        self._absolute_base_pos = Vec2(self._absolute_base_pos.x + current_value.x, self._absolute_base_pos.y + current_value.y)
+                        self._absolute_current_pos = Vec2(self._absolute_base_pos.x, self._absolute_base_pos.y)
             elif mode == "override":
                 # Override mode: current_value is absolute position, set base to it
+                # Initialize absolute tracking if this is first pos.to
+                if self._absolute_base_pos is None or self._absolute_current_pos is None:
+                    current_screen_pos = Vec2(*ctrl.mouse_pos())
+                    self._absolute_base_pos = current_screen_pos
+                    self._absolute_current_pos = current_screen_pos
+
                 if self._base_speed == 0:
                     # No velocity - snap to exact position
-                    self._base_pos = Vec2(current_value.x, current_value.y)
-                    self._internal_pos = Vec2(current_value.x, current_value.y)
+                    self._absolute_base_pos = Vec2(current_value.x, current_value.y)
+                    self._absolute_current_pos = Vec2(current_value.x, current_value.y)
                 else:
                     # Velocity active - use current internal position to avoid jump
-                    self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
+                    self._absolute_base_pos = Vec2(self._absolute_current_pos.x, self._absolute_current_pos.y)
             elif mode == "scale":
                 # Scale mode: current_value is multiplier, scale base position
-                self._base_pos = Vec2(self._base_pos.x * current_value, self._base_pos.y * current_value)
-                self._internal_pos = Vec2(self._base_pos.x, self._base_pos.y)
-
-            # Reset position offset tracking
-            self._last_position_offset = Vec2(0, 0)
+                # Only apply if tracking absolute position
+                if self._absolute_base_pos is not None and self._absolute_current_pos is not None:
+                    self._absolute_base_pos = Vec2(self._absolute_base_pos.x * current_value, self._absolute_base_pos.y * current_value)
+                    self._absolute_current_pos = Vec2(self._absolute_base_pos.x, self._absolute_base_pos.y)
 
             # For instant position changes, apply manually only if frame loop won't handle it
             # Exclude the builder being removed from the active count
@@ -320,8 +327,9 @@ class RigState:
                 active_count -= 1
 
             will_be_active = self._has_movement() or active_count > 0
-            if not will_be_active:
-                mouse_move(int(self._base_pos.x), int(self._base_pos.y))
+            is_relative = builder.config.movement_type == "relative"
+            if not will_be_active and not is_relative and self._absolute_base_pos is not None:
+                mouse_move(int(self._absolute_base_pos.x), int(self._absolute_base_pos.y))
 
         if self._should_frame_loop_be_active():
             self._ensure_frame_loop_running()
@@ -354,7 +362,7 @@ class RigState:
             elif property_name == "direction":
                 self._base_direction = current_value
             elif property_name == "pos":
-                self._base_pos = current_value
+                self._absolute_base_pos = current_value
 
             # Remove all anonymous layer builders affecting this property
             layers_to_remove = [
@@ -378,7 +386,7 @@ class RigState:
             pos_is_override is True if any position builder used override mode
         """
         # Start with base
-        pos = Vec2(self._base_pos.x, self._base_pos.y)
+        pos = Vec2(self._absolute_base_pos.x, self._absolute_base_pos.y) if self._absolute_base_pos else Vec2(0, 0)
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
         pos_is_override = False
@@ -496,28 +504,120 @@ class RigState:
         return speed, direction
 
     def _apply_velocity_movement(self, speed: float, direction: Vec2):
-        """Apply velocity-based movement to internal position"""
+        """Apply velocity-based movement to absolute position (only used in absolute mode)"""
         if speed == 0:
             return
 
+        if self._absolute_current_pos is None:
+            return  # No absolute tracking, skip velocity updates
+
         velocity = direction * speed
         dx_int, dy_int = self._subpixel_adjuster.adjust(velocity.x, velocity.y)
-        self._internal_pos = Vec2(self._internal_pos.x + dx_int, self._internal_pos.y + dy_int)
+        self._absolute_current_pos = Vec2(self._absolute_current_pos.x + dx_int, self._absolute_current_pos.y + dy_int)
 
-    def _apply_position_offset(self, pos: Vec2):
-        """Apply position offset to internal position"""
-        position_offset = pos - self._base_pos
-        offset_delta = position_offset - self._last_position_offset
+    def _compute_velocity_delta(self) -> Vec2:
+        """Compute velocity contribution as delta (speed + direction)
 
-        if offset_delta.x != 0 or offset_delta.y != 0:
-            # Apply position offset directly without subpixel adjuster
-            # Position changes are absolute targets, not velocity-based movement
-            self._internal_pos = Vec2(
-                self._internal_pos.x + offset_delta.x,
-                self._internal_pos.y + offset_delta.y
-            )
+        Returns:
+            Delta vector from velocity this frame
+        """
+        speed, direction = self._compute_velocity()
+        if speed == 0:
+            return Vec2(0, 0)
 
-        self._last_position_offset = position_offset
+        velocity = direction * speed
+        dx, dy = self._subpixel_adjuster.adjust(velocity.x, velocity.y)
+        return Vec2(dx, dy)
+
+    def _process_position_builders(self) -> tuple[bool, Optional[Vec2], Vec2, list]:
+        """Process all position builders and gather their contributions
+
+        Returns:
+            (has_absolute_position, absolute_target, relative_delta, relative_position_updates)
+            - has_absolute_position: True if any pos.to() builder exists
+            - absolute_target: Target position from pos.to() (if exists)
+            - relative_delta: Accumulated delta from all pos.by() builders
+            - relative_position_updates: List of (builder, new_value, new_int_value) for tracking updates
+        """
+        has_absolute_position = False
+        absolute_target = None
+        relative_delta = Vec2(0, 0)
+        relative_position_updates = []
+
+        for layer_name, builder in self._active_builders.items():
+            if builder.config.property != "pos":
+                continue
+
+            if builder.config.movement_type == "absolute":
+                # pos.to() - absolute positioning
+                has_absolute_position = True
+                absolute_target = builder.get_interpolated_value()
+                # Note: only one absolute position builder should be active at a time
+                # If multiple exist, last one wins (matches current override behavior)
+            else:
+                # pos.by() - pure relative delta
+                current_interpolated = builder.get_interpolated_value()
+
+                # Initialize tracking attributes if needed
+                if not hasattr(builder, '_last_emitted_relative_pos'):
+                    builder._last_emitted_relative_pos = Vec2(0, 0)
+                if not hasattr(builder, '_total_emitted_int'):
+                    builder._total_emitted_int = Vec2(0, 0)
+
+                # Compute integer delta accounting for accumulated error
+                target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
+                actual_delta_int = target_total_int - builder._total_emitted_int
+
+                relative_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
+
+                print(f"[TICK] layer={layer_name}, phase={builder.lifecycle.phase}, "
+                      f"current_interpolated={current_interpolated}, "
+                      f"target_total_int={target_total_int}, "
+                      f"total_emitted={builder._total_emitted_int}, "
+                      f"will_emit={actual_delta_int}, "
+                      f"is_complete={builder.lifecycle.is_complete()}")
+
+                # Store update to apply after builder removal check
+                relative_position_updates.append((builder, current_interpolated, target_total_int))
+
+        return has_absolute_position, absolute_target, relative_delta, relative_position_updates
+
+    def _emit_mouse_movement(self, has_absolute_position: bool, absolute_target: Optional[Vec2], frame_delta: Vec2):
+        """Emit mouse movement based on accumulated deltas
+
+        Args:
+            has_absolute_position: True if using absolute positioning (pos.to)
+            absolute_target: Target position for absolute mode
+            frame_delta: Accumulated delta from velocity and relative position builders
+        """
+        if has_absolute_position:
+            # Absolute mode: combine absolute target with relative deltas
+            final_pos = absolute_target + frame_delta
+            self._absolute_current_pos = final_pos
+            from .core import mouse_move
+            new_x = int(round(final_pos.x))
+            new_y = int(round(final_pos.y))
+            current_x, current_y = ctrl.mouse_pos()
+            if new_x != current_x or new_y != current_y:
+                mouse_move(new_x, new_y)
+        else:
+            # Pure relative mode: emit accumulated delta
+            if frame_delta.x != 0 or frame_delta.y != 0:
+                from .core import mouse_move_relative
+                mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
+
+    def _update_relative_position_tracking(self, relative_position_updates: list, completed_layers: set):
+        """Update tracking for relative position builders after removal
+
+        Args:
+            relative_position_updates: List of (builder, new_value, new_int_value) to update
+            completed_layers: Set of layer names that were completed and removed
+        """
+        for builder, new_value, new_int_value in relative_position_updates:
+            # Only update builders that are still active (weren't completed)
+            if builder.config.layer_name not in completed_layers:
+                builder._last_emitted_relative_pos = new_value
+                builder._total_emitted_int = new_int_value
 
     def _sync_to_manual_mouse_movement(self) -> bool:
         """Detect and sync to manual mouse movements by the user
@@ -540,20 +640,21 @@ class RigState:
         if not has_absolute_builder:
             return False  # Pure relative mode - can't detect manual movement
 
+        if self._absolute_current_pos is None:
+            return False  # No absolute tracking initialized
+
         current_x, current_y = ctrl.mouse_pos()
-        expected_x = int(round(self._internal_pos.x))
-        expected_y = int(round(self._internal_pos.y))
+        expected_x = int(round(self._absolute_current_pos.x))
+        expected_y = int(round(self._absolute_current_pos.y))
 
         # If mouse position differs from our internal position, user moved it manually
         if current_x != expected_x or current_y != expected_y:
             manual_move = Vec2(current_x, current_y)
 
             # Update internal position to match manual movement
-            self._internal_pos = manual_move
+            self._absolute_current_pos = manual_move
             # Update base position to match (this effectively "bakes" the manual movement)
-            self._base_pos = manual_move
-            # Reset position offset tracking
-            self._last_position_offset = Vec2(0, 0)
+            self._absolute_base_pos = manual_move
 
             # Record time of manual movement
             self._last_manual_movement_time = time.perf_counter()
@@ -573,10 +674,23 @@ class RigState:
         return False
 
     def _tick_frame(self):
+        """Main frame loop tick - processes all builders and emits mouse movement
+
+        Flow:
+        1. Check for manual mouse movement (absolute mode only)
+        2. Advance all builder lifecycles
+        3. Compute velocity delta (speed + direction)
+        4. Process position builders (absolute vs relative)
+        5. Emit mouse movement (absolute or relative)
+        6. Remove completed builders
+        7. Update tracking for remaining builders
+        8. Execute callbacks and stop if done
+        """
         current_time, dt = self._calculate_delta_time()
         if dt is None:
             return
 
+        # Check for manual movement (only works in absolute mode)
         manual_movement_detected = self._sync_to_manual_mouse_movement()
         phase_transitions = self._advance_all_builders(current_time)
 
@@ -586,98 +700,26 @@ class RigState:
             self._stop_frame_loop_if_done()
             return
 
-        # NEW APPROACH: Gather contributions from all builders
+        # Accumulate all movement contributions
         frame_delta = Vec2(0, 0)
-        has_absolute_position = False
-        absolute_target = None
 
-        # 1. Compute velocity contribution (speed + direction) - always relative
-        speed, direction = self._compute_velocity()
-        if speed != 0:
-            velocity = direction * speed
-            dx, dy = self._subpixel_adjuster.adjust(velocity.x, velocity.y)
-            frame_delta += Vec2(dx, dy)
+        # 1. Add velocity contribution (always relative)
+        frame_delta += self._compute_velocity_delta()
 
-        # 2. Process position builders - check movement type
-        relative_position_updates = []  # Track updates to apply after builder removal
+        # 2. Process position builders (absolute vs relative)
+        has_absolute_position, absolute_target, relative_delta, relative_position_updates = self._process_position_builders()
+        frame_delta += relative_delta
 
-        for layer_name, builder in self._active_builders.items():
-            if builder.config.property != "pos":
-                continue
+        # 3. Emit mouse movement (absolute or relative mode)
+        self._emit_mouse_movement(has_absolute_position, absolute_target, frame_delta)
 
-            if builder.config.movement_type == "absolute":
-                # pos.to() - need absolute positioning
-                has_absolute_position = True
-                absolute_target = builder.get_interpolated_value()
-                # Note: only one absolute position builder should be active at a time
-                # If multiple exist, last one wins (this matches current override behavior)
-            else:
-                # pos.by() - pure delta contribution
-                # For relative with .over(), get_interpolated_value() returns the total interpolated offset
-                # We need to emit only the NEW delta since last frame
-                current_interpolated = builder.get_interpolated_value()
-
-                # Track last emitted value to compute frame delta
-                # We track both the interpolated value and the actual integer emitted
-                if not hasattr(builder, '_last_emitted_relative_pos'):
-                    builder._last_emitted_relative_pos = Vec2(0, 0)
-                if not hasattr(builder, '_total_emitted_int'):
-                    builder._total_emitted_int = Vec2(0, 0)
-
-                # Compute what we SHOULD emit (difference from last interpolated to current)
-                frame_delta_from_builder = current_interpolated - builder._last_emitted_relative_pos
-
-                # Compute integer delta accounting for accumulated error
-                target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
-                actual_delta_int = target_total_int - builder._total_emitted_int
-
-                frame_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
-
-                print(f"[TICK] layer={layer_name}, phase={builder.lifecycle.phase}, "
-                      f"current_interpolated={current_interpolated}, "
-                      f"target_total_int={target_total_int}, "
-                      f"total_emitted={builder._total_emitted_int}, "
-                      f"will_emit={actual_delta_int}, "
-                      f"is_complete={builder.lifecycle.is_complete()}")
-
-                # Store update to apply after builder removal check
-                relative_position_updates.append((builder, current_interpolated, target_total_int))
-
-        # 3. Decide how to move mouse based on what we have
-        if has_absolute_position:
-            # Mix absolute + relative deltas
-            final_pos = absolute_target + frame_delta
-            self._internal_pos = final_pos
-            from .core import mouse_move
-            new_x = int(round(final_pos.x))
-            new_y = int(round(final_pos.y))
-            current_x, current_y = ctrl.mouse_pos()
-            if new_x != current_x or new_y != current_y:
-                mouse_move(new_x, new_y)
-        else:
-            # Pure relative - emit accumulated delta
-            if frame_delta.x != 0 or frame_delta.y != 0:
-                from .core import mouse_move_relative
-                mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
-
-        # Remove completed builders (may emit additional final deltas for relative movement)
+        # 4. Remove completed builders (may emit final deltas)
         completed_layers = self._remove_completed_builders(current_time)
 
-        # NOW update relative position tracking after removal check
-        # Only update for builders that weren't removed
-        for builder, new_value, new_int_value in relative_position_updates:
-            # Check if builder's layer is still active (wasn't completed)
-            if builder.config.layer_name not in completed_layers:
-                builder._last_emitted_relative_pos = new_value
-                builder._total_emitted_int = new_int_value
+        # 5. Update tracking for relative builders still active
+        self._update_relative_position_tracking(relative_position_updates, completed_layers)
 
-        # Update internal tracking AFTER handling completed builders
-        # This ensures stop() can bake correctly while still capturing final deltas
-        if not has_absolute_position:
-            current_mouse = Vec2(*ctrl.mouse_pos())
-            self._internal_pos = current_mouse
-            self._base_pos = current_mouse
-
+        # 6. Execute callbacks and stop if done
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
@@ -763,25 +805,6 @@ class RigState:
 
         return set(completed)
 
-    def _apply_position_updates(self, pos: Vec2, pos_is_override: bool):
-        """Apply position changes based on mode"""
-        if pos_is_override:
-            self._internal_pos = Vec2(pos.x, pos.y)
-            self._base_pos = Vec2(pos.x, pos.y)
-            self._last_position_offset = Vec2(0, 0)
-        else:
-            self._apply_position_offset(pos)
-            self._base_pos = Vec2(self._internal_pos.x, self._internal_pos.y)
-
-    def _move_mouse_if_changed(self):
-        """Move mouse if position has changed"""
-        new_x = int(round(self._internal_pos.x))
-        new_y = int(round(self._internal_pos.y))
-
-        current_x, current_y = ctrl.mouse_pos()
-        if new_x != current_x or new_y != current_y:
-            mouse_move(new_x, new_y)
-
     def _execute_phase_callbacks(self, phase_transitions: list[tuple['ActiveBuilder', str]]):
         """Execute callbacks for completed phases"""
         for builder, completed_phase in phase_transitions:
@@ -806,9 +829,8 @@ class RigState:
             )
             if has_absolute_builder:
                 current_mouse = Vec2(*ctrl.mouse_pos())
-                self._internal_pos = current_mouse
-                self._base_pos = current_mouse
-            self._last_position_offset = Vec2(0, 0)
+                self._absolute_current_pos = current_mouse
+                self._absolute_base_pos = current_mouse
 
     def _stop_frame_loop(self):
         """Stop the frame loop"""
@@ -817,16 +839,16 @@ class RigState:
             self._frame_loop_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
-            # Sync internal position to actual mouse position when stopping
-            # But keep _base_pos as-is (it was set by the last bake)
-            current_mouse = Vec2(*ctrl.mouse_pos())
-            self._internal_pos = current_mouse
-            # Only update _base_pos if it's significantly different from current mouse
-            # This handles manual mouse movements while preserving exact baked positions
-            diff = abs(current_mouse.x - self._base_pos.x) + abs(current_mouse.y - self._base_pos.y)
-            if diff > 2:  # More than 2 pixels difference suggests manual movement
-                self._base_pos = current_mouse
-            self._last_position_offset = Vec2(0, 0)
+            # Only sync position if we're tracking absolute coordinates
+            if self._absolute_current_pos is not None:
+                current_mouse = Vec2(*ctrl.mouse_pos())
+                self._absolute_current_pos = current_mouse
+                # Only update base if it's significantly different from current mouse
+                # This handles manual mouse movements while preserving exact baked positions
+                if self._absolute_base_pos is not None:
+                    diff = abs(current_mouse.x - self._absolute_base_pos.x) + abs(current_mouse.y - self._absolute_base_pos.y)
+                    if diff > 2:  # More than 2 pixels difference suggests manual movement
+                        self._absolute_base_pos = current_mouse
 
             # Execute stop callbacks when frame loop actually stops
             for callback in self._stop_callbacks:
@@ -1057,7 +1079,7 @@ class RigState:
 
         @property
         def pos(self) -> Vec2:
-            return self._rig_state._base_pos
+            return self._rig_state._absolute_base_pos if self._rig_state._absolute_base_pos else Vec2(0, 0)
 
         @property
         def speed(self) -> float:
