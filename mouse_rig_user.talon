@@ -41,9 +41,9 @@ rig big down: user.mouse_rig_pos_by(0, 300)
 
 # Direction rotation
 rig rotate <number>: user.mouse_rig_direction_by(number)
-rig rotate left: user.mouse_rig_direction_by(-90)
-rig rotate right: user.mouse_rig_direction_by(90)
-rig rotate around: user.mouse_rig_direction_by(180)
+rig rotate left: user.mouse_rig_direction_by(-90, "1000")
+rig rotate right: user.mouse_rig_direction_by(90, "1000")
+rig rotate around: user.mouse_rig_direction_by(180, "1000")
 
 # Settings
 rig [set] scale <number>: user.mouse_rig_set_scale(number)

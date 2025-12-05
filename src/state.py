@@ -51,8 +51,9 @@ class RigState:
         # Auto-order counter for layers without explicit order
         self._next_auto_order: int = 0
 
-        # Manual mouse movement detection
+        # Manual mouse movement detection (works in both absolute and relative modes)
         self._last_manual_movement_time: Optional[float] = None
+        self._expected_mouse_pos: Optional[tuple[int, int]] = None  # Expected screen position after last rig movement
 
         # Stop callbacks (fired when frame loop stops)
         self._stop_callbacks: list = []
@@ -587,7 +588,6 @@ class RigState:
             frame_delta: Accumulated delta from velocity and relative position builders
         """
         if has_absolute_position:
-            # Absolute mode: combine absolute target with relative deltas
             final_pos = absolute_target + frame_delta
             self._absolute_current_pos = final_pos
             from .core import mouse_move
@@ -596,11 +596,12 @@ class RigState:
             current_x, current_y = ctrl.mouse_pos()
             if new_x != current_x or new_y != current_y:
                 mouse_move(new_x, new_y)
+                self._expected_mouse_pos = (new_x, new_y)
         else:
-            # Pure relative mode: emit accumulated delta
             if frame_delta.x != 0 or frame_delta.y != 0:
                 from .core import mouse_move_relative
                 mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
+                self._expected_mouse_pos = ctrl.mouse_pos()
 
     def _update_relative_position_tracking(self, relative_position_updates: list, completed_layers: set):
         """Update tracking for relative position builders after removal
@@ -618,44 +619,15 @@ class RigState:
     def _sync_to_manual_mouse_movement(self) -> bool:
         """Detect and sync to manual mouse movements by the user
 
-        Only works when absolute position builders are active (pos.to).
-        In pure relative mode, we can't detect manual movement.
+        Works in both absolute and relative modes by tracking expected position
+        after each rig movement and comparing it to actual position before next movement.
 
         Returns:
             True if we should skip rig movement (manual movement detected or in timeout), False otherwise
         """
-        # Check if manual mouse detection is enabled
+        # Only perform manual movement detection if enabled
         if not settings.get("user.mouse_rig_pause_on_manual_movement", True):
             return False
-
-        # Only detect manual movement if we have absolute position builders
-        has_absolute_builder = any(
-            builder.config.property == "pos" and builder.config.movement_type == "absolute"
-            for builder in self._active_builders.values()
-        )
-        if not has_absolute_builder:
-            return False  # Pure relative mode - can't detect manual movement
-
-        if self._absolute_current_pos is None:
-            return False  # No absolute tracking initialized
-
-        current_x, current_y = ctrl.mouse_pos()
-        expected_x = int(round(self._absolute_current_pos.x))
-        expected_y = int(round(self._absolute_current_pos.y))
-
-        # If mouse position differs from our internal position, user moved it manually
-        if current_x != expected_x or current_y != expected_y:
-            manual_move = Vec2(current_x, current_y)
-
-            # Update internal position to match manual movement
-            self._absolute_current_pos = manual_move
-            # Update base position to match (this effectively "bakes" the manual movement)
-            self._absolute_base_pos = manual_move
-
-            # Record time of manual movement
-            self._last_manual_movement_time = time.perf_counter()
-
-            return True
 
         # Check if we're still in timeout period after manual movement
         if self._last_manual_movement_time is not None:
@@ -666,6 +638,27 @@ class RigState:
             else:
                 # Timeout expired, allow rig to take control again
                 self._last_manual_movement_time = None
+                self._expected_mouse_pos = None  # Reset tracking
+
+        # If we have an expected position from last movement, check if it matches actual
+        if self._expected_mouse_pos is not None:
+            current_x, current_y = ctrl.mouse_pos()
+            expected_x, expected_y = self._expected_mouse_pos
+
+            # If mouse position differs from expected, user moved it manually
+            if current_x != expected_x or current_y != expected_y:
+                # Sync internal tracking to manual position
+                if self._absolute_current_pos is not None:
+                    # In absolute mode, update tracked positions
+                    manual_pos = Vec2(current_x, current_y)
+                    self._absolute_current_pos = manual_pos
+                    self._absolute_base_pos = manual_pos
+
+                # Record time of manual movement
+                self._last_manual_movement_time = time.perf_counter()
+                self._expected_mouse_pos = None  # Reset until next rig movement
+
+                return True
 
         return False
 
@@ -832,6 +825,8 @@ class RigState:
             self._frame_loop_job = None
             self._last_frame_time = None
             self._subpixel_adjuster.reset()
+            self._expected_mouse_pos = None  # Clear expected position tracking
+
             # Only sync position if we're tracking absolute coordinates
             if self._absolute_current_pos is not None:
                 current_mouse = Vec2(*ctrl.mouse_pos())
@@ -1100,7 +1095,9 @@ class RigState:
         3. Set speed to 0 (with optional smooth deceleration)
         """
         # Validate arguments
-        from .contracts import BuilderConfig, ConfigError
+        from .contracts import BuilderConfig, ConfigError, validate_timing
+        transition_ms = validate_timing(transition_ms, 'transition_ms')
+
         config = BuilderConfig()
         all_kwargs = {'easing': easing, **kwargs}
         config.validate_method_kwargs('stop', **all_kwargs)

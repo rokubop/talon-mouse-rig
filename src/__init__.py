@@ -207,6 +207,8 @@ class Rig:
             StopHandle: Handle that allows chaining .then(callback) to execute
                        when the system fully stops
         """
+        from .contracts import validate_timing
+        ms = validate_timing(ms, 'ms')
         self._state.stop(ms, easing)
         return StopHandle(self._state)
 

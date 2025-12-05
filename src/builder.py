@@ -8,7 +8,7 @@ import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
 from .core import Vec2, EPSILON
-from .contracts import BuilderConfig, LifecyclePhase
+from .contracts import BuilderConfig, LifecyclePhase, validate_timing
 from .lifecycle import Lifecycle, PropertyAnimator
 from . import rate_utils
 from . import mode_operations
@@ -185,10 +185,10 @@ class RigBuilder:
 
         if rate is not None:
             # Rate-based, duration will be calculated later
-            self.config.over_rate = rate
+            self.config.over_rate = validate_timing(rate, 'rate')
             self.config.over_easing = easing
         else:
-            self.config.over_ms = ms if ms is not None else 0
+            self.config.over_ms = validate_timing(ms, 'ms') if ms is not None else 0
             self.config.over_easing = easing
 
         self.config.over_interpolation = interpolation
@@ -201,7 +201,7 @@ class RigBuilder:
 
     def hold(self, ms: float) -> 'RigBuilder':
         """Set hold duration"""
-        self.config.hold_ms = ms
+        self.config.hold_ms = validate_timing(ms, 'ms')
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self
 
@@ -227,10 +227,10 @@ class RigBuilder:
         self.config.validate_method_kwargs('revert', **all_kwargs)
 
         if rate is not None:
-            self.config.revert_rate = rate
+            self.config.revert_rate = self._validate_timing(rate, 'rate')
             self.config.revert_easing = easing
         else:
-            self.config.revert_ms = ms if ms is not None else 0
+            self.config.revert_ms = self._validate_timing(ms, 'ms') if ms is not None else 0
             self.config.revert_easing = easing
 
         self.config.revert_interpolation = interpolation

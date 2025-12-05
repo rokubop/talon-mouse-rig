@@ -9,11 +9,6 @@ from abc import ABC, abstractmethod
 if TYPE_CHECKING:
     from .core import Vec2
 
-
-# ============================================================================
-# VALIDATION SCHEMAS - Single source of truth for what's valid
-# ============================================================================
-
 VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector']
 
 VALID_OPERATORS = {
@@ -23,10 +18,8 @@ VALID_OPERATORS = {
     'vector': ['to', 'add', 'by', 'sub', 'bake']
 }
 
-"""Valid modes for layer operations"""
 VALID_MODES = ['offset', 'override', 'scale']
 
-# Layer types
 LAYER_TYPES = {
     '__base__': {'order': float('-inf')},
     '__final__': {'order': float('inf')},
@@ -42,7 +35,6 @@ VALID_EASINGS = [
 VALID_INTERPOLATIONS = ['lerp', 'slerp']
 VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']  # ignore is internal for throttle()
 
-# Method signatures for validation
 METHOD_SIGNATURES = {
     'over': {
         'params': ['ms', 'easing', 'rate', 'interpolation'],
@@ -540,3 +532,13 @@ class BuilderConfig:
                     ".hold() is only useful when you need to wait before reverting or calling a callback.\n"
                     "If you want to keep the value, simply don't use .hold() at all, and you can .revert() later.\n\n"
                 )
+
+def validate_timing(value: Any, param_name: str) -> Optional[float]:
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)):
+        raise TypeError(
+            f"Timing parameter '{param_name}' must be a number or None, "
+            f"got {type(value).__name__}: {repr(value)}"
+        )
+    return float(value)

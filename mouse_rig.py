@@ -643,5 +643,4 @@ class Actions:
         # print("x", actions.mouse_x())
         # print("y", actions.mouse_y())
         # print(ctrl.mouse_pos())
-        print(int(0.9))
-        actions.mouse_nudge(0.9,0)
+        actions.user.mouse_rig_go_right(5, 10, 1000, "linear")
