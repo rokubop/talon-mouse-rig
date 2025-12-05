@@ -455,6 +455,7 @@ class PropertyBuilder:
 
         # Check if a property is already set - can't chain multiple properties
         if self.rig_builder.config.property is not None and self.rig_builder.config.property != property_name:
+            self.rig_builder._executed = True
             raise ConfigError(
                 f"Cannot combine multiple properties in one command.\n\n"
                 f"You're trying to set both '{self.rig_builder.config.property}' and '{property_name}' together.\n\n"
