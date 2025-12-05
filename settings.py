@@ -4,7 +4,7 @@ from talon import Module
 
 mod = Module()
 
-# Say "Rig reload" to reload settings
+
 
 mod.setting("mouse_rig_frame_interval",
     type=int,
@@ -12,6 +12,7 @@ mod.setting("mouse_rig_frame_interval",
     desc="Frame interval in milliseconds (default 16ms = ~60fps)"
 )
 
+# Say "Rig reload" to reload settings
 mod.setting(
     "mouse_rig_api",
     type=str,
