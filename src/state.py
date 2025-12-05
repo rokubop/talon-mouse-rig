@@ -570,15 +570,11 @@ class RigState:
 
                 relative_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
 
-                print(f"[TICK] layer={layer_name}, phase={builder.lifecycle.phase}, "
-                      f"current_interpolated={current_interpolated}, "
-                      f"target_total_int={target_total_int}, "
-                      f"total_emitted={builder._total_emitted_int}, "
-                      f"will_emit={actual_delta_int}, "
-                      f"is_complete={builder.lifecycle.is_complete()}")
+                # The new total is what we've already emitted plus what we're about to emit
+                new_total_emitted = builder._total_emitted_int + actual_delta_int
 
                 # Store update to apply after builder removal check
-                relative_position_updates.append((builder, current_interpolated, target_total_int))
+                relative_position_updates.append((builder, current_interpolated, new_total_emitted))
 
         return has_absolute_position, absolute_target, relative_delta, relative_position_updates
 
@@ -713,11 +709,14 @@ class RigState:
         # 3. Emit mouse movement (absolute or relative mode)
         self._emit_mouse_movement(has_absolute_position, absolute_target, frame_delta)
 
-        # 4. Remove completed builders (may emit final deltas)
-        completed_layers = self._remove_completed_builders(current_time)
+        # 4. Update tracking BEFORE checking for completion to avoid double-emission
+        # We update unconditionally here since the deltas were already emitted
+        for builder, new_value, new_int_value in relative_position_updates:
+            builder._last_emitted_relative_pos = new_value
+            builder._total_emitted_int = new_int_value
 
-        # 5. Update tracking for relative builders still active
-        self._update_relative_position_tracking(relative_position_updates, completed_layers)
+        # 5. Remove completed builders (may emit final deltas)
+        completed_layers = self._remove_completed_builders(current_time)
 
         # 6. Execute callbacks and stop if done
         self._execute_phase_callbacks(phase_transitions)
@@ -788,15 +787,9 @@ class RigState:
                     # Compare integer targets to avoid rounding errors
                     final_delta_int = final_target_int - builder._total_emitted_int
 
-                    print(f"[REMOVE] layer={layer}, final_value={final_value}, "
-                          f"final_target_int={final_target_int}, "
-                          f"total_emitted_int={builder._total_emitted_int}, "
-                          f"final_delta_int={final_delta_int}")
-
                     if final_delta_int.x != 0 or final_delta_int.y != 0:
                         from .core import mouse_move_relative
                         mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
-                        print(f"[REMOVE] Emitted final delta: {int(final_delta_int.x)}, {int(final_delta_int.y)}")
 
                 completed.append(layer)
 

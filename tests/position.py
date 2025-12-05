@@ -194,6 +194,8 @@ def test_pos_by_over(on_success, on_failure):
 
 def test_pos_by_over_hold_revert(on_success, on_failure):
     """Test: rig.pos.by(dx, dy).over(ms).hold(ms).revert(ms)"""
+    # Capture the actual start position when the rig executes
+    rig = actions.user.mouse_rig()
     start_x, start_y = ctrl.mouse_pos()
     dx, dy = TEST_OFFSET, TEST_OFFSET
 
@@ -226,7 +228,6 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
             on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
             return
 
-    rig = actions.user.mouse_rig()
     rig.pos.by(dx, dy).over(300).then(check_after_over).hold(300).then(check_after_hold).revert(300).then(check_after_revert)
     cron.after("1000ms", check_state)
 
