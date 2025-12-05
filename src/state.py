@@ -83,7 +83,6 @@ class RigState:
         return self.__repr__()
 
     def _generate_base_layer_name(self) -> str:
-        """Return base layer name"""
         return "__base__"
 
     def time_alive(self, layer: str) -> Optional[float]:

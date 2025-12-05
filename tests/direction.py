@@ -12,19 +12,16 @@ MOVEMENT_TOLERANCE = 50
 # ============================================================================
 
 def normalize_angle(degrees):
-    """Normalize angle to 0-360 range"""
     return degrees % 360
 
 
 def get_angle_from_vector(x, y):
-    """Convert (x, y) vector to degrees"""
     radians = math.atan2(y, x)
     degrees = math.degrees(radians)
     return normalize_angle(degrees)
 
 
 def angle_difference(angle1, angle2):
-    """Get smallest difference between two angles"""
     diff = abs(angle1 - angle2)
     if diff > 180:
         diff = 360 - diff

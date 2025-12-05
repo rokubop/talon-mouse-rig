@@ -26,16 +26,13 @@ class BehaviorProxy:
         self.has_args = has_args
 
     def __call__(self, *args):
-        """Handle .queue() syntax"""
         method = getattr(self.builder, f'_set_{self.behavior_name}')
         return method(*args)
 
     def __getattr__(self, name):
-        """Handle .queue.direction syntax (property chaining)"""
         # Auto-apply the behavior first
         method = getattr(self.builder, f'_set_{self.behavior_name}')
-        method()  # Call with no args for property-style access
-        # Then forward to the builder
+        method()
         return getattr(self.builder, name)
 
 
@@ -48,25 +45,21 @@ class ModeProxy:
 
     @property
     def pos(self) -> 'PropertyBuilder':
-        """Position property accessor with mode"""
         self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "pos")
 
     @property
     def speed(self) -> 'PropertyBuilder':
-        """Speed property accessor with mode"""
         self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "speed")
 
     @property
     def direction(self) -> 'PropertyBuilder':
-        """Direction property accessor with mode"""
         self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "direction")
 
     @property
     def vector(self) -> 'PropertyBuilder':
-        """Vector property accessor with mode"""
         self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "vector")
 
@@ -106,17 +99,14 @@ class RigBuilder:
 
     @property
     def offset(self) -> 'ModeProxy':
-        """Offset mode - additive contribution to accumulated value"""
         return ModeProxy(self, "offset")
 
     @property
     def override(self) -> 'ModeProxy':
-        """Override mode - replace accumulated value (ignores previous layers)"""
         return ModeProxy(self, "override")
 
     @property
     def scale(self) -> 'ModeProxy':
-        """Scale mode - multiplicative factor on accumulated value"""
         return ModeProxy(self, "scale")
 
     # ========================================================================
@@ -125,17 +115,14 @@ class RigBuilder:
 
     @property
     def pos(self) -> 'PropertyBuilder':
-        """Position property accessor"""
         return PropertyBuilder(self, "pos")
 
     @property
     def speed(self) -> 'PropertyBuilder':
-        """Speed property accessor"""
         return PropertyBuilder(self, "speed")
 
     @property
     def direction(self) -> 'PropertyBuilder':
-        """Direction property accessor"""
         return PropertyBuilder(self, "direction")
 
     def __getattr__(self, name: str):
@@ -200,7 +187,6 @@ class RigBuilder:
         return self
 
     def hold(self, ms: float) -> 'RigBuilder':
-        """Set hold duration"""
         self.config.hold_ms = validate_timing(ms, 'ms')
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self
@@ -242,7 +228,6 @@ class RigBuilder:
         return self
 
     def then(self, callback: Callable) -> 'RigBuilder':
-        """Add callback after current lifecycle stage"""
         stage = self._lifecycle_stage or LifecyclePhase.OVER
         self.config.then_callbacks.append((stage, callback))
         return self
@@ -253,48 +238,39 @@ class RigBuilder:
 
     @property
     def stack(self) -> BehaviorProxy:
-        """Stack behavior (unlimited or max) - use .stack or .stack(max)"""
         return BehaviorProxy(self, 'stack', has_args=True)
 
     def _set_stack(self, max_count: Optional[int] = None) -> 'RigBuilder':
-        """Internal: Set stack behavior"""
         self.config.behavior = "stack"
         self.config.behavior_args = (max_count,) if max_count is not None else ()
         return self
 
     @property
     def reset(self) -> BehaviorProxy:
-        """Reset behavior (cancel previous) - use .reset or .reset()"""
         return BehaviorProxy(self, 'reset')
 
     def _set_reset(self) -> 'RigBuilder':
-        """Internal: Set reset behavior"""
         self.config.behavior = "reset"
         return self
 
     @property
     def queue(self) -> BehaviorProxy:
-        """Queue behavior (wait for current) - use .queue or .queue()"""
         return BehaviorProxy(self, 'queue')
 
     def _set_queue(self) -> 'RigBuilder':
-        """Internal: Set queue behavior"""
         self.config.behavior = "queue"
         return self
 
     @property
     def extend(self) -> BehaviorProxy:
-        """Extend hold duration - use .extend or .extend()"""
         return BehaviorProxy(self, 'extend')
 
     def _set_extend(self) -> 'RigBuilder':
-        """Internal: Set extend behavior"""
         self.config.behavior = "extend"
         return self
 
     @property
     def throttle(self) -> BehaviorProxy:
-        """Throttle behavior (rate limit) - use .throttle or .throttle() to ignore while active, or .throttle(ms) to rate limit"""
         return BehaviorProxy(self, 'throttle', has_args=False)
 
     def _set_throttle(self, ms: Optional[float] = None) -> 'RigBuilder':
@@ -315,7 +291,6 @@ class RigBuilder:
     # ========================================================================
 
     def bake(self, value: bool = True) -> 'RigBuilder':
-        """Control whether changes persist to base"""
         self.config.bake_value = value
         return self
 
@@ -324,7 +299,6 @@ class RigBuilder:
     # ========================================================================
 
     def __del__(self):
-        """Execute builder when garbage collected"""
         if not self._executed:
             self._execute()
 
@@ -495,24 +469,20 @@ class PropertyBuilder:
     # Mode accessors for property.mode.operation() syntax
     @property
     def offset(self) -> 'PropertyBuilder':
-        """Set offset mode for this property"""
         self.rig_builder.config.mode = "offset"
         return self
 
     @property
     def override(self) -> 'PropertyBuilder':
-        """Set override mode for this property"""
         self.rig_builder.config.mode = "override"
         return self
 
     @property
     def scale(self) -> 'PropertyBuilder':
-        """Set scale mode for this property"""
         self.rig_builder.config.mode = "scale"
         return self
 
     def to(self, *args) -> RigBuilder:
-        """Set absolute value"""
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
@@ -527,7 +497,6 @@ class PropertyBuilder:
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
-        """Add delta"""
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
@@ -542,25 +511,21 @@ class PropertyBuilder:
         return self.rig_builder
 
     def by(self, *args) -> RigBuilder:
-        """Add delta (alias for add)"""
         return self.add(*args)
 
     def sub(self, *args) -> RigBuilder:
-        """Subtract delta"""
         self.rig_builder.config.operator = "sub"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
-        """Multiply"""
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
-        """Divide"""
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()

@@ -68,11 +68,9 @@ class Vec2:
     y: float
 
     def __repr__(self) -> str:
-        """Helpful representation showing x and y coordinates"""
         return f"Vec2({self.x:.2f}, {self.y:.2f})"
 
     def __str__(self) -> str:
-        """String representation"""
         return f"({self.x:.2f}, {self.y:.2f})"
 
     def __add__(self, other: 'Vec2') -> 'Vec2':
@@ -159,7 +157,6 @@ class Vec2:
 
 
 def normalize_vector(x: float, y: float) -> Tuple[float, float]:
-    """Normalize a vector to unit length"""
     mag = math.sqrt(x ** 2 + y ** 2)
     if mag < EPSILON:
         return (0.0, 0.0)
@@ -167,12 +164,10 @@ def normalize_vector(x: float, y: float) -> Tuple[float, float]:
 
 
 def lerp(a: float, b: float, t: float) -> float:
-    """Linear interpolation"""
     return a + (b - a) * t
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
-    """Clamp value between min and max"""
     return max(min_val, min(max_val, value))
 
 
@@ -203,7 +198,6 @@ class SubpixelAdjuster:
         return dx_int, dy_int
 
     def reset(self):
-        """Reset accumulated fractional errors"""
         self.x_frac = 0.0
         self.y_frac = 0.0
 

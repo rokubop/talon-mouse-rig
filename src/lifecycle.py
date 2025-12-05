@@ -40,7 +40,6 @@ class Lifecycle:
         self.started = False
 
     def add_callback(self, phase: str, callback: Callable):
-        """Add a callback to execute after a specific phase"""
         if phase not in self.callbacks:
             self.callbacks[phase] = []
         self.callbacks[phase].append(callback)
@@ -161,11 +160,9 @@ class Lifecycle:
             self.phase = None
 
     def get_phase_callbacks(self, phase: str) -> list:
-        """Get callbacks for a specific phase"""
         return self.callbacks.get(phase, [])
 
     def execute_callbacks(self, phase: str):
-        """Execute all callbacks for a phase"""
         for callback in self.callbacks.get(phase, []):
             try:
                 callback()

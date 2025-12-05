@@ -16,7 +16,6 @@ class BuilderQueue:
         self.current: Optional[Callable] = None
 
     def enqueue(self, execution_callback: Callable):
-        """Add a builder execution callback to the queue"""
         self.queue.append(execution_callback)
 
     def start_next(self) -> bool:
@@ -34,11 +33,9 @@ class BuilderQueue:
         return True
 
     def is_empty(self) -> bool:
-        """Check if queue has no pending items"""
         return len(self.queue) == 0
 
     def clear(self):
-        """Clear all queued items"""
         self.queue.clear()
         self.current = None
 
@@ -50,18 +47,15 @@ class QueueManager:
         self.queues: dict[str, BuilderQueue] = {}
 
     def get_queue(self, layer: str) -> BuilderQueue:
-        """Get or create a queue for a layer"""
         if layer not in self.queues:
             self.queues[layer] = BuilderQueue()
         return self.queues[layer]
 
     def enqueue(self, layer: str, execution_callback: Callable):
-        """Enqueue a builder for a layer"""
         queue = self.get_queue(layer)
         queue.enqueue(execution_callback)
 
     def on_builder_complete(self, layer: str):
-        """Called when a builder completes, starts next in queue"""
         if layer in self.queues:
             queue = self.queues[layer]
             if not queue.start_next():
@@ -69,11 +63,9 @@ class QueueManager:
                 del self.queues[layer]
 
     def clear_queue(self, layer: str):
-        """Clear all queued items for a layer"""
         if layer in self.queues:
             self.queues[layer].clear()
             del self.queues[layer]
 
     def is_active(self, layer: str) -> bool:
-        """Check if a layer has an active builder or queued items"""
         return layer in self.queues and not self.queues[layer].is_empty()
