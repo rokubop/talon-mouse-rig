@@ -517,6 +517,66 @@ class Actions:
         if revert_ms is not None:
             builder = builder.revert(revert_ms)
 
+    def mouse_rig_layer_pos_override_to(
+            layer_name: str,
+            x: float,
+            y: float,
+            ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """Create a named position layer that overrides the mouse position.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).pos.override.to(x, y).over(ms, easing).then(callback)
+        ```
+
+        Examples:
+        ```python
+        mouse_rig_layer_pos_override_to("center", 960, 540)              # instant override
+        mouse_rig_layer_pos_override_to("center", 960, 540, 500)         # override over 500ms
+        mouse_rig_layer_pos_override_to("center", 960, 540, 500, "ease") # override with easing
+        ```
+        """
+        rig = actions.user.mouse_rig()
+        builder = rig.layer(layer_name).pos.override.to(x, y)
+        if ms is not None:
+            builder = builder.over(ms, easing)
+        if callback is not None:
+            builder.then(callback)
+
+    def mouse_rig_layer_pos_offset_by(
+            layer_name: str,
+            dx: float,
+            dy: float,
+            ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """Create a named position layer that offsets the mouse position.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.layer(layer_name).pos.offset.by(dx, dy).over(ms, easing).then(callback)
+        ```
+
+        Examples:
+        ```python
+        mouse_rig_layer_pos_offset_by("shake", 10, 5)              # instant offset
+        mouse_rig_layer_pos_offset_by("shake", 10, 5, 100)         # offset over 100ms
+        mouse_rig_layer_pos_offset_by("shake", 10, 5, 100, "ease") # offset with easing
+        ```
+        """
+        rig = actions.user.mouse_rig()
+        builder = rig.layer(layer_name).pos.offset.by(dx, dy)
+        if ms is not None:
+            builder = builder.over(ms, easing)
+        if callback is not None:
+            builder.then(callback)
+
     def mouse_rig_layer_revert(
             layer_name: str,
             ms: int = None,
