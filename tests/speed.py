@@ -272,7 +272,7 @@ def test_layer_speed_offset_from_stopped(on_success, on_failure):
 
     # Set direction but no base speed
     rig.direction.to(1, 0)
-    
+
     # Add speed via layer offset
     rig.layer("boost").speed.offset.add(5)
     start_pos = ctrl.mouse_pos()

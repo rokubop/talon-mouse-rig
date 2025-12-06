@@ -396,7 +396,7 @@ def apply_vector_mode(
         # Offset: additive contribution - add velocity vectors
         accumulated_velocity = accumulated_direction * accumulated_speed
         new_velocity = accumulated_velocity + canonical_value
-        
+
         print(f"[VECTOR OFFSET] accumulated_vel=({accumulated_velocity.x:.2f}, {accumulated_velocity.y:.2f}), "
               f"offset=({canonical_value.x:.2f}, {canonical_value.y:.2f}), "
               f"new_vel=({new_velocity.x:.2f}, {new_velocity.y:.2f})")
@@ -407,7 +407,7 @@ def apply_vector_mode(
         except:
             # If magnitude is 0, keep current direction
             direction = accumulated_direction
-        
+
         print(f"[VECTOR OFFSET] result: speed={speed:.2f}, dir=({direction.x:.2f}, {direction.y:.2f})")
         return speed, direction
 

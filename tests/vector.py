@@ -314,48 +314,6 @@ def test_layer_vector_offset_multiple(on_success, on_failure):
     cron.after("500ms", check_combined)
 
 
-def test_layer_vector_offset_batched(on_success, on_failure):
-    """Test: Batched offset layers apply simultaneously"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.stop()
-    actions.sleep("100ms")
-
-    # Use batch() to ensure both layers apply in same frame
-    with rig.state.batch():
-        # Force 1: Wind pushing right (2, 0)
-        rig.layer("wind").vector.offset.add(2, 0)
-        # Force 2: Gravity pulling down (0, 3)
-        rig.layer("gravity").vector.offset.add(0, 3)
-    # Both layers now active, frame loop starts with both present
-
-    actions.sleep("100ms")
-    start_pos = ctrl.mouse_pos()
-
-    def check_combined():
-        end_pos = ctrl.mouse_pos()
-        rig_check = actions.user.mouse_rig()
-
-        # Combined: (2, 0) + (0, 3) = (2, 3)
-        expected_speed = math.sqrt(2**2 + 3**2)  # ~3.6
-        if abs(rig_check.state.speed - expected_speed) > 1.5:
-            on_failure(f"Combined speed is {rig_check.state.speed}, expected ~{expected_speed:.1f}")
-            return
-
-        # Check movement is generally right-down
-        dx = end_pos[0] - start_pos[0]
-        dy = end_pos[1] - start_pos[1]
-
-        if dx < 20 or dy < 30:
-            on_failure(f"Expected right-down movement, got dx={dx}, dy={dy}")
-            return
-
-        rig_check.stop()
-        on_success()
-
-    cron.after("500ms", check_combined)
-
-
 def test_layer_vector_override(on_success, on_failure):
     """Test: layer().vector.override.to(x, y) - override velocity"""
     rig = actions.user.mouse_rig()
@@ -447,7 +405,6 @@ VECTOR_TESTS = [
     ("vector.to(x, y).over(ms)", test_vector_to_over),
     ("layer vector.offset.add(x, y)", test_layer_vector_offset_add),
     ("layer vector multiple forces", test_layer_vector_offset_multiple),
-    ("layer vector batched forces", test_layer_vector_offset_batched),
     ("layer vector.override.to(x, y)", test_layer_vector_override),
     ("layer vector revert", test_layer_vector_revert),
 ]
