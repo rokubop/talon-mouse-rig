@@ -218,47 +218,35 @@ class Rig:
         return StopHandle(self._state)
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
-        """Reverse direction and speed (instant 180° flip with optional inertia transition)
-
-        Uses a high-priority override layer to instantly negate velocity, preserving
-        all existing layers. If ms is provided, applies counter-force over time.
+        """Reverse direction (180° flip with optional smooth transition through zero)
 
         Example:
             Moving right at speed 3, direction (1, 0)
+            After reverse():
+                Instant: direction becomes (-1, 0), moving left
             After reverse(500):
-            - Instant: Override layer sets velocity to (-3, 0) in world space
-            - This makes it move right due to negative speed × reversed direction
-            - Over 500ms: Offset layer adds (6, 0) to counter momentum
-            - Result: Moving left at speed 3, direction (-1, 0)
+                Smooth: velocity lerps (3,0) → (0,0) → (-3,0) over 500ms
+                Effect: Decelerates to stop, then accelerates in opposite direction
+
+        Args:
+            ms: Optional duration for smooth reversal. If None, instant flip.
+
+        Returns:
+            RigBuilder for chaining
         """
         from .core import Vec2
 
-        # Get current computed velocity (includes all layers)
-        current_speed = self._state.speed
-        current_direction = self._state.direction
-        current_velocity = current_direction * current_speed
-        inverted_velocity = current_velocity * -1
+        if ms is None:
+            # Instant: just flip direction by 180°
+            return self.direction.by(180)
+        else:
+            # Gradual: use vector to preserve magnitude during transition
+            # Get current velocity and reverse it
+            current_velocity = self._state.direction * self._state.speed
+            reversed_velocity = current_velocity * -1
 
-        # Use override layer to instantly set inverted velocity
-        # This preserves all existing layers underneath
-        self.layer("__reverse__").vector.override.to(inverted_velocity.x, inverted_velocity.y)
-
-        # If over time, apply counter-force via offset layer
-        if ms is not None:
-            # Counter-force needs to be 2x the original velocity to transition fully
-            counter_vector = current_velocity * 2
-
-            # Apply counter-force over time, then clean up reverse layer
-            builder = self.layer("__reverse_counter__").vector.offset.add(counter_vector.x, counter_vector.y).over(ms)
-
-            # After transition completes, remove the override layer
-            # The counter-force will have moved us to the correct final velocity
-            builder.then(lambda: self._state.remove_layer("__reverse__"))
-
-            return builder
-
-        # Instant reverse, no builder needed
-        return RigBuilder(self._state)
+            # Use vector override with linear interpolation for smooth zero transition
+            return self.vector.override.to(reversed_velocity.x, reversed_velocity.y).over(ms, interpolation='linear')
 
     def bake(self):
         """Bake all active builders to base state"""

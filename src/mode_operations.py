@@ -174,6 +174,15 @@ def calculate_direction_target(
                 new_x = current.x * cos_a - current.y * sin_a
                 new_y = current.x * sin_a + current.y * cos_a
                 return Vec2(new_x, new_y).normalized()
+        elif operator == "mul":
+            # Multiply direction by scalar
+            # For negative scalars (like -1 for reverse), keep unnormalized
+            # to allow smooth magnitude transitions during lerp
+            scalar = value[0] if isinstance(value, tuple) else value
+            result = Vec2(current.x * scalar, current.y * scalar)
+            # Only normalize if scalar is positive (normal scaling)
+            # Negative scalars indicate reversal - preserve for magnitude lerp
+            return result.normalized() if scalar >= 0 else result
 
     else:  # offset
         # Offset mode: store rotation angle or delta vector

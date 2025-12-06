@@ -361,16 +361,18 @@ class PropertyAnimator:
         target_vector: Vec2,
         phase: Optional[str],
         progress: float,
-        has_reverted: bool = False
+        has_reverted: bool = False,
+        interpolation: str = 'lerp'
     ) -> Vec2:
         """Animate a velocity vector (speed + direction combined).
 
         Args:
             base_vector: The base velocity vector
             target_vector: The target velocity vector
-            phase: Current lifecycle phase
+            phase: Optional[str]
             progress: Progress [0, 1] within current phase
             has_reverted: Whether this lifecycle completed via revert
+            interpolation: 'lerp' for magnitude/direction, 'linear' for component-wise
 
         Returns:
             Current animated velocity vector
@@ -382,6 +384,11 @@ class PropertyAnimator:
             return target_vector
 
         if phase == LifecyclePhase.OVER:
+            # If 'linear', lerp vector components directly (for smooth reversals through zero)
+            if interpolation == 'linear':
+                x = base_vector.x + (target_vector.x - base_vector.x) * progress
+                y = base_vector.y + (target_vector.y - base_vector.y) * progress
+                return Vec2(x, y)
             # Interpolate both magnitude and direction
             base_speed = base_vector.magnitude()
             target_speed = target_vector.magnitude()
@@ -406,6 +413,12 @@ class PropertyAnimator:
             return target_vector
 
         elif phase == LifecyclePhase.REVERT:
+            # If 'linear', lerp vector components directly
+            if interpolation == 'linear':
+                x = target_vector.x + (base_vector.x - target_vector.x) * progress
+                y = target_vector.y + (base_vector.y - target_vector.y) * progress
+                return Vec2(x, y)
+
             # Interpolate back from target to base
             base_speed = base_vector.magnitude()
             target_speed = target_vector.magnitude()
@@ -430,12 +443,16 @@ class PropertyAnimator:
 
 
 def _lerp_direction(v1: Vec2, v2: Vec2, t: float) -> Vec2:
-    """Linear interpolation between two direction vectors"""
+    """Linear interpolation between two direction vectors
+    
+    Args:
+        v1: Start direction vector
+        v2: End direction vector  
+        t: Progress [0, 1]
+    """
     x = v1.x + (v2.x - v1.x) * t
     y = v1.y + (v2.y - v1.y) * t
     return Vec2(x, y).normalized()
-
-
 def _slerp(v1: Vec2, v2: Vec2, t: float) -> Vec2:
     """Spherical linear interpolation between two direction vectors"""
     # Calculate angle between vectors

@@ -649,52 +649,51 @@ def test_reverse_method_instant(on_success, on_failure):
 
 
 def test_reverse_method_over_time(on_success, on_failure):
-    """Test: rig.reverse(ms) - smooth 180° turn over time with inertia"""
+    """Test: rig.reverse(ms) - smooth 180° turn over time through zero"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
     actions.sleep("100ms")
 
-    # Start moving right
+    # Start moving right at speed 3
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
     actions.sleep("200ms")
     start_pos = ctrl.mouse_pos()
 
-    # Gradual reverse - instant flip + counter-force over time
+    # Gradual reverse - smooth transition through zero
+    # Direction lerps: (1,0) → (0,0) → (-1,0)
+    # Velocity: slows down → stops → speeds up in opposite direction
     rig.reverse(1000)
 
     def check_midpoint():
-        """During reversal - should still be moving left (inertia)"""
+        """At midpoint - should be near stop or moving slowly"""
         mid_pos = ctrl.mouse_pos()
 
-        # After instant flip: velocity is inverted, still moving left due to inertia
-        # Counter-force is gradually applied to slow down and reverse
+        # Should have moved right initially, but be slowing down
         dx = mid_pos[0] - start_pos[0]
-        if dx > -10:
-            on_failure(f"Expected leftward movement during reversal (inertia), got dx={dx}")
+        if dx < 5:
+            on_failure(f"Expected some rightward movement before stopping, got dx={dx}")
             return
 
         def check_final():
-            """After reversal completes - should be moving right"""
+            """After reversal completes - should be moving left"""
             rig_final = actions.user.mouse_rig()
             end_pos = ctrl.mouse_pos()
 
-            # Direction should still be inverted in state (left)
+            # Direction should be reversed (left)
             dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
             if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
                 on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
                 return
 
-            # But speed should be positive now, so moving right (dir × speed = left × -speed = right)
-            # Actually with counter-force, final speed should be positive
-            # Check: should be moving RIGHT now (counter-force completed)
+            # Should be moving left now
             dx_final = end_pos[0] - mid_pos[0]
-            if dx_final < 10:
-                on_failure(f"Expected rightward movement after reversal completes, got dx={dx_final}")
+            if dx_final > -5:
+                on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
                 return
 
-            # Check final speed is positive (moving in intended reversed direction)
+            # Check final speed is back to original
             if rig_final.state.speed < 2:
                 on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
                 return
@@ -704,7 +703,7 @@ def test_reverse_method_over_time(on_success, on_failure):
 
         cron.after("1200ms", check_final)
 
-    cron.after("300ms", check_midpoint)
+    cron.after("500ms", check_midpoint)
 
 
 # ============================================================================

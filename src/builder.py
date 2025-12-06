@@ -958,21 +958,25 @@ class ActiveBuilder:
             elif mode == "offset":
                 # Offset mode: animate velocity vector from zero
                 neutral = Vec2(0, 0)
+                interpolation = self.config.over_interpolation
                 return PropertyAnimator.animate_vector(
                     neutral,
                     self.target_value,
                     phase,
                     progress,
-                    self.lifecycle.has_reverted()
+                    self.lifecycle.has_reverted(),
+                    interpolation
                 )
             else:  # override
                 # Override: animate from base velocity to target velocity
+                interpolation = self.config.over_interpolation
                 return PropertyAnimator.animate_vector(
                     self.base_value,
                     self.target_value,
                     phase,
                     progress,
-                    self.lifecycle.has_reverted()
+                    self.lifecycle.has_reverted(),
+                    interpolation
                 )
 
         return self.target_value
@@ -1020,12 +1024,14 @@ class ActiveBuilder:
                     self.group_lifecycle.has_reverted()
                 )
             elif property_type == "vector":
+                interpolation = self.config.revert_interpolation
                 return PropertyAnimator.animate_vector(
                     self.group_base_value,
                     self.group_target_value,
                     phase,
                     progress,
-                    self.group_lifecycle.has_reverted()
+                    self.group_lifecycle.has_reverted(),
+                    interpolation
                 )
 
         # Aggregate own value plus all children values

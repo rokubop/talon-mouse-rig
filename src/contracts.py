@@ -32,7 +32,7 @@ VALID_EASINGS = [
     'ease_in_3', 'ease_out_3', 'ease_in_out_3',
     'ease_in_4', 'ease_out_4', 'ease_in_out_4',
 ]
-VALID_INTERPOLATIONS = ['lerp', 'slerp']
+VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
 VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']  # ignore is internal for throttle()
 
 METHOD_SIGNATURES = {

@@ -199,9 +199,10 @@ Use `.layer(name)` to create named effects that can be reverted later.
 
 ### Interpolation
 
-Direction interpolation modes for `.over()` and `.revert()`:
-- `interpolation='lerp'` - Linear interpolation (default)
+Interpolation modes for `.over()` and `.revert()`:
+- `interpolation='lerp'` - Linear interpolation (default for direction)
 - `interpolation='slerp'` - Spherical interpolation (smooth rotation along arc)
+- `interpolation='linear'` - Linear component interpolation (for smooth zero transitions in vectors)
 
 ```python
 rig.direction.by(90).over(500, interpolation='slerp')
