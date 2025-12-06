@@ -573,7 +573,8 @@ def test_direction_reverse_180_over_time(on_success, on_failure):
     start_pos = ctrl.mouse_pos()
 
     # Reverse direction over time (180° turn)
-    rig.direction.to(-1, 0).over(500)  # Should rotate to 180° (left)
+    rig.direction.mul(-1).over(500, interpolation="linear")
+    # rig.direction.to(-1, 0).over(500)  # Should rotate to 180° (left)
 
     def check_midpoint():
         """During rotation - should be transitioning"""

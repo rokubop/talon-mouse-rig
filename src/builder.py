@@ -320,6 +320,8 @@ class RigBuilder:
             # Incomplete builder, ignore
             return
 
+        self._detect_and_apply_special_cases()
+
         self.config.validate_mode()
         self.config.validate_hold()
 
@@ -327,6 +329,48 @@ class RigBuilder:
 
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
         self.rig_state.add_builder(active)
+
+    def _detect_and_apply_special_cases(self):
+        """Detect and apply any necessary config transformations
+
+        Checks for special cases that need to be rewritten before execution.
+        """
+        # Transform 180° direction reversals to vector operations for smooth zero transitions
+        if (self.is_anonymous and
+            self.config.property == "direction" and
+            (self.config.operator == "to" or self.config.operator == "mul")):
+
+            # Check if this is actually a 180° reversal before transforming
+            current_dir = self.rig_state.base.direction
+
+            # Calculate target direction based on operator
+            if self.config.operator == "to":
+                target_dir = Vec2.from_tuple(self.config.value).normalized()
+            else:  # mul
+                scalar = self.config.value
+                target_dir = Vec2(current_dir.x * scalar, current_dir.y * scalar).normalized()
+
+            # Only transform if approximately 180° (dot product ≈ -1)
+            dot_product = current_dir.dot(target_dir)
+            if dot_product < -0.99:
+                self._convert_direction_reversal_to_vector()
+
+    def _convert_direction_reversal_to_vector(self):
+        """Convert 180° direction reversals to vector operations
+
+        This allows smooth velocity transitions through zero when reversing direction.
+        Transforms the config in-place from direction to vector property.
+        Only called after 180° reversal is already detected.
+        """
+        # Convert to vector reversal which supports smooth zero transitions
+        current_velocity = self.rig_state.base.direction * self.rig_state.base.speed
+        reversed_velocity = current_velocity * -1
+
+        # Transform config to vector operation (preserves all lifecycle settings)
+        self.config.property = "vector"
+        self.config.operator = "to"
+        self.config.value = (reversed_velocity.x, reversed_velocity.y)
+        self.config.mode = "override"
 
     def _calculate_rate_durations(self):
         """Calculate durations from rate parameters"""

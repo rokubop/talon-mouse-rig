@@ -444,10 +444,10 @@ class PropertyAnimator:
 
 def _lerp_direction(v1: Vec2, v2: Vec2, t: float) -> Vec2:
     """Linear interpolation between two direction vectors
-    
+
     Args:
         v1: Start direction vector
-        v2: End direction vector  
+        v2: End direction vector
         t: Progress [0, 1]
     """
     x = v1.x + (v2.x - v1.x) * t
