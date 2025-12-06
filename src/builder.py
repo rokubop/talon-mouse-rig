@@ -634,7 +634,7 @@ class ActiveBuilder:
         self.group_lifecycle: Optional[Lifecycle] = None
         self.group_base_value: Optional[Any] = None
         self.group_target_value: Optional[Any] = None
-        
+
         # Flag to mark builder for removal (set when group_lifecycle completes)
         self._marked_for_removal: bool = False
 

@@ -771,7 +771,7 @@ class RigState:
             if builder._marked_for_removal:
                 completed.append(layer)
                 continue
-            
+
             # Final advance to ensure target achieved
             still_active = builder.advance(current_time)
 

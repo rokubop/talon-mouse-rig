@@ -151,6 +151,138 @@ def test_speed_mul(on_success, on_failure):
     cron.after("400ms", check_movement)
 
 
+def test_speed_to_negative(on_success, on_failure):
+    """Test: rig.speed.to(-5) - negative speed should reverse direction"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    # Start moving right
+    rig.direction.to(1, 0)
+    rig.speed.to(5)
+    actions.sleep("200ms")
+
+    # Set negative speed
+    start_pos = ctrl.mouse_pos()
+    rig.speed.to(-5)
+
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        # Speed should be negative
+        if abs(rig_check.state.speed - (-5)) > 0.1:
+            on_failure(f"Speed wrong: expected -5, got {rig_check.state.speed}")
+            return
+
+        # Direction should stay right (1, 0) - negative speed reverses movement
+        dir_x, dir_y = rig_check.state.direction.x, rig_check.state.direction.y
+        if abs(dir_x - 1.0) > 0.1 or abs(dir_y) > 0.1:
+            on_failure(f"Direction wrong: expected (1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+            return
+
+        # Should be moving left (direction × negative speed)
+        dx = end_pos[0] - start_pos[0]
+        if dx > -10:
+            on_failure(f"Expected leftward movement, got dx={dx}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
+
+
+def test_speed_add_negative(on_success, on_failure):
+    """Test: rig.speed.add(-7) - subtracting speed that goes negative"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    # Start at speed 5 moving right
+    rig.direction.to(1, 0)
+    rig.speed.to(5)
+    actions.sleep("200ms")
+
+    # Add -7, resulting in -2 (should reverse)
+    start_pos = ctrl.mouse_pos()
+    rig.speed.add(-7)
+
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        # Speed should be -2 (5 + -7 = -2)
+        if abs(rig_check.state.speed - (-2)) > 0.1:
+            on_failure(f"Speed wrong: expected -2, got {rig_check.state.speed}")
+            return
+
+        # Direction should stay right (1, 0) - negative speed reverses movement
+        dir_x, dir_y = rig_check.state.direction.x, rig_check.state.direction.y
+        if abs(dir_x - 1.0) > 0.1 or abs(dir_y) > 0.1:
+            on_failure(f"Direction wrong: expected (1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+            return
+
+        # Should be moving left (direction × negative speed)
+        dx = end_pos[0] - start_pos[0]
+        if dx > -5:
+            on_failure(f"Expected leftward movement, got dx={dx}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
+
+
+def test_speed_add_negative_over(on_success, on_failure):
+    """Test: rig.speed.add(-10).over(ms) - gradual deceleration through zero to reverse"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    # Start at speed 5 moving right
+    rig.direction.to(1, 0)
+    rig.speed.to(5)
+    actions.sleep("200ms")
+    start_pos = ctrl.mouse_pos()
+
+    # Add -10 over time, should slow, stop, reverse
+    rig.speed.add(-10).over(500)
+
+    def check_midpoint():
+        """Should still be moving right but slower"""
+        mid_pos = ctrl.mouse_pos()
+        
+        dx = mid_pos[0] - start_pos[0]
+        if dx < 5:
+            on_failure(f"Expected rightward movement at midpoint, got dx={dx}")
+            return
+        
+        def check_final():
+            """Should be moving left at speed -5"""
+            rig_final = actions.user.mouse_rig()
+            end_pos = ctrl.mouse_pos()
+            
+            # Final speed should be -5 (5 + -10 = -5)
+            if abs(rig_final.state.speed - (-5)) > 1:
+                on_failure(f"Final speed wrong: expected -5, got {rig_final.state.speed}")
+                return
+            
+            # Direction should stay right (1, 0) - negative speed reverses movement
+            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+            if abs(dir_x - 1.0) > 0.1 or abs(dir_y) > 0.1:
+                on_failure(f"Final direction wrong: expected (1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                return
+            
+            rig_final.stop()
+            on_success()
+        
+        cron.after("400ms", check_final)
+    
+    cron.after("300ms", check_midpoint)
+
+
 # ============================================================================
 # STOP TESTS
 # ============================================================================
@@ -308,6 +440,9 @@ SPEED_TESTS = [
     ("speed.to() over", test_speed_to_over),
     ("speed.add()", test_speed_add),
     ("speed.mul()", test_speed_mul),
+    ("speed.to(-5) negative", test_speed_to_negative),
+    ("speed.add(-7) negative", test_speed_add_negative),
+    ("speed.add(-10).over(ms)", test_speed_add_negative_over),
     ("stop immediate", test_stop_immediate),
     ("stop over", test_stop_over),
     ("stop over then callback", test_stop_over_then_callback),

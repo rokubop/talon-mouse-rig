@@ -225,6 +225,62 @@ def test_vector_to_over(on_success, on_failure):
     cron.after("700ms", check_final)
 
 
+def test_vector_add_opposite_over(on_success, on_failure):
+    """Test: rig.vector.add(x, y).over(ms) - adding opposite direction force gradually"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+    actions.sleep("100ms")
+
+    # Start moving right at speed 3
+    rig.vector.to(3, 0)
+    actions.sleep("200ms")
+    start_pos = ctrl.mouse_pos()
+
+    # Add opposite force (left) with higher magnitude over time
+    # This should slow down, stop, then reverse direction
+    rig.vector.add(-6, 0).over(500)
+
+    def check_midpoint():
+        """Check that we're slowing down during transition"""
+        mid_pos = ctrl.mouse_pos()
+        rig_mid = actions.user.mouse_rig()
+
+        # Should still be moving right but slower (3 - partial 5)
+        dx = mid_pos[0] - start_pos[0]
+        if dx < 20:
+            on_failure(f"Expected rightward movement at midpoint, got dx={dx}")
+            return
+
+        def check_final():
+            """Check final state after transition completes"""
+            end_pos = ctrl.mouse_pos()
+            rig_final = actions.user.mouse_rig()
+
+            # Final velocity should be (3, 0) + (-5, 0) = (-2, 0)
+            # So speed ~2, moving left
+            if abs(rig_final.state.speed - 2) > 1:
+                on_failure(f"Final speed is {rig_final.state.speed}, expected ~2")
+                return
+
+            # Direction should be left (-1, 0)
+            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                on_failure(f"Final direction is ({dir_x:.2f}, {dir_y:.2f}), expected (-1, 0)")
+                return
+
+            # Check actual movement: should have moved right initially, then reversed
+            total_dx = end_pos[0] - start_pos[0]
+            # Can't easily predict exact position, but speed should be leftward now
+
+            rig_final.stop()
+            on_success()
+
+        cron.after("800ms", check_final)
+
+    cron.after("300ms", check_midpoint)
+
+
 # ============================================================================
 # LAYER VECTOR TESTS
 # ============================================================================
@@ -403,6 +459,7 @@ VECTOR_TESTS = [
     ("vector.to(x, y) diagonal", test_vector_to_diagonal),
     ("vector.add(x, y)", test_vector_add),
     ("vector.to(x, y).over(ms)", test_vector_to_over),
+    ("vector.add(x, y).over(ms) opposite", test_vector_add_opposite_over),
     ("layer vector.offset.add(x, y)", test_layer_vector_offset_add),
     ("layer vector multiple forces", test_layer_vector_offset_multiple),
     ("layer vector.override.to(x, y)", test_layer_vector_override),
