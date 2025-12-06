@@ -499,18 +499,12 @@ class RigState:
             mode = builder.config.mode
             current_value = builder.get_interpolated_value()
 
-            layer_name = builder.config.layer_name
-            print(f"[COMPUTE_VELOCITY] Applying layer '{layer_name}' prop={prop} mode={mode} value={current_value}")
-            print(f"[COMPUTE_VELOCITY]   Before: speed={speed:.2f}, dir=({direction.x:.2f}, {direction.y:.2f})")
-
             if prop == "speed":
                 speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
             elif prop == "direction":
                 direction = mode_operations.apply_direction_mode(mode, current_value, direction)
             elif prop == "vector":
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
-
-            print(f"[COMPUTE_VELOCITY]   After: speed={speed:.2f}, dir=({direction.x:.2f}, {direction.y:.2f})")
 
         return speed, direction
 
@@ -773,6 +767,11 @@ class RigState:
         completed = []
 
         for layer, builder in list(self._active_builders.items()):
+            # Check if already marked for removal (e.g., group_lifecycle completed)
+            if builder._marked_for_removal:
+                completed.append(layer)
+                continue
+            
             # Final advance to ensure target achieved
             still_active = builder.advance(current_time)
 
@@ -1211,6 +1210,8 @@ class RigState:
                 base_value = builder.base_value  # Original direction
             elif builder.config.property == "pos":
                 base_value = Vec2(0, 0)  # Zero offset
+            elif builder.config.property == "vector":
+                base_value = Vec2(0, 0)  # Zero velocity
             else:
                 base_value = 0
 

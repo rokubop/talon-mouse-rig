@@ -367,7 +367,7 @@ def test_layer_vector_revert(on_success, on_failure):
     rig.vector.to(3, 0)
 
     # Add boost force: (2, 0) for extra speed
-    rig.layer("boost").vector.offset.add(2, 0).hold(300)
+    rig.layer("boost").vector.offset.add(2, 0)
 
     def check_during_boost():
         rig_check = actions.user.mouse_rig()

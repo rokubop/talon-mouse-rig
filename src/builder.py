@@ -217,10 +217,10 @@ class RigBuilder:
         self.config.validate_method_kwargs('revert', **all_kwargs)
 
         if rate is not None:
-            self.config.revert_rate = self._validate_timing(rate, 'rate')
+            self.config.revert_rate = validate_timing(rate, 'rate')
             self.config.revert_easing = easing
         else:
-            self.config.revert_ms = self._validate_timing(ms, 'ms') if ms is not None else 0
+            self.config.revert_ms = validate_timing(ms, 'ms') if ms is not None else 0
             self.config.revert_easing = easing
 
         self.config.revert_interpolation = interpolation
@@ -634,6 +634,9 @@ class ActiveBuilder:
         self.group_lifecycle: Optional[Lifecycle] = None
         self.group_base_value: Optional[Any] = None
         self.group_target_value: Optional[Any] = None
+        
+        # Flag to mark builder for removal (set when group_lifecycle completes)
+        self._marked_for_removal: bool = False
 
         # Create lifecycle
         self.lifecycle = Lifecycle(is_user_layer=not is_anonymous)
@@ -800,7 +803,8 @@ class ActiveBuilder:
                 if self.group_lifecycle.has_reverted():
                     group_reverted = True
                 self.group_lifecycle = None
-                return False  # Remove immediately when group revert completes
+                self._marked_for_removal = True  # Mark for removal
+                return False  # Signal removal
 
         # Update own lifecycle (only if no group lifecycle is active)
         self.lifecycle.advance(current_time)
