@@ -58,6 +58,10 @@ class RigState:
         # Stop callbacks (fired when frame loop stops)
         self._stop_callbacks: list = []
 
+        # Batch mode - defer operations until batch completes
+        self._batch_mode: bool = False
+        self._batch_queue: list = []
+
     def __repr__(self) -> str:
         pos = self.pos
         speed = self.speed
@@ -165,67 +169,96 @@ class RigState:
             if layer in self._throttle_times:
                 del self._throttle_times[layer]
 
+    def batch(self):
+        """Context manager to batch multiple operations together
+        
+        All operations within the batch will be queued and executed atomically
+        when the batch completes. This ensures they all take effect in the same frame.
+        
+        Example:
+            with rig.batch():
+                rig.layer("wind").vector.offset.add(2, 0)
+                rig.layer("gravity").vector.offset.add(0, 3)
+            # Both layers now active simultaneously
+        """
+        return BatchContext(self)
+
+    def _queue_or_execute(self, operation):
+        """Either queue the operation or execute it immediately
+        
+        Args:
+            operation: Callable that performs the state modification
+        """
+        if self._batch_mode:
+            self._batch_queue.append(operation)
+        else:
+            operation()
+
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add an active builder to state
 
         For user layers, if layer exists, add as child to existing builder.
         For base layers, operations execute with their configured lifecycle.
         """
-        layer = builder.config.layer_name
+        def operation():
+            layer = builder.config.layer_name
 
-        # Handle bake operation immediately
-        if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() else None)
-            return
-
-        # Validate mode consistency for user layers
-        if not builder.config.is_anonymous() and layer in self._active_builders:
-            existing_builder = self._active_builders[layer]
-            existing_mode = existing_builder.config.mode
-            new_mode = builder.config.mode
-
-            # Check for mode mixing
-            if existing_mode is not None and new_mode is not None and existing_mode != new_mode:
-                from .contracts import ConfigError
-                raise ConfigError(
-                    f"Cannot mix modes on layer '{layer}'.\n"
-                    f"Existing mode: '{existing_mode}'\n"
-                    f"Attempted mode: '{new_mode}'\n\n"
-                    f"Each layer must use a single mode. Either use .reset or use separate layers for different modes:\n"
-                    f"  rig.layer('boost').speed.offset.to(100)\n"
-                    f"  rig.layer('cap').speed.override.to(200)  # Different layer"
-                )
-
-        behavior = builder.config.get_effective_behavior()
-
-        if not builder.config.is_anonymous() and layer in self._active_builders:
-            if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
+            # Handle bake operation immediately
+            if builder.config.operator == "bake":
+                self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() else None)
                 return
 
-        self._handle_base_layer_behavior(builder, behavior)
+            # Validate mode consistency for user layers
+            if not builder.config.is_anonymous() and layer in self._active_builders:
+                existing_builder = self._active_builders[layer]
+                existing_mode = existing_builder.config.mode
+                new_mode = builder.config.mode
 
-        self._active_builders[layer] = builder
+                # Check for mode mixing
+                if existing_mode is not None and new_mode is not None and existing_mode != new_mode:
+                    from .contracts import ConfigError
+                    raise ConfigError(
+                        f"Cannot mix modes on layer '{layer}'.\n"
+                        f"Existing mode: '{existing_mode}'\n"
+                        f"Attempted mode: '{new_mode}'\n\n"
+                        f"Each layer must use a single mode. Either use .reset or use separate layers for different modes:\n"
+                        f"  rig.layer('boost').speed.offset.to(100)\n"
+                        f"  rig.layer('cap').speed.override.to(200)  # Different layer"
+                    )
 
-        # Track layer order
-        if builder.config.order is not None:
-            self._layer_orders[layer] = builder.config.order
-        elif layer != "__base__":
-            if layer not in self._layer_orders:
-                self._layer_orders[layer] = self._next_auto_order
-                self._next_auto_order += 1
+            behavior = builder.config.get_effective_behavior()
 
-        # Start frame loop if builder has lifecycle
-        if not builder.lifecycle.is_complete():
-            self._ensure_frame_loop_running()
-            return
+            if not builder.config.is_anonymous() and layer in self._active_builders:
+                if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
+                    return
 
-        # Handle instant completion
-        self._handle_instant_completion(builder, layer)
-        
-        # After adding builder, check if frame loop should be running
-        # (e.g., if layer creates velocity movement even with base speed 0)
-        if self._should_frame_loop_be_active():
-            self._ensure_frame_loop_running()
+            self._handle_base_layer_behavior(builder, behavior)
+
+            self._active_builders[layer] = builder
+
+            # Track layer order
+            if builder.config.order is not None:
+                self._layer_orders[layer] = builder.config.order
+            elif layer != "__base__":
+                if layer not in self._layer_orders:
+                    self._layer_orders[layer] = self._next_auto_order
+                    self._next_auto_order += 1
+
+            # Start frame loop if builder has lifecycle
+            if not builder.lifecycle.is_complete():
+                if not self._batch_mode:
+                    self._ensure_frame_loop_running()
+                return
+
+            # Handle instant completion
+            self._handle_instant_completion(builder, layer)
+            
+            # After adding builder, check if frame loop should be running
+            # (e.g., if layer creates velocity movement even with base speed 0)
+            if not self._batch_mode and self._should_frame_loop_be_active():
+                self._ensure_frame_loop_running()
+
+        self._queue_or_execute(operation)
 
     def remove_builder(self, layer: str, bake: bool = False):
         """Remove an active builder"""
@@ -1229,3 +1262,34 @@ class RigState:
 
             # Clear all children - we'll revert as a single coordinated unit
             builder.children = []
+
+
+class BatchContext:
+    """Context manager for batching rig operations
+    
+    Defers all state modifications until the batch completes,
+    ensuring they all take effect in the same frame.
+    """
+    
+    def __init__(self, rig_state: RigState):
+        self.rig_state = rig_state
+    
+    def __enter__(self):
+        self.rig_state._batch_mode = True
+        self.rig_state._batch_queue = []
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.rig_state._batch_mode = False
+        
+        # Execute all queued operations atomically
+        for operation in self.rig_state._batch_queue:
+            operation()
+        
+        self.rig_state._batch_queue = []
+        
+        # Now check if we need to start/continue frame loop
+        if self.rig_state._should_frame_loop_be_active():
+            self.rig_state._ensure_frame_loop_running()
+        
+        return False  # Don't suppress exceptions
