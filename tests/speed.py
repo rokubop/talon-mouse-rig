@@ -253,33 +253,33 @@ def test_speed_add_negative_over(on_success, on_failure):
     def check_midpoint():
         """Should still be moving right but slower"""
         mid_pos = ctrl.mouse_pos()
-        
+
         dx = mid_pos[0] - start_pos[0]
         if dx < 5:
             on_failure(f"Expected rightward movement at midpoint, got dx={dx}")
             return
-        
+
         def check_final():
             """Should be moving left at speed -5"""
             rig_final = actions.user.mouse_rig()
             end_pos = ctrl.mouse_pos()
-            
+
             # Final speed should be -5 (5 + -10 = -5)
             if abs(rig_final.state.speed - (-5)) > 1:
                 on_failure(f"Final speed wrong: expected -5, got {rig_final.state.speed}")
                 return
-            
+
             # Direction should stay right (1, 0) - negative speed reverses movement
             dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
             if abs(dir_x - 1.0) > 0.1 or abs(dir_y) > 0.1:
                 on_failure(f"Final direction wrong: expected (1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
                 return
-            
+
             rig_final.stop()
             on_success()
-        
+
         cron.after("400ms", check_final)
-    
+
     cron.after("300ms", check_midpoint)
 
 

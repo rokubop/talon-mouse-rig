@@ -556,6 +556,158 @@ def test_layer_direction_with_callbacks(on_success, on_failure):
 
 
 # ============================================================================
+# DIRECTION REVERSAL / INVERSION TESTS
+# ============================================================================
+
+def test_direction_reverse_180_over_time(on_success, on_failure):
+    """Test: rig.direction.to(-x, -y).over(ms) - 180° reversal should be smooth"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+    actions.sleep("100ms")
+
+    # Start moving right
+    rig.speed(TEST_SPEED)
+    rig.direction.to(1, 0)  # 0° (right)
+    actions.sleep("200ms")
+    start_pos = ctrl.mouse_pos()
+
+    # Reverse direction over time (180° turn)
+    rig.direction.to(-1, 0).over(500)  # Should rotate to 180° (left)
+
+    def check_midpoint():
+        """During rotation - should be transitioning"""
+        mid_pos = ctrl.mouse_pos()
+
+        # Should have some rightward movement initially
+        dx = mid_pos[0] - start_pos[0]
+        if dx < 5:
+            on_failure(f"Expected some rightward movement during transition, got dx={dx}")
+            return
+
+        def check_final():
+            """After rotation completes - should be moving left"""
+            rig_final = actions.user.mouse_rig()
+            end_pos = ctrl.mouse_pos()
+
+            # Direction should be left (-1, 0)
+            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                return
+
+            # Should be moving left now
+            dx_final = end_pos[0] - mid_pos[0]
+            if dx_final > -5:
+                on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
+                return
+
+            rig_final.stop()
+            on_success()
+
+        cron.after("400ms", check_final)
+
+    cron.after("300ms", check_midpoint)
+
+
+def test_reverse_method_instant(on_success, on_failure):
+    """Test: rig.reverse() - instant 180° turn"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+    actions.sleep("100ms")
+
+    # Start moving right
+    rig.speed(TEST_SPEED)
+    rig.direction.to(1, 0)
+    actions.sleep("200ms")
+    start_pos = ctrl.mouse_pos()
+
+    # Instant reverse
+    rig.reverse()
+
+    def check_reversed():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        # Direction should be reversed (left)
+        dir_x, dir_y = rig_check.state.direction.x, rig_check.state.direction.y
+        if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+            on_failure(f"Direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+            return
+
+        # Should be moving left
+        dx = end_pos[0] - start_pos[0]
+        if dx > -10:
+            on_failure(f"Expected leftward movement, got dx={dx}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_reversed)
+
+
+def test_reverse_method_over_time(on_success, on_failure):
+    """Test: rig.reverse(ms) - smooth 180° turn over time with inertia"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+    actions.sleep("100ms")
+
+    # Start moving right
+    rig.speed(TEST_SPEED)
+    rig.direction.to(1, 0)
+    actions.sleep("200ms")
+    start_pos = ctrl.mouse_pos()
+
+    # Gradual reverse - instant flip + counter-force over time
+    rig.reverse(1000)
+
+    def check_midpoint():
+        """During reversal - should still be moving left (inertia)"""
+        mid_pos = ctrl.mouse_pos()
+
+        # After instant flip: velocity is inverted, still moving left due to inertia
+        # Counter-force is gradually applied to slow down and reverse
+        dx = mid_pos[0] - start_pos[0]
+        if dx > -10:
+            on_failure(f"Expected leftward movement during reversal (inertia), got dx={dx}")
+            return
+
+        def check_final():
+            """After reversal completes - should be moving right"""
+            rig_final = actions.user.mouse_rig()
+            end_pos = ctrl.mouse_pos()
+
+            # Direction should still be inverted in state (left)
+            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                return
+
+            # But speed should be positive now, so moving right (dir × speed = left × -speed = right)
+            # Actually with counter-force, final speed should be positive
+            # Check: should be moving RIGHT now (counter-force completed)
+            dx_final = end_pos[0] - mid_pos[0]
+            if dx_final < 10:
+                on_failure(f"Expected rightward movement after reversal completes, got dx={dx_final}")
+                return
+
+            # Check final speed is positive (moving in intended reversed direction)
+            if rig_final.state.speed < 2:
+                on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
+                return
+
+            rig_final.stop()
+            on_success()
+
+        cron.after("1200ms", check_final)
+
+    cron.after("300ms", check_midpoint)
+
+
+# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
@@ -573,4 +725,7 @@ DIRECTION_TESTS = [
     ("layer direction.override.to(x, y).over(ms)", test_layer_direction_override_to_over),
     ("layer direction.override.to().over().revert()", test_layer_direction_override_to_over_revert),
     ("layer direction with callbacks", test_layer_direction_with_callbacks),
+    ("direction 180° reversal over time", test_direction_reverse_180_over_time),
+    ("reverse() instant", test_reverse_method_instant),
+    ("reverse(ms) over time", test_reverse_method_over_time),
 ]
