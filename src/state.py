@@ -221,6 +221,11 @@ class RigState:
 
         # Handle instant completion
         self._handle_instant_completion(builder, layer)
+        
+        # After adding builder, check if frame loop should be running
+        # (e.g., if layer creates velocity movement even with base speed 0)
+        if self._should_frame_loop_be_active():
+            self._ensure_frame_loop_running()
 
     def remove_builder(self, layer: str, bake: bool = False):
         """Remove an active builder"""
@@ -493,6 +498,10 @@ class RigState:
             prop = builder.config.property
             mode = builder.config.mode
             current_value = builder.get_interpolated_value()
+            
+            layer_name = builder.config.layer_name
+            print(f"[COMPUTE_VELOCITY] Applying layer '{layer_name}' prop={prop} mode={mode} value={current_value}")
+            print(f"[COMPUTE_VELOCITY]   Before: speed={speed:.2f}, dir=({direction.x:.2f}, {direction.y:.2f})")
 
             if prop == "speed":
                 speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
@@ -500,6 +509,8 @@ class RigState:
                 direction = mode_operations.apply_direction_mode(mode, current_value, direction)
             elif prop == "vector":
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
+            
+            print(f"[COMPUTE_VELOCITY]   After: speed={speed:.2f}, dir=({direction.x:.2f}, {direction.y:.2f})")
 
         return speed, direction
 
@@ -846,8 +857,22 @@ class RigState:
             self._stop_callbacks.clear()
 
     def _has_movement(self) -> bool:
-        """Check if there's any movement happening (base speed non-zero)"""
-        return self._base_speed != 0
+        """Check if there's any movement happening (base speed or velocity layers)"""
+        # Fast path: base speed is non-zero
+        if self._base_speed != 0:
+            return True
+        
+        # Check if any velocity-affecting builders exist
+        # If they do, they could create movement even with base speed 0
+        for builder in self._active_builders.values():
+            prop = builder.config.property
+            if prop in ("speed", "direction", "vector"):
+                # For speed/vector with offset mode, they add to velocity
+                # For direction, it only matters if speed > 0
+                if prop in ("speed", "vector"):
+                    return True
+        
+        return False
 
     def _should_frame_loop_be_active(self) -> bool:
         """Check if frame loop should be running (movement or animating builders)

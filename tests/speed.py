@@ -263,6 +263,46 @@ def test_stop_callback_not_fired_on_interrupt(on_success, on_failure):
 # TEST LIST
 # ============================================================================
 
+def test_layer_speed_offset_from_stopped(on_success, on_failure):
+    """Test: layer().speed.offset.add() when base speed is 0 - should start movement"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+    actions.sleep("100ms")
+
+    # Set direction but no base speed
+    rig.direction.to(1, 0)
+    
+    # Add speed via layer offset
+    rig.layer("boost").speed.offset.add(5)
+    start_pos = ctrl.mouse_pos()
+
+    def check_movement():
+        rig_check = actions.user.mouse_rig()
+        end_pos = ctrl.mouse_pos()
+
+        # Should have computed speed from layer
+        if abs(rig_check.state.speed - 5) > 1:
+            on_failure(f"Speed is {rig_check.state.speed}, expected ~5")
+            return
+
+        # Frame loop should be running
+        if rig_check._state._frame_loop_job is None:
+            on_failure("Frame loop should be running with layer speed")
+            return
+
+        # Should have actual movement
+        dx = end_pos[0] - start_pos[0]
+        if dx < 10:
+            on_failure(f"Expected rightward movement, only moved {dx}px")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("400ms", check_movement)
+
+
 SPEED_TESTS = [
     ("speed.to()", test_speed_to),
     ("speed.to() over", test_speed_to_over),
@@ -272,4 +312,5 @@ SPEED_TESTS = [
     ("stop over", test_stop_over),
     ("stop over then callback", test_stop_over_then_callback),
     ("stop callback not fired on interrupt", test_stop_callback_not_fired_on_interrupt),
+    ("layer speed offset from stopped", test_layer_speed_offset_from_stopped),
 ]
