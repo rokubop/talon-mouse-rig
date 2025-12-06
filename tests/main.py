@@ -27,12 +27,14 @@ def toggle_test_ui(show: bool = None):
         from .position import POSITION_TESTS
         from .speed import SPEED_TESTS
         from .direction import DIRECTION_TESTS
+        from .vector import VECTOR_TESTS
         from .validation import VALIDATION_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
             ("Speed", SPEED_TESTS),
             ("Direction", DIRECTION_TESTS),
+            ("Vector", VECTOR_TESTS),
             ("Validation", VALIDATION_TESTS)
         ]
 
@@ -298,6 +300,7 @@ def stop_all_tests():
     actions.user.ui_elements_set_state("run_all_Position", False)
     actions.user.ui_elements_set_state("run_all_Speed", False)
     actions.user.ui_elements_set_state("run_all_Direction", False)
+    actions.user.ui_elements_set_state("run_all_Vector", False)
     actions.user.ui_elements_set_state("run_all_Validation", False)
     actions.user.ui_elements_set_state("current_test", None)
 
@@ -329,7 +332,7 @@ def test_buttons_ui(test_groups):
     for group_name, tests in test_groups:
         state_key = f"run_all_{group_name}"
         run_all_active = state.get(state_key, False)
-        is_collapsed, set_collapsed = state.use(f"collapsed_{group_name}", False)
+        is_collapsed, set_collapsed = state.use(f"collapsed_{group_name}", True)
         run_all_icon = "stop" if run_all_active else "play"
         run_all_label = f"Run All {group_name}"
         run_all_color = "#ff5555" if run_all_active else "#00aa00"

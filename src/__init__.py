@@ -150,6 +150,11 @@ class Rig:
         """Direction property accessor (base layer)"""
         return RigBuilder(self._state).direction
 
+    @property
+    def vector(self):
+        """Vector property accessor (base layer)"""
+        return RigBuilder(self._state).vector
+
     # ========================================================================
     # LAYER METHOD
     # ========================================================================

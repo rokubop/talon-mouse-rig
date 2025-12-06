@@ -355,6 +355,79 @@ class PropertyAnimator:
 
         return target_offset
 
+    @staticmethod
+    def animate_vector(
+        base_vector: Vec2,
+        target_vector: Vec2,
+        phase: Optional[str],
+        progress: float,
+        has_reverted: bool = False
+    ) -> Vec2:
+        """Animate a velocity vector (speed + direction combined).
+
+        Args:
+            base_vector: The base velocity vector
+            target_vector: The target velocity vector
+            phase: Current lifecycle phase
+            progress: Progress [0, 1] within current phase
+            has_reverted: Whether this lifecycle completed via revert
+
+        Returns:
+            Current animated velocity vector
+        """
+        if phase is None:
+            # Lifecycle complete
+            if has_reverted:
+                return base_vector
+            return target_vector
+
+        if phase == LifecyclePhase.OVER:
+            # Interpolate both magnitude and direction
+            base_speed = base_vector.magnitude()
+            target_speed = target_vector.magnitude()
+            interpolated_speed = lerp(base_speed, target_speed, progress)
+
+            # Handle zero vectors
+            if base_speed < EPSILON and target_speed < EPSILON:
+                return Vec2(0, 0)
+            elif base_speed < EPSILON:
+                return target_vector.normalized() * interpolated_speed
+            elif target_speed < EPSILON:
+                return base_vector.normalized() * (base_speed * (1.0 - progress))
+
+            # Interpolate direction
+            base_dir = base_vector.normalized()
+            target_dir = target_vector.normalized()
+            interpolated_dir = _lerp_direction(base_dir, target_dir, progress)
+
+            return interpolated_dir * interpolated_speed
+
+        elif phase == LifecyclePhase.HOLD:
+            return target_vector
+
+        elif phase == LifecyclePhase.REVERT:
+            # Interpolate back from target to base
+            base_speed = base_vector.magnitude()
+            target_speed = target_vector.magnitude()
+            interpolated_speed = lerp(target_speed, base_speed, progress)
+
+            # Handle zero vectors
+            if base_speed < EPSILON and target_speed < EPSILON:
+                return Vec2(0, 0)
+            elif base_speed < EPSILON:
+                return target_vector.normalized() * (target_speed * (1.0 - progress))
+            elif target_speed < EPSILON:
+                return base_vector.normalized() * interpolated_speed
+
+            # Interpolate direction
+            base_dir = base_vector.normalized()
+            target_dir = target_vector.normalized()
+            interpolated_dir = _lerp_direction(target_dir, base_dir, progress)
+
+            return interpolated_dir * interpolated_speed
+
+        return target_vector
+
 
 def _lerp_direction(v1: Vec2, v2: Vec2, t: float) -> Vec2:
     """Linear interpolation between two direction vectors"""

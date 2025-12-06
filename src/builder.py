@@ -125,12 +125,16 @@ class RigBuilder:
     def direction(self) -> 'PropertyBuilder':
         return PropertyBuilder(self, "direction")
 
+    @property
+    def vector(self) -> 'PropertyBuilder':
+        return PropertyBuilder(self, "vector")
+
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
         from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS
 
         # Valid properties are handled above
-        valid_properties = ['pos', 'speed', 'direction']
+        valid_properties = ['pos', 'speed', 'direction', 'vector']
         all_valid = valid_properties + VALID_BUILDER_METHODS
 
         # Find closest match
@@ -363,6 +367,14 @@ class RigBuilder:
                     self.config.over_ms = rate_utils.calculate_position_by_duration(
                         offset, self.config.over_rate
                     )
+            elif self.config.property == "vector":
+                # For vector, use default rate as speed rate, or require explicit rate parameter
+                current_vec = self.rig_state.base.direction * self.rig_state.base.speed
+                target_vec = Vec2.from_tuple(self.config.value) if self.config.operator == "to" else current_vec + Vec2.from_tuple(self.config.value)
+                # Use rate as speed rate (could be extended to support separate speed/direction rates)
+                self.config.over_ms = rate_utils.calculate_vector_duration(
+                    current_vec, target_vec, self.config.over_rate, self.config.over_rate
+                )
 
         # Calculate revert duration from rate
         if self.config.revert_rate is not None:
@@ -394,6 +406,13 @@ class RigBuilder:
                     self.config.revert_ms = rate_utils.calculate_position_by_duration(
                         offset, self.config.revert_rate
                     )
+            elif self.config.property == "vector":
+                # For vector revert, calculate from target back to current
+                current_vec = self.rig_state.base.direction * self.rig_state.base.speed
+                target_vec = Vec2.from_tuple(self.config.value) if self.config.operator == "to" else current_vec + Vec2.from_tuple(self.config.value)
+                self.config.revert_ms = rate_utils.calculate_vector_duration(
+                    target_vec, current_vec, self.config.revert_rate, self.config.revert_rate
+                )
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
@@ -403,6 +422,9 @@ class RigBuilder:
             return self.rig_state.base.direction
         elif self.config.property == "pos":
             return self.rig_state.base.pos
+        elif self.config.property == "vector":
+            # Return velocity vector (direction * speed)
+            return self.rig_state.base.direction * self.rig_state.base.speed
         return 0
 
     def _calculate_target_value(self, current: Any) -> Any:
@@ -674,6 +696,9 @@ class ActiveBuilder:
             return self.rig_state.base.direction
         elif self.config.property == "pos":
             return self.rig_state.base.pos
+        elif self.config.property == "vector":
+            # Return velocity vector (direction * speed)
+            return self.rig_state.base.direction * self.rig_state.base.speed
         return 0
 
     def _calculate_target_value(self) -> Any:
@@ -702,6 +727,12 @@ class ActiveBuilder:
 
         elif self.config.property == "pos":
             return mode_operations.calculate_position_target(operator, value, current, mode)
+
+        elif self.config.property == "vector":
+            # For vector, current is velocity (direction * speed)
+            current_speed = self.rig_state.base.speed
+            current_direction = self.rig_state.base.direction
+            return mode_operations.calculate_vector_target(operator, value, current_speed, current_direction, mode)
 
         return current
 
@@ -909,6 +940,36 @@ class ActiveBuilder:
                         self.target_value.x + (self.base_value.x - self.target_value.x) * progress,
                         self.target_value.y + (self.base_value.y - self.target_value.y) * progress
                     )
+        elif self.config.property == "vector":
+            # For vector, neutral depends on mode
+            if mode == "scale":
+                # Scale mode: animate multiplier from 1.0 (stored in x component)
+                return PropertyAnimator.animate_scalar(
+                    1.0,
+                    self.target_value.x,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted()
+                )
+            elif mode == "offset":
+                # Offset mode: animate velocity vector from zero
+                neutral = Vec2(0, 0)
+                return PropertyAnimator.animate_vector(
+                    neutral,
+                    self.target_value,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted()
+                )
+            else:  # override
+                # Override: animate from base velocity to target velocity
+                return PropertyAnimator.animate_vector(
+                    self.base_value,
+                    self.target_value,
+                    phase,
+                    progress,
+                    self.lifecycle.has_reverted()
+                )
 
         return self.target_value
 
@@ -948,6 +1009,14 @@ class ActiveBuilder:
                 )
             elif property_type == "pos":
                 return PropertyAnimator.animate_position(
+                    self.group_base_value,
+                    self.group_target_value,
+                    phase,
+                    progress,
+                    self.group_lifecycle.has_reverted()
+                )
+            elif property_type == "vector":
+                return PropertyAnimator.animate_vector(
                     self.group_base_value,
                     self.group_target_value,
                     phase,
@@ -1007,6 +1076,28 @@ class ActiveBuilder:
                 if child.config.property == "pos":
                     total_offset = total_offset + child._get_own_value()
             return total_offset
+
+        elif property_type == "vector":
+            # For vector, aggregate velocity contributions
+            # In scale mode, multiply scalars. In offset/override, add vectors
+            mode = self.config.mode
+
+            if mode == "scale":
+                # Scale mode: multiply all scale factors
+                total_scale = self._get_own_value()
+                for child in self.children:
+                    if child.config.property == "vector":
+                        total_scale *= child._get_own_value()
+                return total_scale
+            else:
+                # Offset/override mode: add velocity vectors
+                total_vector = self._get_own_value()
+                for child in self.children:
+                    if child.config.property == "vector":
+                        child_vec = child._get_own_value()
+                        if isinstance(child_vec, Vec2):
+                            total_vector = total_vector + child_vec
+                return total_vector
 
         # Fallback
         return self._get_own_value()

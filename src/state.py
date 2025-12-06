@@ -923,6 +923,13 @@ class RigState:
         return self._compute_current_state()[2]
 
     @property
+    def vector(self) -> Vec2:
+        """Current computed velocity vector (speed * direction)"""
+        speed = self.speed
+        direction = self.direction
+        return direction * speed
+
+    @property
     def direction_cardinal(self) -> Optional[str]:
         """Current direction as cardinal/intercardinal string
 
@@ -1075,6 +1082,11 @@ class RigState:
         @property
         def direction(self) -> Vec2:
             return self._rig_state._base_direction
+
+        @property
+        def vector(self) -> Vec2:
+            """Base velocity vector (speed * direction)"""
+            return self._rig_state._base_direction * self._rig_state._base_speed
 
     @property
     def base(self) -> 'RigState.BaseState':

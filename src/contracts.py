@@ -113,7 +113,7 @@ VALID_RIG_METHODS = [
 ]
 
 VALID_RIG_PROPERTIES = [
-    'pos', 'speed', 'direction',
+    'pos', 'speed', 'direction', 'vector',
     'state', 'base',
     'stack', 'reset', 'queue', 'extend', 'throttle',
 ]

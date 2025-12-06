@@ -319,6 +319,62 @@ def apply_position_mode(
 # VECTOR OPERATIONS (velocity = speed + direction)
 # =============================================================================
 
+def calculate_vector_target(
+    operator: str,
+    value: Union[tuple, Vec2],
+    current_speed: float,
+    current_direction: Vec2,
+    mode: str
+) -> Vec2:
+    """Convert operator + value to canonical form for vector mode.
+
+    Args:
+        operator: The operation (to, add, sub)
+        value: The input value (x, y tuple or Vec2)
+        current_speed: Current speed magnitude
+        current_direction: Current direction vector
+        mode: The mode (offset, override, scale)
+
+    Returns:
+        Canonical Vec2 for the mode:
+        - offset: velocity contribution (additive)
+        - override: absolute velocity
+        - scale: multiplier as Vec2
+    """
+    vec = Vec2.from_tuple(value)
+
+    if mode == "scale":
+        # Scale mode: store multiplier as magnitude
+        if operator == "to":
+            return Vec2(vec.magnitude(), 0)  # Store as scalar in x component
+        elif operator in ("by", "add"):
+            return Vec2(1.0 + vec.magnitude(), 0)
+        elif operator == "sub":
+            return Vec2(1.0 - vec.magnitude(), 0)
+
+    elif mode == "override":
+        # Override mode: store absolute velocity vector
+        if operator == "to":
+            return vec
+        elif operator in ("by", "add"):
+            current_velocity = current_direction * current_speed
+            return current_velocity + vec
+        elif operator == "sub":
+            current_velocity = current_direction * current_speed
+            return current_velocity - vec
+
+    else:  # offset
+        # Offset mode: store velocity contribution
+        if operator == "to":
+            return vec
+        elif operator in ("by", "add"):
+            return vec
+        elif operator == "sub":
+            return -vec
+
+    return vec
+
+
 def apply_vector_mode(
     mode: str,
     canonical_value: Vec2,
