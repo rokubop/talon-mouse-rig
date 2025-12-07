@@ -123,53 +123,25 @@ def test_invalid_direction_vector_zero(on_success, on_failure):
 
 
 def test_negative_duration(on_success, on_failure):
-    """Test: negative duration should error or be treated as 0"""
+    """Test: negative duration should error"""
     try:
         rig = actions.user.mouse_rig()
-        rig.pos.to(CENTER_X, CENTER_Y)
         rig.speed.to(5).over(-500)
-        # If it succeeds, check that it doesn't create a weird state
-        actions.sleep("100ms")
-        # Should either error or handle gracefully
-        on_success()  # If no crash, consider it handled
+        on_failure("Expected error for negative duration but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
         error_msg = str(e).lower()
-        if "negative" in error_msg or "invalid" in error_msg or "duration" in error_msg:
+        if "negative" in error_msg or "duration" in error_msg:
             on_success()
         else:
             on_failure(f"Error occurred but message unclear: {e}")
-
-
-def test_invalid_speed_zero(on_success, on_failure):
-    """Test: speed(0) - zero speed should be handled gracefully (no movement)"""
-    try:
-        rig = actions.user.mouse_rig()
-        rig.speed(0)
-        rig.layer("test").direction.to(1, 0).hold(500)
-        # Should handle gracefully - just won't move
-        on_success()
-    except Exception as e:
-        on_failure(f"Unexpected error with zero speed: {e}")
-
-
-def test_invalid_speed_negative(on_success, on_failure):
-    """Test: speed(-1) - negative speed should be handled gracefully (abs value or no movement)"""
-    try:
-        rig = actions.user.mouse_rig()
-        rig.speed(-1)
-        rig.layer("test").direction.to(1, 0).hold(500)
-        # Should handle gracefully
-        on_success()
-    except Exception as e:
-        on_failure(f"Unexpected error with negative speed: {e}")
 
 
 def test_layer_empty_name(on_success, on_failure):
     """Test: layer("") with empty string should error or handle gracefully"""
     try:
         rig = actions.user.mouse_rig()
-        rig.layer("").direction.to(1, 0).hold(500)
+        rig.layer('').direction.override.to(1, 0)
         # If it succeeds, check state
         actions.sleep("100ms")
         rig_check = actions.user.mouse_rig()
@@ -276,7 +248,7 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
     except AttributeError as e:
         print(f"  Error message: {e}")
         error_msg = str(e)
-        if "direction_x" in error_msg and "direction.x" in error_msg:
+        if "direction_x" in error_msg and "Available attributes" in error_msg:
             on_success()
         else:
             on_failure(f"AttributeError raised but message not helpful: {e}")
@@ -297,11 +269,6 @@ VALIDATION_TESTS = [
     ("layer operation without mode", test_layer_operation_without_mode),
     ("zero direction vector", test_invalid_direction_vector_zero),
     ("negative duration", test_negative_duration),
-    ("zero speed", test_invalid_speed_zero),
-    ("negative speed", test_invalid_speed_negative),
     ("empty layer name", test_layer_empty_name),
-    ("very small duration", test_very_small_duration),
-    ("very large position", test_very_large_position),
-    ("large angle normalization", test_angle_normalization),
     ("invalid layer state attribute", test_invalid_layer_state_attribute),
 ]

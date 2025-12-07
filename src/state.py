@@ -1003,8 +1003,9 @@ class RigState:
             parts = [
                 f"prop={builder.config.property}",
                 f"mode={builder.config.mode}",
-                f"current_value={format_value(builder.get_interpolated_value())}",
-                f"target_value={format_value(builder.target_value)}",
+                f"operation={builder.config.operation}",
+                f"value={format_value(builder.get_interpolated_value())}",
+                f"target={format_value(builder.target_value)}",
                 f"time_alive={builder.time_alive:.2f}s",
             ]
 
@@ -1037,12 +1038,17 @@ class RigState:
             return self._builder.config.mode
 
         @property
-        def current_value(self):
+        def operation(self) -> str:
+            """Operation type: 'to', 'by', 'add', 'mult'"""
+            return self._builder.config.operation
+
+        @property
+        def value(self):
             """Current aggregated value (includes children) - always fresh"""
             return self._builder.get_interpolated_value()
 
         @property
-        def target_value(self):
+        def target(self):
             """Target value this layer is moving toward"""
             return self._builder.target_value
 
@@ -1050,6 +1056,26 @@ class RigState:
         def time_alive(self) -> float:
             """Time in seconds since this builder was created"""
             return self._builder.time_alive
+
+        @property
+        def time_left(self) -> float:
+            """Time in seconds until this layer completes (0 if infinite or no timing)"""
+            lifecycle = self._builder.lifecycle
+            total_duration = 0
+
+            if lifecycle.over_ms:
+                total_duration += lifecycle.over_ms
+            if lifecycle.hold_ms:
+                total_duration += lifecycle.hold_ms
+            if lifecycle.revert_ms:
+                total_duration += lifecycle.revert_ms
+
+            if total_duration == 0:
+                return 0  # Infinite/no timing
+
+            elapsed_ms = self._builder.time_alive * 1000
+            remaining_ms = max(0, total_duration - elapsed_ms)
+            return remaining_ms / 1000
 
         def __getattr__(self, name: str):
             """Provide helpful error messages for invalid attributes"""

@@ -79,6 +79,9 @@ class RigBuilder:
         if layer is None:
             self.config.layer_name = rig_state._generate_base_layer_name()
         else:
+            # Validate layer name
+            if not layer or not layer.strip():
+                raise ValueError("Empty layer name not allowed. Layer names must be non-empty strings.")
             self.config.layer_name = layer
 
         # Set order if provided
