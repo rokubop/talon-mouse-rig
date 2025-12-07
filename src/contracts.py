@@ -155,6 +155,11 @@ class RigAttributeError(AttributeError):
     pass
 
 
+class RigUsageError(Exception):
+    """Error for incorrect API usage"""
+    pass
+
+
 def find_closest_match(name: str, valid_options: list[str], max_distance: int = 2) -> Optional[str]:
     """Find closest match using simple edit distance
 
@@ -542,3 +547,20 @@ def validate_timing(value: Any, param_name: str) -> Optional[float]:
             f"got {type(value).__name__}: {repr(value)}"
         )
     return float(value)
+
+
+def validate_has_operation(config: 'BuilderConfig', method_name: str) -> None:
+    """Validate that a timing method has a prior operation to apply to
+
+    Args:
+        config: The builder config to check
+        method_name: Name of the timing method being called (for error message)
+
+    Raises:
+        RigUsageError: If no operation (property/operator) has been set
+    """
+    if config.property is None or config.operator is None:
+        raise RigUsageError(
+            f"Cannot call .{method_name}() without a prior operation. "
+            f"You must set a property (e.g., .speed.to(5), .direction.by(90)) before calling .{method_name}()."
+        )

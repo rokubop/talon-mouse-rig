@@ -8,7 +8,7 @@ import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
 from .core import Vec2, EPSILON
-from .contracts import BuilderConfig, LifecyclePhase, validate_timing
+from .contracts import BuilderConfig, LifecyclePhase, validate_timing, validate_has_operation
 from .lifecycle import Lifecycle, PropertyAnimator
 from . import rate_utils
 from . import mode_operations
@@ -174,6 +174,9 @@ class RigBuilder:
         all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
         self.config.validate_method_kwargs('over', **all_kwargs)
 
+        # Validate that there's an operation to transition over
+        validate_has_operation(self.config, 'over')
+
         if rate is not None:
             # Rate-based, duration will be calculated later
             self.config.over_rate = validate_timing(rate, 'rate')
@@ -191,6 +194,9 @@ class RigBuilder:
         return self
 
     def hold(self, ms: float) -> 'RigBuilder':
+        # Validate that there's an operation to hold
+        validate_has_operation(self.config, 'hold')
+
         self.config.hold_ms = validate_timing(ms, 'ms')
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self

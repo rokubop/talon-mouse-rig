@@ -1,4 +1,4 @@
-from talon import settings, actions, ctrl, actions
+from talon import settings, actions, ctrl, actions, cron
 from typing import Any
 from .settings import mod
 from .src import rig as get_rig, reload_rig

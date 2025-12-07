@@ -76,12 +76,12 @@ def reload_rig():
         except Exception as e:
             pass
 
-    # Then touch other src/ files
+    # Then touch other src/ files (skip ui.py so notification cron job can execute)
     for filename in os.listdir(src_dir):
-        if filename.endswith('.py') and filename != '__init__.py':
+        if filename.endswith('.py') and filename not in ('__init__.py', 'ui.py'):
             filepath = os.path.join(src_dir, filename)
             try:
-                os.utime(filepath, None)  # Updates to current time
+                os.utime(filepath, None)
                 touched_count += 1
             except Exception as e:
                 pass
@@ -97,6 +97,10 @@ def reload_rig():
                     touched_count += 1
                 except Exception as e:
                     pass
+
+    # Show reload notification
+    from .ui import show_reload_notification
+    show_reload_notification()
 
 
 class StopHandle:

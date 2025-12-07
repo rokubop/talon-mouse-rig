@@ -16,14 +16,10 @@ _test_runner_state = {
     "failed_count": 0
 }
 
-# ============================================================================
-# PUBLIC API
-# ============================================================================
 
 def toggle_test_ui(show: bool = None):
     """Main entry point - toggle the QA test UI"""
     try:
-        # Import test lists directly to avoid circular import issues
         from .position import POSITION_TESTS
         from .speed import SPEED_TESTS
         from .direction import DIRECTION_TESTS
@@ -41,12 +37,12 @@ def toggle_test_ui(show: bool = None):
         show = show if show is not None else not actions.user.ui_elements_get_trees()
 
         if show:
-            actions.user.ui_elements_show(lambda: test_buttons_ui(test_groups))
+            actions.user.ui_elements_show(lambda: test_runner_ui(test_groups))
             actions.user.ui_elements_show(test_result_ui)
             actions.user.ui_elements_show(test_status_ui)
             actions.user.ui_elements_show(test_summary_ui)
         else:
-            actions.user.ui_elements_hide(lambda: test_buttons_ui(test_groups))
+            actions.user.ui_elements_hide(lambda: test_runner_ui(test_groups))
             actions.user.ui_elements_hide(test_result_ui)
             actions.user.ui_elements_hide(test_status_ui)
             actions.user.ui_elements_hide(test_summary_ui)
@@ -61,10 +57,6 @@ def toggle_test_ui(show: bool = None):
             print("="*70 + "\n")
         raise
 
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
 
 def wait_for_position_async(target_x, target_y, tolerance, timeout_ms, on_success, on_failure):
     """Asynchronously wait for mouse position using cron polling"""
@@ -87,7 +79,6 @@ def wait_for_position_async(target_x, target_y, tolerance, timeout_ms, on_succes
 
 
 def wait_for_stop(check_duration=0.3, timeout=TIMEOUT):
-    """Wait for mouse to stop moving"""
     start = time.perf_counter()
     last_pos = ctrl.mouse_pos()
     stable_start = None
@@ -110,39 +101,27 @@ def wait_for_stop(check_duration=0.3, timeout=TIMEOUT):
 
 def move_to_center():
     """Move mouse to center position instantly"""
-    # Stop any active rig operations first
     actions.user.mouse_rig().stop()
     actions.sleep("100ms")
 
-    # Use rig to move to center so it knows the position
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("200ms")
 
 
-# ============================================================================
-# TEST RUNNER
-# ============================================================================
-
-def run_single_test(test_name, test_func, on_complete=None):
-    """Run a single test and show result - supports both sync and async tests"""
-
-    # Set current test name
+def run_single_test(test_name, test_func, on_complete=None, test_group=None):
     actions.user.ui_elements_set_state("current_test", test_name)
     actions.user.ui_elements_set_state("test_result", None)
 
     def on_test_success():
-        # Always stop the rig after test completes
         actions.user.mouse_rig().stop()
 
-        # Show success
         actions.user.ui_elements_set_state("test_result", {
             "success": True,
             "message": "PASSED"
         })
         print(f"PASSED: {test_name}")
 
-        # Clear result after delay
         def clear_and_complete():
             actions.user.ui_elements_set_state("test_result", None)
             actions.user.ui_elements_set_state("current_test", None)
@@ -151,10 +130,8 @@ def run_single_test(test_name, test_func, on_complete=None):
         cron.after("1s", clear_and_complete)
 
     def on_test_failure(error_msg):
-        # Always stop the rig after test completes
         actions.user.mouse_rig().stop()
 
-        # Show failure
         actions.user.ui_elements_set_state("test_result", {
             "success": False,
             "message": "FAILED"
@@ -162,7 +139,6 @@ def run_single_test(test_name, test_func, on_complete=None):
         print(f"FAILED: {test_name}")
         print(f"  Error: {error_msg}")
 
-        # Clear result after delay
         def clear_and_complete():
             actions.user.ui_elements_set_state("test_result", None)
             actions.user.ui_elements_set_state("current_test", None)
@@ -171,18 +147,16 @@ def run_single_test(test_name, test_func, on_complete=None):
         cron.after("1s", clear_and_complete)
 
     try:
-        # Move to center first
-        move_to_center()
+        # Skip move_to_center for validation tests
+        if test_group != "Validation":
+            move_to_center()
 
-        # Check if test function takes callbacks (async test)
         sig = inspect.signature(test_func)
         is_async_test = len(sig.parameters) >= 2
 
         if is_async_test:
-            # Run async test with callbacks
             test_func(on_test_success, on_test_failure)
         else:
-            # Run synchronous test
             try:
                 test_func()
                 on_test_success()
@@ -192,7 +166,6 @@ def run_single_test(test_name, test_func, on_complete=None):
                 on_test_failure(f"Exception: {e}")
 
     except Exception as e:
-        # Show error
         actions.user.ui_elements_set_state("test_result", {
             "success": False,
             "message": "ERROR"
@@ -208,14 +181,14 @@ def run_single_test(test_name, test_func, on_complete=None):
         cron.after("2s", clear_and_complete)
 
 
-def run_all_tests(tests):
-    """Run all tests in sequence"""
+def run_all_tests(tests, group_name):
     if _test_runner_state["running"]:
         return
 
     _test_runner_state["running"] = True
     _test_runner_state["current_test_index"] = 0
     _test_runner_state["tests"] = tests
+    _test_runner_state["group_name"] = group_name
     _test_runner_state["stop_requested"] = False
     _test_runner_state["passed_count"] = 0
     _test_runner_state["failed_count"] = 0
@@ -228,7 +201,6 @@ def run_all_tests(tests):
             return
 
         if _test_runner_state["current_test_index"] >= len(_test_runner_state["tests"]):
-            # All tests complete - show summary
             show_summary()
             return
 
@@ -236,7 +208,6 @@ def run_all_tests(tests):
         _test_runner_state["current_test_index"] += 1
 
         def on_test_complete(success):
-            # Always stop the rig after each test to ensure clean state
             actions.user.mouse_rig().stop()
 
             if success:
@@ -245,20 +216,17 @@ def run_all_tests(tests):
                 _test_runner_state["failed_count"] += 1
 
             if not success:
-                # Stop on failure and show summary
                 print("Stopping test run due to failure")
                 show_summary()
             elif _test_runner_state["running"]:
-                # Continue to next test
                 cron.after("200ms", run_next_test)
 
-        run_single_test(test_name, test_func, on_complete=on_test_complete)
+        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=_test_runner_state["group_name"])
 
     run_next_test()
 
 
 def show_summary():
-    """Show test run summary"""
     passed = _test_runner_state["passed_count"]
     failed = _test_runner_state["failed_count"]
     total = passed + failed
@@ -278,7 +246,6 @@ def show_summary():
         print(f"Failed: {failed}")
     print(f"{'='*50}\n")
 
-    # Clear summary after 3 seconds
     def clear_summary():
         actions.user.ui_elements_set_state("test_summary", None)
         stop_all_tests()
@@ -287,7 +254,6 @@ def show_summary():
 
 
 def stop_all_tests():
-    """Stop the test runner"""
     if _test_runner_state["interval_job"]:
         cron.cancel(_test_runner_state["interval_job"])
         _test_runner_state["interval_job"] = None
@@ -306,7 +272,6 @@ def stop_all_tests():
 
 
 def toggle_run_all(tests, group_name):
-    """Toggle running all tests in a group"""
     state_key = f"run_all_{group_name}"
     if _test_runner_state["running"] and actions.user.ui_elements_get_state(state_key, False):
         _test_runner_state["stop_requested"] = True
@@ -314,15 +279,11 @@ def toggle_run_all(tests, group_name):
         actions.user.ui_elements_set_state(state_key, False)
     else:
         actions.user.ui_elements_set_state(state_key, True)
-        run_all_tests(tests)
+        run_all_tests(tests, group_name)
 
 
-# ============================================================================
-# UI COMPONENTS
-# ============================================================================
-
-def test_buttons_ui(test_groups):
-    """UI element showing all test buttons grouped by category"""
+def test_runner_ui(test_groups):
+    """UI element showing test runner with collapsible groups and run controls"""
     screen, window, div, button, state, icon, text = actions.user.ui_elements(
         ["screen", "window", "div", "button", "state", "icon", "text"]
     )
@@ -338,7 +299,6 @@ def test_buttons_ui(test_groups):
         run_all_color = "#ff5555" if run_all_active else "#00aa00"
         chevron_icon = "chevron_right" if is_collapsed else "chevron_down"
 
-        # Unified header with collapse+title button and Run All button
         group_header = div(
             flex_direction="row",
             gap=10,
@@ -379,7 +339,6 @@ def test_buttons_ui(test_groups):
 
         test_buttons = []
         if not is_collapsed:
-            # Test list container with subtle border and spacing
             test_items = []
             for test_name, test_func in tests:
                 test_items.append(
@@ -392,7 +351,7 @@ def test_buttons_ui(test_groups):
                         color="#cccccc",
                         font_size=13,
                         border_radius=2,
-                        on_click=lambda e, f=test_func, n=test_name: run_single_test(n, f)
+                        on_click=lambda e, f=test_func, n=test_name, g=group_name: run_single_test(n, f, test_group=g)
                     )
                 )
 
@@ -437,7 +396,6 @@ def test_buttons_ui(test_groups):
 
 
 def test_status_ui():
-    """UI element showing currently running test name"""
     screen, div, text, state = actions.user.ui_elements(["screen", "div", "text", "state"])
 
     current_test = state.get("current_test", None)
@@ -457,7 +415,6 @@ def test_status_ui():
 
 
 def test_result_ui():
-    """UI element showing test result in center bottom"""
     screen, div, text, state, icon = actions.user.ui_elements(["screen", "div", "text", "state", "icon"])
 
     result = state.get("test_result", None)
@@ -488,7 +445,6 @@ def test_result_ui():
 
 
 def test_summary_ui():
-    """UI element showing test run summary"""
     screen, div, text, state = actions.user.ui_elements(["screen", "div", "text", "state"])
 
     summary = state.get("test_summary", None)

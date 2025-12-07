@@ -14,8 +14,8 @@ def test_multiple_properties_not_allowed(on_success, on_failure):
         rig.speed(3).direction.to(1, 0)
         on_failure("Expected error but operation succeeded")
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
-        # Check if error message mentions combining properties
         if "combine" in error_msg and "properties" in error_msg:
             on_success()
         else:
@@ -29,20 +29,7 @@ def test_hold_without_layer(on_success, on_failure):
         rig.hold(1000)
         on_failure("Expected error but operation succeeded")
     except Exception as e:
-        error_msg = str(e).lower()
-        if "layer" in error_msg or "must" in error_msg or "cannot" in error_msg:
-            on_success()
-        else:
-            on_failure(f"Error occurred but message unclear: {e}")
-
-
-def test_direction_without_layer(on_success, on_failure):
-    """Test: rig.direction.to() without layer should error"""
-    try:
-        rig = actions.user.mouse_rig()
-        rig.direction.to(1, 0)
-        on_failure("Expected error but operation succeeded")
-    except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "layer" in error_msg or "must" in error_msg or "cannot" in error_msg:
             on_success()
@@ -57,6 +44,7 @@ def test_over_without_operation(on_success, on_failure):
         rig.layer("test").over(500)
         on_failure("Expected error but operation succeeded")
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "over" in error_msg or "transition" in error_msg or "cannot" in error_msg:
             on_success()
@@ -77,7 +65,7 @@ def test_revert_without_operation(on_success, on_failure):
         else:
             on_failure("Layer created but no operation was performed")
     except Exception as e:
-        # If it errors, that's also acceptable
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "revert" in error_msg or "nothing" in error_msg or "cannot" in error_msg:
             on_success()
@@ -93,6 +81,7 @@ def test_hold_without_revert(on_success, on_failure):
         rig.direction.to(1, 0).hold(500)
         on_failure("Expected error for hold() without revert() but operation succeeded")
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "hold" in error_msg or "revert" in error_msg or "requires" in error_msg or "must" in error_msg:
             on_success()
@@ -107,8 +96,8 @@ def test_layer_operation_without_mode(on_success, on_failure):
         rig.layer("test").speed.to(100)
         on_failure("Expected error for layer operation without mode but operation succeeded")
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
-        # Check if error mentions mode or provides helpful guidance
         if "mode" in error_msg or "offset" in error_msg or "override" in error_msg or "scale" in error_msg:
             on_success()
         else:
@@ -123,6 +112,7 @@ def test_invalid_direction_vector_zero(on_success, on_failure):
         rig.direction.to(0, 0)
         on_failure("Expected error for zero vector but operation succeeded")
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "zero" in error_msg or "invalid" in error_msg or "direction" in error_msg:
             on_success()
@@ -142,6 +132,7 @@ def test_negative_duration(on_success, on_failure):
         # Should either error or handle gracefully
         on_success()  # If no crash, consider it handled
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "negative" in error_msg or "invalid" in error_msg or "duration" in error_msg:
             on_success()
@@ -186,6 +177,7 @@ def test_layer_empty_name(on_success, on_failure):
         else:
             on_success()  # Handled gracefully
     except Exception as e:
+        print(f"  Error message: {e}")
         error_msg = str(e).lower()
         if "empty" in error_msg or "name" in error_msg or "invalid" in error_msg:
             on_success()
@@ -281,8 +273,8 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
 
         on_failure("Expected AttributeError for invalid layer state attribute")
     except AttributeError as e:
+        print(f"  Error message: {e}")
         error_msg = str(e)
-        # Check if error message is helpful and mentions the correct way to access it
         if "direction_x" in error_msg and "direction.x" in error_msg:
             on_success()
         else:
@@ -298,7 +290,6 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
 VALIDATION_TESTS = [
     ("multiple properties not allowed", test_multiple_properties_not_allowed),
     ("hold without layer", test_hold_without_layer),
-    ("direction without layer", test_direction_without_layer),
     ("over without operation", test_over_without_operation),
     ("revert without operation", test_revert_without_operation),
     ("hold without revert", test_hold_without_revert),
