@@ -48,6 +48,10 @@ def reload_rig():
     """
     global _global_state
 
+    # Show brief notification before reload
+    from .ui import show_reloading_notification
+    show_reloading_notification()
+
     if _global_state is not None:
         # Stop any active movements
         try:
@@ -97,12 +101,6 @@ def reload_rig():
                     touched_count += 1
                 except Exception as e:
                     pass
-
-    # Show reload notification
-    from .ui import show_reload_notification
-    show_reload_notification()
-
-
 class StopHandle:
     """Handle returned by stop() that allows adding callbacks via .then()"""
 
@@ -215,7 +213,7 @@ class Rig:
                        when the system fully stops
         """
         from .contracts import validate_timing
-        ms = validate_timing(ms, 'ms')
+        ms = validate_timing(ms, 'ms', method='stop')
         self._state.stop(ms, easing)
         return StopHandle(self._state)
 

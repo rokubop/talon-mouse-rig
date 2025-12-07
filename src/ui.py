@@ -1,26 +1,28 @@
 from talon import actions, cron
 
-def show_reload_notification():
+def show_reloading_notification():
+    """Show brief 'Reloading...' notification before files are touched"""
     try:
-        def reload_notification_ui():
+        def reloading_ui():
             screen, div, text = actions.user.ui_elements(["screen", "div", "text"])
             return screen(align_items="flex_end", justify_content="flex_end")[
                 div(
                     padding=15,
                     margin=50,
-                    background_color="#00aa00dd",
+                    background_color="#0088ffdd",
                     border_radius=10
                 )[
-                    text("Rig reloaded!", font_size=20, color="white", font_weight="bold")
+                    text("Reloading...", font_size=20, color="white", font_weight="bold")
                 ]
             ]
 
-        actions.user.ui_elements_show(reload_notification_ui)
+        actions.user.ui_elements_show(reloading_ui)
 
         def hide_notification():
-            actions.user.ui_elements_hide(reload_notification_ui)
+            actions.user.ui_elements_hide(reloading_ui)
 
-        cron.after("3s", hide_notification)
+        # Hide after brief flash (will be destroyed by reload anyway)
+        cron.after("500ms", hide_notification)
     except (AttributeError, ImportError):
         # ui_elements not available, silently skip
         pass

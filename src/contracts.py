@@ -474,6 +474,21 @@ class BuilderConfig:
                 f"Valid operators for {self.property}: {valid_str}"
             )
 
+        # Validate direction values
+        if self.property == "direction" and self.operator in ("to", "add", "by"):
+            if isinstance(self.value, (tuple, list)) and len(self.value) >= 2:
+                x, y = self.value[0], self.value[1]
+                if x == 0 and y == 0:
+                    raise ConfigError(
+                        "Invalid direction vector (0, 0).\n\n"
+                        "Direction cannot be a zero vector - it must have a magnitude.\n\n"
+                        "To stop movement, use one of these instead:\n"
+                        "  rig.stop()             # Stop all movement instantly\n"
+                        "  rig.stop(500)          # Stop with 500ms transition\n"
+                        "  rig.speed.to(0)        # Set speed to zero\n"
+                        "  rig.layer('name').revert()  # Revert a layer"
+                    )
+
     def validate_easing(self, easing: str, context: str = "easing") -> None:
         """Validate an easing value
 
@@ -538,15 +553,37 @@ class BuilderConfig:
                     "If you want to keep the value, simply don't use .hold() at all, and you can .revert() later.\n\n"
                 )
 
-def validate_timing(value: Any, param_name: str) -> Optional[float]:
+def validate_timing(value: Any, param_name: str, method: str = None) -> Optional[float]:
+    """Validate timing parameters (ms, rate, etc.)
+
+    Args:
+        value: The value to validate
+        param_name: Name of the parameter ('ms', 'rate', etc.)
+        method: Name of the method being called ('over', 'hold', 'revert', 'stop')
+    """
     if value is None:
         return None
+
+    method_str = f".{method}({param_name}=...)" if method else f"'{param_name}'"
+
     if not isinstance(value, (int, float)):
         raise TypeError(
-            f"Timing parameter '{param_name}' must be a number or None, "
-            f"got {type(value).__name__}: {repr(value)}"
+            f"Invalid type for {method_str}\n\n"
+            f"Expected: number (int or float)\n"
+            f"Got: {type(value).__name__} = {repr(value)}\n\n"
+            f"Timing parameters must be numeric values."
         )
-    return float(value)
+
+    float_value = float(value)
+
+    if float_value < 0:
+        raise ConfigError(
+            f"Negative duration not allowed: {method_str}\n\n"
+            f"Got: {value}\n\n"
+            f"Duration values must be >= 0."
+        )
+
+    return float_value
 
 
 def validate_has_operation(config: 'BuilderConfig', method_name: str) -> None:

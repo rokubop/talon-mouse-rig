@@ -1134,7 +1134,7 @@ class RigState:
         """
         # Validate arguments
         from .contracts import BuilderConfig, ConfigError, validate_timing
-        transition_ms = validate_timing(transition_ms, 'transition_ms')
+        transition_ms = validate_timing(transition_ms, 'transition_ms', method='stop')
 
         config = BuilderConfig()
         all_kwargs = {'easing': easing, **kwargs}

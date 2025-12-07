@@ -179,10 +179,10 @@ class RigBuilder:
 
         if rate is not None:
             # Rate-based, duration will be calculated later
-            self.config.over_rate = validate_timing(rate, 'rate')
+            self.config.over_rate = validate_timing(rate, 'rate', method='over')
             self.config.over_easing = easing
         else:
-            self.config.over_ms = validate_timing(ms, 'ms') if ms is not None else 0
+            self.config.over_ms = validate_timing(ms, 'ms', method='over') if ms is not None else 0
             self.config.over_easing = easing
 
         self.config.over_interpolation = interpolation
@@ -197,7 +197,7 @@ class RigBuilder:
         # Validate that there's an operation to hold
         validate_has_operation(self.config, 'hold')
 
-        self.config.hold_ms = validate_timing(ms, 'ms')
+        self.config.hold_ms = validate_timing(ms, 'ms', method='hold')
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self
 
@@ -223,10 +223,10 @@ class RigBuilder:
         self.config.validate_method_kwargs('revert', **all_kwargs)
 
         if rate is not None:
-            self.config.revert_rate = validate_timing(rate, 'rate')
+            self.config.revert_rate = validate_timing(rate, 'rate', method='revert')
             self.config.revert_easing = easing
         else:
-            self.config.revert_ms = validate_timing(ms, 'ms') if ms is not None else 0
+            self.config.revert_ms = validate_timing(ms, 'ms', method='revert') if ms is not None else 0
             self.config.revert_easing = easing
 
         self.config.revert_interpolation = interpolation
@@ -534,7 +534,7 @@ class PropertyBuilder:
             self.rig_builder._executed = True
             raise ConfigError(
                 f"Cannot combine multiple properties in one command.\n\n"
-                f"You're trying to set both '{self.rig_builder.config.property}' and '{property_name}' together.\n\n"
+                f"Attempting to set both '{self.rig_builder.config.property}' and '{property_name}'.\n\n"
                 f"Use separate commands instead:\n\n"
                 f"  rig.{self.rig_builder.config.property}(...)\n"
                 f"  rig.{property_name}(...)"

@@ -22,8 +22,8 @@ def test_multiple_properties_not_allowed(on_success, on_failure):
             on_failure(f"Error occurred but message unclear: {e}")
 
 
-def test_hold_without_layer(on_success, on_failure):
-    """Test: rig.hold() without layer should error"""
+def test_hold_without_operation(on_success, on_failure):
+    """Test: rig.hold() without a property operation should error"""
     try:
         rig = actions.user.mouse_rig()
         rig.hold(1000)
@@ -31,7 +31,7 @@ def test_hold_without_layer(on_success, on_failure):
     except Exception as e:
         print(f"  Error message: {e}")
         error_msg = str(e).lower()
-        if "layer" in error_msg or "must" in error_msg or "cannot" in error_msg:
+        if "hold" in error_msg and ("attribute" in error_msg or "operation" in error_msg or "property" in error_msg):
             on_success()
         else:
             on_failure(f"Error occurred but message unclear: {e}")
@@ -78,7 +78,8 @@ def test_hold_without_revert(on_success, on_failure):
     try:
         rig = actions.user.mouse_rig()
         rig.speed(3)
-        rig.direction.to(1, 0).hold(500)
+        builder = rig.direction.to(1, 0).hold(500)
+        builder._execute()  # Force execution to catch validation error
         on_failure("Expected error for hold() without revert() but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
@@ -93,7 +94,8 @@ def test_layer_operation_without_mode(on_success, on_failure):
     """Test: layer operation without mode (.offset/.override/.scale) should error"""
     try:
         rig = actions.user.mouse_rig()
-        rig.layer("test").speed.to(100)
+        builder = rig.layer("test").speed.to(100)
+        builder._execute()  # Force execution to catch validation error
         on_failure("Expected error for layer operation without mode but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
@@ -114,7 +116,7 @@ def test_invalid_direction_vector_zero(on_success, on_failure):
     except Exception as e:
         print(f"  Error message: {e}")
         error_msg = str(e).lower()
-        if "zero" in error_msg or "invalid" in error_msg or "direction" in error_msg:
+        if ("zero" in error_msg or "invalid" in error_msg) and ("stop" in error_msg or "speed.to(0)" in error_msg):
             on_success()
         else:
             on_failure(f"Error occurred but message unclear: {e}")
@@ -125,10 +127,9 @@ def test_negative_duration(on_success, on_failure):
     try:
         rig = actions.user.mouse_rig()
         rig.pos.to(CENTER_X, CENTER_Y)
-        rig.layer("test").hold(-500)
+        rig.speed.to(5).over(-500)
         # If it succeeds, check that it doesn't create a weird state
         actions.sleep("100ms")
-        rig_check = actions.user.mouse_rig()
         # Should either error or handle gracefully
         on_success()  # If no crash, consider it handled
     except Exception as e:
@@ -289,7 +290,7 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
 
 VALIDATION_TESTS = [
     ("multiple properties not allowed", test_multiple_properties_not_allowed),
-    ("hold without layer", test_hold_without_layer),
+    ("hold without operation", test_hold_without_operation),
     ("over without operation", test_over_without_operation),
     ("revert without operation", test_revert_without_operation),
     ("hold without revert", test_hold_without_revert),
