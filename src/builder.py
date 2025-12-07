@@ -320,7 +320,7 @@ class RigBuilder:
             # Incomplete builder, ignore
             return
 
-        self._detect_and_apply_special_cases()
+        # self._detect_and_apply_special_cases()
 
         self.config.validate_mode()
         self.config.validate_hold()
@@ -353,7 +353,9 @@ class RigBuilder:
             # Only transform if approximately 180° (dot product ≈ -1)
             dot_product = current_dir.dot(target_dir)
             if dot_product < -0.99:
-                self._convert_direction_reversal_to_vector()
+                # Commenting out vector conversion - using new linear interpolation approach instead
+                # self._convert_direction_reversal_to_vector()
+                pass
 
     def _convert_direction_reversal_to_vector(self):
         """Convert 180° direction reversals to vector operations
@@ -361,6 +363,8 @@ class RigBuilder:
         This allows smooth velocity transitions through zero when reversing direction.
         Transforms the config in-place from direction to vector property.
         Only called after 180° reversal is already detected.
+
+        NOTE: Currently disabled in favor of linear interpolation approach in ActiveBuilder.__init__
         """
         # Convert to vector reversal which supports smooth zero transitions
         current_velocity = self.rig_state.base.direction * self.rig_state.base.speed
@@ -721,6 +725,25 @@ class ActiveBuilder:
             self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
+
+        # Auto-detect same-axis direction reversal for smooth zero-crossing
+        if (config.property == "direction" and
+            config.operator == "to" and
+            config.over_ms is not None and
+            config.over_ms > 0):
+            if self._is_same_axis_reversal(self.base_value, self.target_value):
+                config.over_interpolation = 'linear'
+                config.revert_interpolation = 'linear'
+
+    def _is_same_axis_reversal(self, base_dir: Vec2, target_dir: Vec2) -> bool:
+        base_x_zero = abs(base_dir.x) < 0.01
+        base_y_zero = abs(base_dir.y) < 0.01
+        target_x_zero = abs(target_dir.x) < 0.01
+        target_y_zero = abs(target_dir.y) < 0.01
+
+        opposite_direction = base_dir.dot(target_dir) < -0.9
+
+        return ((base_x_zero and target_x_zero) or (base_y_zero and target_y_zero)) and opposite_direction
 
     def __repr__(self) -> str:
         phase = self.lifecycle.phase if self.lifecycle and self.lifecycle.phase else "instant"

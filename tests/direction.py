@@ -559,56 +559,78 @@ def test_layer_direction_with_callbacks(on_success, on_failure):
 # DIRECTION REVERSAL / INVERSION TESTS
 # ============================================================================
 
-def test_direction_reverse_180_over_time(on_success, on_failure):
-    """Test: rig.direction.to(-x, -y).over(ms) - 180° reversal should be smooth"""
+def test_direction_opposite_over_time(on_success, on_failure):
+    """Test: rig.direction.to(-x, -y).over(ms) - 180° same-axis reversal with smooth zero-crossing
+
+    Auto-detects opposite direction on same axis and uses linear interpolation.
+    Velocity smoothly decelerates through zero: (20,0) → (10,0) → (0,0) → (-10,0) → (-20,0)
+    Direction magnitude varies during transition: (1,0) → (0.5,0) → (0,0) → (-0.5,0) → (-1,0)
+    """
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
     actions.sleep("100ms")
 
-    # Start moving right
+    # Start moving right at speed 3
     rig.speed(TEST_SPEED)
-    rig.direction.to(1, 0)  # 0° (right)
+    rig.direction.to(1, 0)
     actions.sleep("200ms")
     start_pos = ctrl.mouse_pos()
 
-    # Reverse direction over time (180° turn)
-    rig.direction.mul(-1).over(500, interpolation="linear")
-    # rig.direction.to(-1, 0).over(500)  # Should rotate to 180° (left)
+    # Reverse to left over 1 second (auto-detects same-axis reversal → uses linear interpolation)
+    rig.direction.to(-1, 0).over(1000)
 
-    def check_midpoint():
-        """During rotation - should be transitioning"""
-        mid_pos = ctrl.mouse_pos()
+    def check_early_deceleration():
+        """At ~300ms: Should be decelerating (still moving right but slower)"""
+        early_pos = ctrl.mouse_pos()
 
-        # Should have some rightward movement initially
-        dx = mid_pos[0] - start_pos[0]
-        if dx < 5:
-            on_failure(f"Expected some rightward movement during transition, got dx={dx}")
+        # Should have moved right from start
+        dx_early = early_pos[0] - start_pos[0]
+        if dx_early < 5:
+            on_failure(f"Expected rightward movement during early phase, got dx={dx_early}")
             return
 
-        def check_final():
-            """After rotation completes - should be moving left"""
-            rig_final = actions.user.mouse_rig()
-            end_pos = ctrl.mouse_pos()
+        def check_near_zero():
+            """At ~500ms: Should be near zero velocity (stopped or very slow)"""
+            mid_pos = ctrl.mouse_pos()
 
-            # Direction should be left (-1, 0)
-            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
-            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
-                on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+            # Should have moved right total, but less than full speed would allow
+            dx_total = mid_pos[0] - start_pos[0]
+            if dx_total < 10:
+                on_failure(f"Expected some rightward movement before zero-crossing, got dx={dx_total}")
                 return
 
-            # Should be moving left now
-            dx_final = end_pos[0] - mid_pos[0]
-            if dx_final > -5:
-                on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
+            # Movement since early check should be minimal (decelerating through zero)
+            dx_recent = mid_pos[0] - early_pos[0]
+            if abs(dx_recent) > 20:
+                on_failure(f"Expected slow/stopped movement near zero-crossing, got dx={dx_recent}")
                 return
 
-            rig_final.stop()
-            on_success()
+            def check_final():
+                """At ~1300ms: Should be moving left at full speed"""
+                rig_final = actions.user.mouse_rig()
+                end_pos = ctrl.mouse_pos()
 
-        cron.after("400ms", check_final)
+                # Direction should be fully reversed to left (-1, 0)
+                dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+                if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                    on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                    return
 
-    cron.after("300ms", check_midpoint)
+                # Should be moving left (negative dx from midpoint)
+                dx_final = end_pos[0] - mid_pos[0]
+                if dx_final > -5:
+                    on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("800ms", check_final)
+
+        cron.after("200ms", check_near_zero)
+
+    cron.after("300ms", check_early_deceleration)
 
 
 def test_reverse_method_instant(on_success, on_failure):
@@ -725,7 +747,7 @@ DIRECTION_TESTS = [
     ("layer direction.override.to(x, y).over(ms)", test_layer_direction_override_to_over),
     ("layer direction.override.to().over().revert()", test_layer_direction_override_to_over_revert),
     ("layer direction with callbacks", test_layer_direction_with_callbacks),
-    ("direction 180° reversal over time", test_direction_reverse_180_over_time),
+    ("direction opposite over time", test_direction_opposite_over_time),
     ("reverse() instant", test_reverse_method_instant),
     ("reverse(ms) over time", test_reverse_method_over_time),
 ]

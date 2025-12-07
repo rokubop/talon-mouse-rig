@@ -284,7 +284,7 @@ class PropertyAnimator:
         has_reverted: bool = False,
         interpolation: str = "lerp"
     ) -> Vec2:
-        """Animate a direction vector using lerp or slerp.
+        """Animate a direction vector using lerp, slerp, or linear.
 
         Args:
             base_dir: The base direction vector (normalized)
@@ -292,7 +292,8 @@ class PropertyAnimator:
             phase: Current lifecycle phase
             progress: Progress [0, 1] within current phase
             has_reverted: Whether this lifecycle completed via revert
-            interpolation: "lerp" for linear interpolation or "slerp" for spherical
+            interpolation: "lerp" for linear interpolation, "slerp" for spherical,
+                          or "linear" for component-wise (no normalization, for reversals)
 
         Returns:
             Current animated direction vector
@@ -305,14 +306,25 @@ class PropertyAnimator:
             return target_dir
 
         if phase == LifecyclePhase.OVER:
-            if interpolation == "slerp":
+            if interpolation == "linear":
+                # Component-wise lerp without normalization (for same-axis reversals through zero)
+                x = base_dir.x + (target_dir.x - base_dir.x) * progress
+                y = base_dir.y + (target_dir.y - base_dir.y) * progress
+                result = Vec2(x, y)
+                return result
+            elif interpolation == "slerp":
                 return _slerp(base_dir, target_dir, progress)
             else:
                 return _lerp_direction(base_dir, target_dir, progress)
         elif phase == LifecyclePhase.HOLD:
             return target_dir
         elif phase == LifecyclePhase.REVERT:
-            if interpolation == "slerp":
+            if interpolation == "linear":
+                # Component-wise lerp without normalization
+                x = target_dir.x + (base_dir.x - target_dir.x) * progress
+                y = target_dir.y + (base_dir.y - target_dir.y) * progress
+                return Vec2(x, y)
+            elif interpolation == "slerp":
                 return _slerp(target_dir, base_dir, progress)
             else:
                 return _lerp_direction(target_dir, base_dir, progress)

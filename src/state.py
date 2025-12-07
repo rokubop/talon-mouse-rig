@@ -500,10 +500,13 @@ class RigState:
             current_value = builder.get_interpolated_value()
 
             if prop == "speed":
+                prev_speed = speed
                 speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
             elif prop == "direction":
+                prev_direction = direction
                 direction = mode_operations.apply_direction_mode(mode, current_value, direction)
             elif prop == "vector":
+                prev_speed, prev_direction = speed, direction
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
 
         return speed, direction
@@ -852,7 +855,7 @@ class RigState:
                 try:
                     callback()
                 except Exception as e:
-                    print(f"Error in stop callback: {e}")
+                    pass
             self._stop_callbacks.clear()
 
     def _has_movement(self) -> bool:

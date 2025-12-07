@@ -681,11 +681,8 @@ class Actions:
         """
         if api not in MOUSE_APIS:
             available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
-            print(f"Invalid mouse API: '{api}'")
-            print(f"Available: {available}")
             return
         settings.set("user.mouse_rig_api", api)
-        print(f"Mouse API set to: {api}")
         # Reload to pick up the new API immediately
         reload_rig()
 

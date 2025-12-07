@@ -56,7 +56,7 @@ def reload_rig():
             # Then stop the frame loop
             _global_state._stop_frame_loop()
         except Exception as e:
-            print(f"Error stopping frame loop: {e}")
+            pass
         _global_state = None
 
     # Touch all Python files in src/ and tests/ to trigger Talon's file watcher
@@ -74,7 +74,7 @@ def reload_rig():
             os.utime(init_file, None)
             touched_count += 1
         except Exception as e:
-            print(f"Error updating __init__.py: {e}")
+            pass
 
     # Then touch other src/ files
     for filename in os.listdir(src_dir):
@@ -84,7 +84,7 @@ def reload_rig():
                 os.utime(filepath, None)  # Updates to current time
                 touched_count += 1
             except Exception as e:
-                print(f"Error updating {filename}: {e}")
+                pass
 
     # Then touch tests/ files
     tests_dir = os.path.join(parent_dir, 'tests')
@@ -96,9 +96,7 @@ def reload_rig():
                     os.utime(filepath, None)
                     touched_count += 1
                 except Exception as e:
-                    print(f"Error updating tests/{filename}: {e}")
-
-    print(f"✓ Rig state cleared and {touched_count} files touched for reload")
+                    pass
 
 
 class StopHandle:
