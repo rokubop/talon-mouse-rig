@@ -28,9 +28,9 @@ LAYER_TYPES = {
 VALID_EASINGS = [
     'linear',
     'ease_in', 'ease_out', 'ease_in_out',
-    'ease_in_2', 'ease_out_2', 'ease_in_out_2',
-    'ease_in_3', 'ease_out_3', 'ease_in_out_3',
-    'ease_in_4', 'ease_out_4', 'ease_in_out_4',
+    'ease_in2', 'ease_out2', 'ease_in_out2',
+    'ease_in3', 'ease_out3', 'ease_in_out3',
+    'ease_in4', 'ease_out4', 'ease_in_out4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
 VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']  # ignore is internal for throttle()
