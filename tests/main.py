@@ -1,6 +1,7 @@
 from talon import actions, ctrl, cron
 import time
 import inspect
+import re
 
 CENTER_X = 960
 CENTER_Y = 540
@@ -115,6 +116,11 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
     actions.user.ui_elements_set_state("current_test", test_name)
     actions.user.ui_elements_set_state("test_result", None)
 
+    # Sanitize ID to match ui_elements behavior
+    sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', test_name)
+    test_button_id = f"test_button_{test_group}_{sanitized_name}"
+    actions.user.ui_elements_highlight(test_button_id)
+
     def on_test_success():
         actions.user.mouse_rig().stop()
 
@@ -127,6 +133,7 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
         def clear_and_complete():
             actions.user.ui_elements_set_state("test_result", None)
             actions.user.ui_elements_set_state("current_test", None)
+            actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(True)
         cron.after("1s", clear_and_complete)
@@ -144,6 +151,7 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
         def clear_and_complete():
             actions.user.ui_elements_set_state("test_result", None)
             actions.user.ui_elements_set_state("current_test", None)
+            actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(False)
         cron.after("1s", clear_and_complete)
@@ -178,6 +186,7 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
         def clear_and_complete():
             actions.user.ui_elements_set_state("test_result", None)
             actions.user.ui_elements_set_state("current_test", None)
+            actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(False)
         cron.after("2s", clear_and_complete)
@@ -280,6 +289,8 @@ def toggle_run_all(tests, group_name):
         stop_all_tests()
         actions.user.ui_elements_set_state(state_key, False)
     else:
+        # Expand the group so test buttons are visible for highlighting
+        actions.user.ui_elements_set_state(f"collapsed_{group_name}", False)
         actions.user.ui_elements_set_state(state_key, True)
         run_all_tests(tests, group_name)
 
@@ -343,9 +354,11 @@ def test_runner_ui(test_groups):
         if not is_collapsed:
             test_items = []
             for test_name, test_func in tests:
+                test_button_id = f"test_button_{group_name}_{test_name}"
                 test_items.append(
                     button(
                         test_name,
+                        id=test_button_id,
                         padding=8,
                         padding_left=16,
                         margin_bottom=2,

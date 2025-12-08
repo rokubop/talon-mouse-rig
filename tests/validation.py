@@ -350,10 +350,10 @@ def test_vector_zero_zero(on_success, on_failure):
 
         # Check that speed is now 0
         rig_check = actions.user.mouse_rig()
-        if abs(rig_check.speed) < 0.01:
+        if abs(rig_check.state.speed) < 0.01:
             on_success()
         else:
-            on_failure(f"Expected speed ~0 after vector.to(0, 0), got {rig_check.speed}")
+            on_failure(f"Expected speed ~0 after vector.to(0, 0), got {rig_check.state.speed}")
     except Exception as e:
         print(f"  Error message: {e}")
         on_failure(f"Unexpected error: {e}")
@@ -379,25 +379,78 @@ def test_position_zero_zero(on_success, on_failure):
 
 
 def test_duplicate_mode_specification(on_success, on_failure):
-    """Test: layer().direction.offset.override.to() - duplicate mode should use last one"""
+    """Test: layer().direction.offset.override.to() - duplicate mode should error"""
     try:
         rig = actions.user.mouse_rig()
-        # This should use 'override' mode (the last one specified)
+        # This should error - can't specify both offset and override
         rig.layer("test").direction.offset.override.to(1, 0)
-
-        actions.sleep("100ms")
-
-        rig_check = actions.user.mouse_rig()
-        layer_state = rig_check.state.layer("test")
-
-        # Check that override mode was used (should show in mode attribute)
-        if layer_state.mode == "override":
-            on_success()
-        else:
-            on_failure(f"Expected mode 'override', got '{layer_state.mode}'")
+        on_failure("Expected error for duplicate mode specification but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
-        on_failure(f"Unexpected error: {e}")
+        error_msg = str(e).lower()
+        if "mode" in error_msg and ("only one" in error_msg or "duplicate" in error_msg or "already" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_accessing_property_as_value(on_success, on_failure):
+    """Test: rig.speed used as a value should give helpful error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.speed(5)
+
+        # Try multiple scenarios that should all error with helpful message
+        rig_check = actions.user.mouse_rig()
+
+        # Test 1: print/str conversion
+        try:
+            _ = str(rig_check.speed)
+            on_failure("str(rig.speed) should have errored")
+            return
+        except Exception as e:
+            print(f"    str() error: {e}")
+            if "rig.state.speed" not in str(e):
+                on_failure(f"str(rig.speed) error not helpful: {e}")
+                return
+
+        # Test 2: multiplication
+        try:
+            _ = rig_check.speed * 2
+            on_failure("rig.speed * 2 should have errored")
+            return
+        except Exception as e:
+            print(f"    multiplication error: {e}")
+            if "rig.state.speed" not in str(e):
+                on_failure(f"rig.speed * 2 error not helpful: {e}")
+                return
+
+        # Test 3: addition
+        try:
+            _ = rig_check.speed + 5
+            on_failure("rig.speed + 5 should have errored")
+            return
+        except Exception as e:
+            print(f"    addition error: {e}")
+            if "rig.state.speed" not in str(e):
+                on_failure(f"rig.speed + 5 error not helpful: {e}")
+                return
+
+        # Test 4: abs()
+        try:
+            _ = abs(rig_check.speed)
+            on_failure("abs(rig.speed) should have errored")
+            return
+        except Exception as e:
+            print(f"    abs() error: {e}")
+            if "rig.state.speed" not in str(e):
+                on_failure(f"abs(rig.speed) error not helpful: {e}")
+                return
+
+        on_success()
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error in test setup: {e}")
 
 
 # ============================================================================
@@ -423,4 +476,5 @@ VALIDATION_TESTS = [
     ("vector.to(0, 0) allowed", test_vector_zero_zero),
     ("pos.to(0, 0) allowed", test_position_zero_zero),
     ("duplicate mode specification", test_duplicate_mode_specification),
+    ("accessing property as value", test_accessing_property_as_value),
 ]

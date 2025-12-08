@@ -301,8 +301,8 @@ def test_layer_direction_offset_by(on_success, on_failure):
             on_failure(f"Layer mode is '{layer_state.mode}', expected 'offset'")
             return
 
-        if layer_state.current_value != 90:
-            on_failure(f"Layer value is {layer_state.current_value}, expected 90")
+        if layer_state.value != 90:
+            on_failure(f"Layer value is {layer_state.value}, expected 90")
             return
 
         on_success()
@@ -339,8 +339,8 @@ def test_layer_direction_offset_by_over(on_success, on_failure):
             on_failure(f"Layer mode is '{layer_state.mode}', expected 'offset'")
             return
 
-        if layer_state.current_value != 180:
-            on_failure(f"Layer value is {layer_state.current_value}, expected 180")
+        if layer_state.value != 180:
+            on_failure(f"Layer value is {layer_state.value}, expected 180")
             return
 
         on_success()

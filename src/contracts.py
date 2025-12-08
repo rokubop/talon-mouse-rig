@@ -125,7 +125,7 @@ VALID_BUILDER_METHODS = [
 
 # Valid LayerState attributes (properties and methods)
 VALID_LAYER_STATE_ATTRS = [
-    'prop', 'mode', 'operation', 'value', 'target', 'time_alive', 'time_left'
+    'prop', 'mode', 'operator', 'value', 'target', 'time_alive', 'time_left'
 ]
 
 
@@ -339,7 +339,7 @@ class LifecyclePhase:
 class BuilderConfig:
     """Configuration collected by RigBuilder during fluent API calls"""
     def __init__(self):
-        # Property and operation
+        # Property and operator
         self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div
         self.value: Any = None

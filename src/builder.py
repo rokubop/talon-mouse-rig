@@ -7,8 +7,18 @@ import math
 import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
-from .core import Vec2, EPSILON
-from .contracts import BuilderConfig, LifecyclePhase, validate_timing, validate_has_operation
+from .core import Vec2, EPSILON, mouse_move, mouse_move_relative
+from .contracts import (
+    BuilderConfig,
+    LifecyclePhase,
+    validate_timing,
+    validate_has_operation,
+    ConfigError,
+    RigAttributeError,
+    find_closest_match,
+    VALID_BUILDER_METHODS,
+    VALID_OPERATORS,
+)
 from .lifecycle import Lifecycle, PropertyAnimator
 from . import rate_utils
 from . import mode_operations
@@ -30,7 +40,6 @@ class BehaviorProxy:
         return method(*args)
 
     def __getattr__(self, name):
-        # Auto-apply the behavior first
         method = getattr(self.builder, f'_set_{self.behavior_name}')
         method()
         return getattr(self.builder, name)
@@ -74,23 +83,20 @@ class RigBuilder:
     def __init__(self, rig_state: 'RigState', layer: Optional[str] = None, order: Optional[int] = None):
         self.rig_state = rig_state
         self.config = BuilderConfig()
+        self._is_valid = True
+        self._executed = False
+        self._lifecycle_stage = None
 
-        # Auto-generate layer if anonymous (base layer)
         if layer is None:
             self.config.layer_name = rig_state._generate_base_layer_name()
         else:
-            # Validate layer name
             if not layer or not layer.strip():
+                self._is_valid = False
                 raise ValueError("Empty layer name not allowed. Layer names must be non-empty strings.")
             self.config.layer_name = layer
 
-        # Set order if provided
         if order is not None:
             self.config.order = order
-
-        self._is_valid = True
-        self._executed = False
-        self._lifecycle_stage = None  # Track which stage we're adding callbacks to
 
     @property
     def is_anonymous(self) -> bool:
@@ -135,9 +141,6 @@ class RigBuilder:
 
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
-        from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS, ConfigError, VALID_OPERATORS
-
-        # Check if trying to call an operator method when one is already set
         if self.config.operator is not None and any(name in ops for ops in VALID_OPERATORS.values()):
             self._is_valid = False
             raise ConfigError(
@@ -146,11 +149,9 @@ class RigBuilder:
                 f"Either use one operator or use separate commands."
             )
 
-        # Valid properties are handled above
         valid_properties = ['pos', 'speed', 'direction', 'vector']
         all_valid = valid_properties + VALID_BUILDER_METHODS
 
-        # Find closest match
         suggestion = find_closest_match(name, all_valid)
 
         msg = f"RigBuilder has no attribute '{name}'"
@@ -184,15 +185,12 @@ class RigBuilder:
             rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
-        # Validate using contract
         all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
         self.config.validate_method_kwargs('over', **all_kwargs)
 
-        # Validate that there's an operation to transition over
         validate_has_operation(self.config, 'over')
 
         if rate is not None:
-            # Rate-based, duration will be calculated later
             self.config.over_rate = validate_timing(rate, 'rate', method='over')
             self.config.over_easing = easing
         else:
@@ -201,14 +199,12 @@ class RigBuilder:
 
         self.config.over_interpolation = interpolation
 
-        # When .over() is called, this becomes asynchronous (frame loop execution)
         self.config.is_synchronous = False
 
         self._lifecycle_stage = LifecyclePhase.OVER
         return self
 
     def hold(self, ms: float) -> 'RigBuilder':
-        # Validate that there's an operation to hold
         validate_has_operation(self.config, 'hold')
 
         self.config.hold_ms = validate_timing(ms, 'ms', method='hold')
@@ -232,7 +228,6 @@ class RigBuilder:
             rate: Rate-based duration (units/sec, degrees/sec, pixels/sec)
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
-        # Validate using contract
         all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
         self.config.validate_method_kwargs('revert', **all_kwargs)
 
@@ -245,7 +240,6 @@ class RigBuilder:
 
         self.config.revert_interpolation = interpolation
 
-        # When .revert() is called, this becomes asynchronous (frame loop execution)
         self.config.is_synchronous = False
 
         self._lifecycle_stage = LifecyclePhase.REVERT
@@ -319,6 +313,31 @@ class RigBuilder:
         return self
 
     # ========================================================================
+    # STRING REPRESENTATION
+    # ========================================================================
+
+    def __repr__(self) -> str:
+        """Provide informative representation of the builder"""
+        if not self.is_anonymous:
+            return f"RigBuilder(layer='{self.config.layer_name}')"
+        return f"RigBuilder()"
+
+    def __str__(self) -> str:
+        """Provide user-friendly string representation"""
+        msg = "<RigBuilder - use for chaining operations"
+        if not self.is_anonymous:
+            msg += f" on layer '{self.config.layer_name}'"
+        msg += ">\n\n"
+        msg += "Available operations:\n"
+        msg += "  .speed.to(value) / .speed.add(value)\n"
+        msg += "  .direction.to(x, y) / .direction.by(degrees)\n"
+        msg += "  .vector.to(x, y)\n"
+        msg += "  .pos.to(x, y) / .pos.by(x, y)\n"
+        msg += "  .over(ms) / .hold(ms) / .revert(ms)\n\n"
+        msg += "To read current state: use rig.state"
+        return msg
+
+    # ========================================================================
     # EXECUTION (on __del__)
     # ========================================================================
 
@@ -337,7 +356,6 @@ class RigBuilder:
                 self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return
 
-            # Incomplete builder, ignore
             return
 
         # self._detect_and_apply_special_cases()
@@ -350,62 +368,14 @@ class RigBuilder:
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
         self.rig_state.add_builder(active)
 
-    def _detect_and_apply_special_cases(self):
-        """Detect and apply any necessary config transformations
-
-        Checks for special cases that need to be rewritten before execution.
-        """
-        # Transform 180° direction reversals to vector operations for smooth zero transitions
-        if (self.is_anonymous and
-            self.config.property == "direction" and
-            (self.config.operator == "to" or self.config.operator == "mul")):
-
-            # Check if this is actually a 180° reversal before transforming
-            current_dir = self.rig_state.base.direction
-
-            # Calculate target direction based on operator
-            if self.config.operator == "to":
-                target_dir = Vec2.from_tuple(self.config.value).normalized()
-            else:  # mul
-                scalar = self.config.value
-                target_dir = Vec2(current_dir.x * scalar, current_dir.y * scalar).normalized()
-
-            # Only transform if approximately 180° (dot product ≈ -1)
-            dot_product = current_dir.dot(target_dir)
-            if dot_product < -0.99:
-                # Commenting out vector conversion - using new linear interpolation approach instead
-                # self._convert_direction_reversal_to_vector()
-                pass
-
-    def _convert_direction_reversal_to_vector(self):
-        """Convert 180° direction reversals to vector operations
-
-        This allows smooth velocity transitions through zero when reversing direction.
-        Transforms the config in-place from direction to vector property.
-        Only called after 180° reversal is already detected.
-
-        NOTE: Currently disabled in favor of linear interpolation approach in ActiveBuilder.__init__
-        """
-        # Convert to vector reversal which supports smooth zero transitions
-        current_velocity = self.rig_state.base.direction * self.rig_state.base.speed
-        reversed_velocity = current_velocity * -1
-
-        # Transform config to vector operation (preserves all lifecycle settings)
-        self.config.property = "vector"
-        self.config.operator = "to"
-        self.config.value = (reversed_velocity.x, reversed_velocity.y)
-        self.config.mode = "override"
-
     def _calculate_rate_durations(self):
         """Calculate durations from rate parameters"""
         if self.config.property is None or self.config.operator is None:
             return
 
-        # Get current and target values
         current_value = self._get_base_value()
         target_value = self._calculate_target_value(current_value)
 
-        # Calculate over duration from rate
         if self.config.over_rate is not None:
             if self.config.property == "speed":
                 self.config.over_ms = rate_utils.calculate_speed_duration(
@@ -444,7 +414,6 @@ class RigBuilder:
                     current_vec, target_vec, self.config.over_rate, self.config.over_rate
                 )
 
-        # Calculate revert duration from rate
         if self.config.revert_rate is not None:
             if self.config.property == "speed":
                 self.config.revert_ms = rate_utils.calculate_speed_duration(
@@ -516,7 +485,6 @@ class RigBuilder:
             if operator == "to":
                 return Vec2.from_tuple(value).normalized()
             elif operator in ("by", "add"):
-                # Rotation by degrees
                 angle_deg = value[0] if isinstance(value, tuple) else value
                 angle_rad = math.radians(angle_deg)
                 cos_a = math.cos(angle_rad)
@@ -538,12 +506,9 @@ class PropertyBuilder:
     """Helper for property operations - thin wrapper that configures RigBuilder"""
 
     def __init__(self, rig_builder: RigBuilder, property_name: str):
-        from .contracts import ConfigError
-
         self.rig_builder = rig_builder
         self.property_name = property_name
 
-        # Check if a property is already set - can't chain multiple properties
         if self.rig_builder.config.property is not None and self.rig_builder.config.property != property_name:
             self.rig_builder._is_valid = False
             raise ConfigError(
@@ -554,24 +519,41 @@ class PropertyBuilder:
                 f"  rig.{property_name}(...)"
             )
 
-        # Set property on builder
         self.rig_builder.config.property = property_name
 
-    # Mode accessors for property.mode.operation() syntax
     @property
     def offset(self) -> 'PropertyBuilder':
+        self._check_duplicate_mode("offset")
         self.rig_builder.config.mode = "offset"
         return self
 
     @property
     def override(self) -> 'PropertyBuilder':
+        self._check_duplicate_mode("override")
         self.rig_builder.config.mode = "override"
         return self
 
     @property
     def scale(self) -> 'PropertyBuilder':
+        self._check_duplicate_mode("scale")
         self.rig_builder.config.mode = "scale"
         return self
+
+    def _check_duplicate_mode(self, new_mode: str) -> None:
+        if self.rig_builder.config.mode is not None:
+            self.rig_builder._is_valid = False
+            existing_mode = self.rig_builder.config.mode
+            raise ConfigError(
+                f"Cannot call .{new_mode} after .{existing_mode} - only one mode allowed.\n\n"
+                f"Each operation can only have one mode (offset/override/scale).\n\n"
+                f"Current chain: {self.property_name}.{existing_mode}.{new_mode}\n\n"
+                f"Use one mode:\n"
+                f"  rig.{self.property_name}.{new_mode}.to(...)\n\n"
+                f"Modes:\n"
+                f"  .offset   - Add to base value\n"
+                f"  .override - Replace base value\n"
+                f"  .scale    - Multiply base value"
+            )
 
     def _check_duplicate_operator(self, new_operator: str) -> None:
         """Check if an operator is already set and raise error if so
@@ -582,8 +564,6 @@ class PropertyBuilder:
         Raises:
             ConfigError: If an operator is already set
         """
-        from .contracts import ConfigError
-
         if self.rig_builder.config.operator is not None:
             self.rig_builder._is_valid = False
             existing_op = self.rig_builder.config.operator
@@ -604,12 +584,9 @@ class PropertyBuilder:
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
 
-        # Position operations are synchronous by default (instant execution)
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
-            # pos.to() needs absolute positioning (reads ctrl.mouse_pos())
             self.rig_builder.config.movement_type = "absolute"
-        # else: keep default "relative" for speed.to(), direction.to()
 
         return self.rig_builder
 
@@ -619,11 +596,9 @@ class PropertyBuilder:
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
 
-        # Position operations are synchronous by default (instant execution)
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
 
-        # All add/by operations use relative movement (pure deltas)
         self.rig_builder.config.movement_type = "relative"
 
         return self.rig_builder
@@ -676,13 +651,132 @@ class PropertyBuilder:
         """
         return self.rig_builder.revert(ms, easing, **kwargs)
 
-    # Shorthand for anonymous only
     def __call__(self, *args) -> RigBuilder:
         """Shorthand: rig.speed(5) -> rig.speed.to(5)
 
         Only works for anonymous builders.
         """
         return self.to(*args)
+
+    def _value_error(self):
+        """Provide helpful error when PropertyBuilder is used as a value"""
+        raise ConfigError(
+            f"Cannot use rig.{self.property_name} to read values.\n\n"
+            f"rig.{self.property_name} is for setting/building operations:\n"
+            f"  rig.{self.property_name}.to(value)\n"
+            f"  rig.{self.property_name}.add(value)\n\n"
+            f"To read current values, use rig.state:\n"
+            f"  rig.state.{self.property_name}  # Current computed value\n"
+            f"  rig.base.{self.property_name}   # Base (baked) value"
+        )
+
+    def __repr__(self):
+        """Provide helpful error when PropertyBuilder is printed or converted to string"""
+        self._value_error()
+
+    def __str__(self):
+        """Provide helpful error when PropertyBuilder is printed or converted to string"""
+        self._value_error()
+
+    def __abs__(self):
+        """Provide helpful error when PropertyBuilder is used with abs()"""
+        self._value_error()
+
+    def __float__(self):
+        """Provide helpful error when PropertyBuilder is converted to float"""
+        self._value_error()
+
+    def __int__(self):
+        """Provide helpful error when PropertyBuilder is converted to int"""
+        self._value_error()
+
+    def __add__(self, other):
+        """Provide helpful error when PropertyBuilder is used in addition"""
+        self._value_error()
+
+    def __radd__(self, other):
+        """Provide helpful error when PropertyBuilder is used in addition (reversed)"""
+        self._value_error()
+
+    def __sub__(self, other):
+        """Provide helpful error when PropertyBuilder is used in subtraction"""
+        self._value_error()
+
+    def __rsub__(self, other):
+        """Provide helpful error when PropertyBuilder is used in subtraction (reversed)"""
+        self._value_error()
+
+    def __mul__(self, other):
+        """Provide helpful error when PropertyBuilder is used in multiplication"""
+        self._value_error()
+
+    def __rmul__(self, other):
+        """Provide helpful error when PropertyBuilder is used in multiplication (reversed)"""
+        self._value_error()
+
+    def __truediv__(self, other):
+        """Provide helpful error when PropertyBuilder is used in division"""
+        self._value_error()
+
+    def __rtruediv__(self, other):
+        """Provide helpful error when PropertyBuilder is used in division (reversed)"""
+        self._value_error()
+
+    def __floordiv__(self, other):
+        """Provide helpful error when PropertyBuilder is used in floor division"""
+        self._value_error()
+
+    def __rfloordiv__(self, other):
+        """Provide helpful error when PropertyBuilder is used in floor division (reversed)"""
+        self._value_error()
+
+    def __mod__(self, other):
+        """Provide helpful error when PropertyBuilder is used in modulo"""
+        self._value_error()
+
+    def __rmod__(self, other):
+        """Provide helpful error when PropertyBuilder is used in modulo (reversed)"""
+        self._value_error()
+
+    def __pow__(self, other):
+        """Provide helpful error when PropertyBuilder is used in power"""
+        self._value_error()
+
+    def __rpow__(self, other):
+        """Provide helpful error when PropertyBuilder is used in power (reversed)"""
+        self._value_error()
+
+    def __lt__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __le__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __gt__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __ge__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __eq__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __ne__(self, other):
+        """Provide helpful error when PropertyBuilder is used in comparison"""
+        self._value_error()
+
+    def __neg__(self):
+        """Provide helpful error when PropertyBuilder is negated"""
+        self._value_error()
+
+    def __pos__(self):
+        """Provide helpful error when PropertyBuilder is used with unary +"""
+        self._value_error()
 
 
 class ActiveBuilder:
@@ -708,20 +802,16 @@ class ActiveBuilder:
             elif config.operator in ("mul", "div"):
                 config.mode = "scale"  # Multiplicative
             else:
-                config.mode = "offset"  # Additive contribution
+                config.mode = "offset"
 
-        # Children list - starts empty, only actual children added
         self.children: list['ActiveBuilder'] = []
 
-        # Group lifecycle for coordinated operations (like revert)
         self.group_lifecycle: Optional[Lifecycle] = None
         self.group_base_value: Optional[Any] = None
         self.group_target_value: Optional[Any] = None
 
-        # Flag to mark builder for removal (set when group_lifecycle completes)
         self._marked_for_removal: bool = False
 
-        # Create lifecycle
         self.lifecycle = Lifecycle(is_user_layer=not is_anonymous)
         self.lifecycle.over_ms = config.over_ms
         self.lifecycle.over_easing = config.over_easing
@@ -729,7 +819,6 @@ class ActiveBuilder:
         self.lifecycle.revert_ms = config.revert_ms
         self.lifecycle.revert_easing = config.revert_easing
 
-        # Add callbacks
         for stage, callback in config.then_callbacks:
             self.lifecycle.add_callback(stage, callback)
 
@@ -854,7 +943,6 @@ class ActiveBuilder:
         """
         if self.config.property == "pos":
             if self.config.movement_type == "absolute":
-                # Absolute positioning (pos.to)
                 mode = self.config.mode
                 current_value = self.target_value
 
@@ -868,13 +956,9 @@ class ActiveBuilder:
                 self.rig_state._internal_pos = new_pos
                 self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
 
-                # Move mouse immediately
-                from .core import mouse_move
                 mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
             else:
-                # Relative positioning (pos.by) - just emit the delta
-                delta = self.target_value  # This is the delta (dx, dy)
-                from .core import mouse_move_relative
+                delta = self.target_value
                 mouse_move_relative(int(delta.x), int(delta.y))
 
         # Add other property types here as needed (speed, direction, etc.)
@@ -896,22 +980,19 @@ class ActiveBuilder:
         Returns:
             True if still active, False if should be removed and garbage collected
         """
-        # Update group lifecycle if active (for coordinated revert)
         group_reverted = False
         if self.group_lifecycle:
             self.group_lifecycle.advance(current_time)
             if self.group_lifecycle.is_complete():
-                # Check if it completed via revert
                 if self.group_lifecycle.has_reverted():
                     group_reverted = True
                 self.group_lifecycle = None
-                self._marked_for_removal = True  # Mark for removal
-                return False  # Signal removal
+                self._marked_for_removal = True
+                return False
 
         # Update own lifecycle (only if no group lifecycle is active)
         self.lifecycle.advance(current_time)
 
-        # Update children, remove completed ones
         active_children = []
         for child in self.children:
             child.lifecycle.advance(current_time)
@@ -920,7 +1001,6 @@ class ActiveBuilder:
 
         self.children = active_children
 
-        # Should be removed if own lifecycle says garbage collect AND no children
         should_gc = self.lifecycle.should_be_garbage_collected()
         own_active = not should_gc
         has_children = len(self.children) > 0

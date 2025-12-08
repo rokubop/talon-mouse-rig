@@ -1041,9 +1041,9 @@ class RigState:
             return self._builder.config.mode
 
         @property
-        def operation(self) -> str:
-            """Operation type: 'to', 'by', 'add', 'mult'"""
-            return self._builder.config.operation
+        def operator(self) -> str:
+            """Operator type: 'to', 'by', 'add', 'mult'"""
+            return self._builder.config.operator
 
         @property
         def value(self):
