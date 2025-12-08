@@ -273,6 +273,9 @@ class RigState:
         # Get aggregated value (includes own value + children)
         current_value = builder.get_interpolated_value()
 
+        if current_value is None:
+            return
+
         # Get property and mode from builder config
         prop = builder.config.property
         mode = builder.config.mode
@@ -1003,7 +1006,7 @@ class RigState:
             parts = [
                 f"prop={builder.config.property}",
                 f"mode={builder.config.mode}",
-                f"operation={builder.config.operation}",
+                f"operator={builder.config.operator}",
                 f"value={format_value(builder.get_interpolated_value())}",
                 f"target={format_value(builder.target_value)}",
                 f"time_alive={builder.time_alive:.2f}s",
