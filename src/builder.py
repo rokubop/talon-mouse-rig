@@ -88,6 +88,7 @@ class RigBuilder:
         if order is not None:
             self.config.order = order
 
+        self._is_valid = True
         self._executed = False
         self._lifecycle_stage = None  # Track which stage we're adding callbacks to
 
@@ -134,7 +135,16 @@ class RigBuilder:
 
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
-        from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS
+        from .contracts import RigAttributeError, find_closest_match, VALID_BUILDER_METHODS, ConfigError, VALID_OPERATORS
+
+        # Check if trying to call an operator method when one is already set
+        if self.config.operator is not None and any(name in ops for ops in VALID_OPERATORS.values()):
+            self._is_valid = False
+            raise ConfigError(
+                f"Cannot call .{name}() after .{self.config.operator}() - duplicate operators not allowed.\n\n"
+                f"Each command can only have one operator.\n\n"
+                f"Either use one operator or use separate commands."
+            )
 
         # Valid properties are handled above
         valid_properties = ['pos', 'speed', 'direction', 'vector']
@@ -150,6 +160,7 @@ class RigBuilder:
             msg += f"\n\nAvailable properties: {', '.join(valid_properties)}"
             msg += f"\nAvailable methods: {', '.join(VALID_BUILDER_METHODS)}"
 
+        self._is_valid = False
         raise RigAttributeError(msg)
 
     # ========================================================================
@@ -312,7 +323,7 @@ class RigBuilder:
     # ========================================================================
 
     def __del__(self):
-        if not self._executed:
+        if self._is_valid and not self._executed:
             self._execute()
 
     def _execute(self):
@@ -534,7 +545,7 @@ class PropertyBuilder:
 
         # Check if a property is already set - can't chain multiple properties
         if self.rig_builder.config.property is not None and self.rig_builder.config.property != property_name:
-            self.rig_builder._executed = True
+            self.rig_builder._is_valid = False
             raise ConfigError(
                 f"Cannot combine multiple properties in one command.\n\n"
                 f"Attempting to set both '{self.rig_builder.config.property}' and '{property_name}'.\n\n"
@@ -562,7 +573,33 @@ class PropertyBuilder:
         self.rig_builder.config.mode = "scale"
         return self
 
+    def _check_duplicate_operator(self, new_operator: str) -> None:
+        """Check if an operator is already set and raise error if so
+
+        Args:
+            new_operator: The operator being set
+
+        Raises:
+            ConfigError: If an operator is already set
+        """
+        from .contracts import ConfigError
+
+        if self.rig_builder.config.operator is not None:
+            self.rig_builder._is_valid = False
+            existing_op = self.rig_builder.config.operator
+            raise ConfigError(
+                f"Cannot call .{new_operator}() after .{existing_op}() - duplicate operators not allowed.\n\n"
+                f"Each command can only have one operator.\n\n"
+                f"Current chain: {self.property_name}.{existing_op}(...).{new_operator}(...)\n\n"
+                f"Either use one operator:\n"
+                f"  rig.{self.property_name}.{new_operator}(...)\n\n"
+                f"Or use separate commands:\n"
+                f"  rig.{self.property_name}.{existing_op}(...)\n"
+                f"  rig.{self.property_name}.{new_operator}(...)"
+            )
+
     def to(self, *args) -> RigBuilder:
+        self._check_duplicate_operator("to")
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
@@ -577,6 +614,7 @@ class PropertyBuilder:
         return self.rig_builder
 
     def add(self, *args) -> RigBuilder:
+        self._check_duplicate_operator("add")
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
@@ -594,18 +632,21 @@ class PropertyBuilder:
         return self.add(*args)
 
     def sub(self, *args) -> RigBuilder:
+        self._check_duplicate_operator("sub")
         self.rig_builder.config.operator = "sub"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
+        self._check_duplicate_operator("mul")
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
+        self._check_duplicate_operator("div")
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
@@ -620,21 +661,6 @@ class PropertyBuilder:
         """
         self.rig_builder.config.operator = "bake"
         self.rig_builder.config.value = None
-        self.rig_builder.config.validate_property_operator()
-        return self.rig_builder
-
-    def scale(self, value: float) -> RigBuilder:
-        """Scale accumulated operations retroactively
-
-        Scale is a retroactive multiplier applied to accumulated values within a layer.
-        Last scale wins per layer.
-
-        Examples:
-            rig.layer("boost").speed.add(5).scale(2)  # Add 10 instead of 5
-            rig.final.speed.scale(2)  # Scale final layer's accumulated value
-        """
-        self.rig_builder.config.operator = "scale"
-        self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator()
         return self.rig_builder
 

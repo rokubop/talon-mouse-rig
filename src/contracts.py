@@ -521,13 +521,15 @@ class BuilderConfig:
         if self.mode is None:
             raise ConfigError(
                 f"Layer operations require an explicit mode.\n\n"
-                f"Available modes:\n"
-                f"  - .offset   - additive contribution (layer adds to accumulated value)\n"
-                f"  - .override - replace value (ignores accumulated, sets final value)\n"
-                f"  - .scale    - multiplicative factor (layer multiplies accumulated value)\n\n"
-                f"Example: rig.layer('boost').speed.offset.to(100)\n"
-                f"         rig.layer('cap').speed.override.to(200)\n"
-                f"         rig.layer('slowmo').speed.scale.to(0.5)"
+                f"Available modes (modify the incoming value):\n"
+                f"  - .offset   - offset the incoming value\n"
+                f"  - .override - replace the incoming value\n"
+                f"  - .scale    - multiply the incoming value\n\n"
+                f"Examples:\n"
+                f"  rig.layer('boost').speed.offset.to(100)       # set offset to 100\n"
+                f"  rig.layer('boost').speed.offset.add(10)       # add 10 to offset (auto-stacks)\n"
+                f"  rig.layer('cap').speed.override.to(200)       # replace with 200\n"
+                f"  rig.layer('slowmo').speed.scale.by(0.5)       # multiply by 0.5 (auto-stacks)"
             )
 
         if self.mode not in VALID_MODES:

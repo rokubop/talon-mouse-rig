@@ -25,13 +25,15 @@ def toggle_test_ui(show: bool = None):
         from .direction import DIRECTION_TESTS
         from .vector import VECTOR_TESTS
         from .validation import VALIDATION_TESTS
+        from .contracts import CONTRACTS_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
             ("Speed", SPEED_TESTS),
             ("Direction", DIRECTION_TESTS),
             ("Vector", VECTOR_TESTS),
-            ("Validation", VALIDATION_TESTS)
+            ("Validation", VALIDATION_TESTS),
+            ("Contracts", CONTRACTS_TESTS)
         ]
 
         show = show if show is not None else not actions.user.ui_elements_get_trees()
@@ -147,8 +149,8 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
         cron.after("1s", clear_and_complete)
 
     try:
-        # Skip move_to_center for validation tests
-        if test_group != "Validation":
+        # Skip move_to_center for validation and contract tests
+        if test_group not in ("Validation", "Contracts"):
             move_to_center()
 
         sig = inspect.signature(test_func)

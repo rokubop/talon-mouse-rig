@@ -48,10 +48,6 @@ def reload_rig():
     """
     global _global_state
 
-    # Show brief notification before reload
-    from .ui import show_reloading_notification
-    show_reloading_notification()
-
     if _global_state is not None:
         # Stop any active movements
         try:
@@ -63,9 +59,15 @@ def reload_rig():
             pass
         _global_state = None
 
+    # Show brief notification before reload
+    from .ui import show_reloading_notification
+    import time
+    show_reloading_notification()
+    # Small delay to ensure notification is visible before reload
+    time.sleep(0.1)
+
     # Touch all Python files in src/ and tests/ to trigger Talon's file watcher
     # Touch src/__init__.py FIRST so module reinitializes properly
-    import time
     src_dir = os.path.dirname(__file__)
     parent_dir = os.path.dirname(src_dir)
 

@@ -179,6 +179,7 @@ def test_very_small_duration(on_success, on_failure):
 
         cron.after("100ms", check_cleanup)
     except Exception as e:
+        print(f"  Error message: {e}")
         on_failure(f"Unexpected error with small duration: {e}")
 
 
@@ -191,6 +192,7 @@ def test_very_large_position(on_success, on_failure):
         # Just check it doesn't crash
         on_success()
     except Exception as e:
+        print(f"  Error message: {e}")
         on_failure(f"Error with large position: {e}")
 
 
@@ -226,6 +228,7 @@ def test_angle_normalization(on_success, on_failure):
 
         cron.after("200ms", rotate)
     except Exception as e:
+        print(f"  Error message: {e}")
         on_failure(f"Error with large angle: {e}")
 
 
@@ -256,6 +259,147 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
         on_failure(f"Wrong exception type: {type(e).__name__}: {e}")
 
 
+def test_duplicate_operator_calls(on_success, on_failure):
+    """Test: calling .to().to() should error - duplicate operators not allowed"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.speed.to(5).to(10)
+        on_failure("Expected error for duplicate operator calls but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "operator" in error_msg or "already" in error_msg or "duplicate" in error_msg or "cannot" in error_msg:
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_duplicate_by_calls(on_success, on_failure):
+    """Test: calling .by().by() should error - duplicate operators not allowed"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.direction.by(45).by(90)
+        on_failure("Expected error for duplicate .by() calls but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "operator" in error_msg or "already" in error_msg or "duplicate" in error_msg or "cannot" in error_msg:
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_mixed_operators(on_success, on_failure):
+    """Test: calling .to().add() should error - cannot mix operators"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.speed.to(5).add(3)
+        on_failure("Expected error for mixed operators but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "operator" in error_msg or "already" in error_msg or "cannot" in error_msg:
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_layer_without_mode(on_success, on_failure):
+    """Test: layer("name").speed.to(100) without .offset/.override/.scale should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.layer("test").speed.to(100)
+        builder._execute()  # Force execution to catch validation error
+        on_failure("Expected error for layer without mode but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "mode" in error_msg and ("offset" in error_msg or "override" in error_msg or "scale" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_layer_direction_without_mode(on_success, on_failure):
+    """Test: layer("name").direction.to() without mode should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.layer("test").direction.to(1, 0)
+        builder._execute()  # Force execution to catch validation error
+        on_failure("Expected error for layer direction without mode but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "mode" in error_msg and ("offset" in error_msg or "override" in error_msg or "scale" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_vector_zero_zero(on_success, on_failure):
+    """Test: vector.to(0, 0) should be allowed (stops movement)"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.speed(5)
+        rig.direction.to(1, 0)
+
+        # vector.to(0, 0) should be allowed - it stops movement
+        rig.vector.to(0, 0)
+
+        actions.sleep("100ms")
+
+        # Check that speed is now 0
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.speed) < 0.01:
+            on_success()
+        else:
+            on_failure(f"Expected speed ~0 after vector.to(0, 0), got {rig_check.speed}")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
+def test_position_zero_zero(on_success, on_failure):
+    """Test: pos.to(0, 0) should be allowed (moves to origin)"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.pos.to(0, 0)
+
+        actions.sleep("50ms")
+
+        # Position operations are instant, so check immediately
+        x, y = ctrl.mouse_pos()
+        if abs(x) < 2 and abs(y) < 2:
+            on_success()
+        else:
+            on_failure(f"Expected position ~(0, 0), got ({x}, {y})")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
+def test_duplicate_mode_specification(on_success, on_failure):
+    """Test: layer().direction.offset.override.to() - duplicate mode should use last one"""
+    try:
+        rig = actions.user.mouse_rig()
+        # This should use 'override' mode (the last one specified)
+        rig.layer("test").direction.offset.override.to(1, 0)
+
+        actions.sleep("100ms")
+
+        rig_check = actions.user.mouse_rig()
+        layer_state = rig_check.state.layer("test")
+
+        # Check that override mode was used (should show in mode attribute)
+        if layer_state.mode == "override":
+            on_success()
+        else:
+            on_failure(f"Expected mode 'override', got '{layer_state.mode}'")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -271,4 +415,12 @@ VALIDATION_TESTS = [
     ("negative duration", test_negative_duration),
     ("empty layer name", test_layer_empty_name),
     ("invalid layer state attribute", test_invalid_layer_state_attribute),
+    ("duplicate operator calls (.to.to)", test_duplicate_operator_calls),
+    ("duplicate .by() calls", test_duplicate_by_calls),
+    ("mixed operators (.to.add)", test_mixed_operators),
+    ("layer without mode (speed)", test_layer_without_mode),
+    ("layer without mode (direction)", test_layer_direction_without_mode),
+    ("vector.to(0, 0) allowed", test_vector_zero_zero),
+    ("pos.to(0, 0) allowed", test_position_zero_zero),
+    ("duplicate mode specification", test_duplicate_mode_specification),
 ]
