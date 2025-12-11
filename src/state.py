@@ -888,17 +888,22 @@ class RigState:
         Frame loop runs when:
         1. There's velocity movement (speed > 0), OR
         2. Any builder has an incomplete lifecycle (in OVER, HOLD, or REVERT phase)
+        3. Any child builder has an incomplete lifecycle
 
         Frame loop stops when:
-        - No velocity AND all builders have completed their lifecycle
+        - No velocity AND all builders and their children have completed their lifecycle
         """
         if self._has_movement():
             return True
 
-        # Check if any builder has an incomplete lifecycle
+        # Check if any builder or its children have an incomplete lifecycle
         for builder in self._active_builders.values():
             if not builder.lifecycle.is_complete():
                 return True
+            # Check children (only layers have children, but all builders have the array)
+            for child in builder.children:
+                if not child.lifecycle.is_complete():
+                    return True
 
         return False
 
