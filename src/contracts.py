@@ -32,7 +32,7 @@ VALID_EASINGS = [
     'ease_in4', 'ease_out4', 'ease_in_out4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
-VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle']
+VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'extend', 'throttle']
 
 METHOD_SIGNATURES = {
     'over': {
@@ -114,12 +114,12 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction', 'vector',
     'state', 'base',
-    'stack', 'reset', 'queue', 'extend', 'throttle',
+    'stack', 'replace', 'queue', 'extend', 'throttle',
 ]
 
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake',
-    'stack', 'reset', 'queue', 'extend', 'throttle',
+    'stack', 'replace', 'queue', 'extend', 'throttle',
 ]
 
 # Valid LayerState attributes (properties and methods)
@@ -320,7 +320,7 @@ class LifecycleMethods(Protocol):
 
 
 class BehaviorMethods(Protocol):
-    """Contract for behavior modes (stack, reset, queue, etc.)"""
+    """Contract for behavior modes (stack, replace, queue, etc.)"""
     def stack(self, max: Optional[int] = None): ...
     def reset(self): ...
     def queue(self): ...
@@ -352,7 +352,7 @@ class BuilderConfig:
         self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
 
         # Behavior
-        self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle
+        self.behavior: Optional[str] = None  # stack, replace, queue, extend, throttle
         self.behavior_args: tuple = ()
 
         # Lifecycle timing

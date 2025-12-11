@@ -264,11 +264,11 @@ class RigBuilder:
         return self
 
     @property
-    def reset(self) -> BehaviorProxy:
-        return BehaviorProxy(self, 'reset')
+    def replace(self) -> BehaviorProxy:
+        return BehaviorProxy(self, 'replace')
 
-    def _set_reset(self) -> 'RigBuilder':
-        self.config.behavior = "reset"
+    def _set_replace(self) -> 'RigBuilder':
+        self.config.behavior = "replace"
         return self
 
     @property

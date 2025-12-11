@@ -180,9 +180,9 @@ class Rig:
         return _BehaviorAccessor(self._state, "stack")
 
     @property
-    def reset(self):
-        """Reset behavior accessor"""
-        return _BehaviorAccessor(self._state, "reset")
+    def replace(self):
+        """Replace behavior accessor"""
+        return _BehaviorAccessor(self._state, "replace")
 
     @property
     def queue(self):

@@ -57,11 +57,11 @@ def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
 
 
 # ============================================================================
-# RESET BEHAVIOR TESTS
+# REPLACE BEHAVIOR TESTS
 # ============================================================================
 
-def test_behavior_reset_property_syntax(on_success, on_failure):
-    """Test: layer().reset.pos.offset.by() - reset replaces previous offset"""
+def test_behavior_replace_property_syntax(on_success, on_failure):
+    """Test: layer().replace.pos.offset.by() - replace old offset with new"""
     start_x, start_y = ctrl.mouse_pos()
     dx1, dy1 = 100, 0
     dx2, dy2 = 50, 0
@@ -73,36 +73,36 @@ def test_behavior_reset_property_syntax(on_success, on_failure):
             on_failure(f"First offset wrong: expected ({expected_x}, {start_y}), got ({x}, {y})")
             return
 
-    def check_reset():
+    def check_replace():
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx2  # Should be dx2 only, not dx1+dx2
         if abs(x - expected_x) > 2 or abs(y - start_y) > 2:
-            on_failure(f"Reset offset wrong: expected ({expected_x}, {start_y}), got ({x}, {y})")
+            on_failure(f"Replace offset wrong: expected ({expected_x}, {start_y}), got ({x}, {y})")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
     rig.layer("test").pos.offset.by(dx1, dy1).over(300).then(check_first)
-    cron.after("100ms", lambda: rig.layer("test").reset.pos.offset.by(dx2, dy2).over(300).then(check_reset))
+    cron.after("100ms", lambda: rig.layer("test").replace.pos.offset.by(dx2, dy2).over(300).then(check_replace))
 
 
-def test_behavior_reset_call_syntax(on_success, on_failure):
-    """Test: layer().reset().pos.offset.by() - reset using call syntax"""
+def test_behavior_replace_call_syntax(on_success, on_failure):
+    """Test: layer().replace().pos.offset.by() - replace using call syntax"""
     start_x, start_y = ctrl.mouse_pos()
     dx1 = 100
     dx2 = 50
 
-    def check_reset():
+    def check_replace():
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx2
         if abs(x - expected_x) > 2:
-            on_failure(f"Reset failed: expected x={expected_x}, got {x}")
+            on_failure(f"Replace failed: expected x={expected_x}, got {x}")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
     rig.layer("test").pos.offset.by(dx1, 0).over(300)
-    cron.after("100ms", lambda: rig.layer("test").reset().pos.offset.by(dx2, 0).over(300).then(check_reset))
+    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
 
 
 # ============================================================================
@@ -266,8 +266,8 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
 BEHAVIOR_TESTS = [
     ("behavior stack property syntax", test_behavior_stack_property_syntax),
     ("behavior stack(max=2)", test_behavior_stack_call_syntax_with_max),
-    ("behavior reset property syntax", test_behavior_reset_property_syntax),
-    ("behavior reset()", test_behavior_reset_call_syntax),
+    ("behavior replace property syntax", test_behavior_replace_property_syntax),
+    ("behavior replace()", test_behavior_replace_call_syntax),
     ("behavior queue property syntax", test_behavior_queue_property_syntax),
     ("behavior queue(max=2)", test_behavior_queue_call_syntax_with_max),
     ("behavior extend property syntax", test_behavior_extend_property_syntax),

@@ -101,9 +101,52 @@ class RigState:
         """
         layer = builder.config.layer_name
 
-        if behavior == "reset":
-            self.remove_builder(layer)
-            return False  # Continue processing as new builder
+        if behavior == "replace":
+            # Replace old layer state with new state
+            # Key: Set base_value to old value so tick animates old → new
+
+            # Capture current value BEFORE any state changes
+            import time
+            current_time = time.perf_counter()
+            existing.advance(current_time)  # Ensure up-to-date
+            old_value = existing.get_interpolated_value()
+
+            print(f"[REPLACE DEBUG] Layer: {layer}")
+            print(f"[REPLACE DEBUG] Property: {existing.config.property}")
+            print(f"[REPLACE DEBUG] Old builder base_value: {existing.base_value}")
+            print(f"[REPLACE DEBUG] Old builder target_value: {existing.target_value}")
+            print(f"[REPLACE DEBUG] Old interpolated value: {old_value}")
+            print(f"[REPLACE DEBUG] New builder initial base_value: {builder.base_value}")
+            print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
+
+            # REPLACE semantics: Continue from current position to new absolute target
+            # Current: old_value (e.g., 31 pixels from start) - already emitted by old builder
+            # Target: builder.target_value (e.g., 50 pixels from start)
+            # Need to emit: target - current = 50 - 31 = 19 more pixels
+
+            # Set base to ZERO and target to the DELTA we need to emit
+            remaining_delta = builder.target_value - old_value
+            builder.base_value = Vec2(0, 0)
+            builder.target_value = remaining_delta
+
+            print(f"[REPLACE DEBUG] Current offset: {old_value}, Final target: {builder.target_value}")
+            print(f"[REPLACE DEBUG] Will emit delta: {remaining_delta} to reach final target")
+            print(f"[REPLACE DEBUG] New builder base_value: {builder.base_value}")
+            print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
+
+            # ATOMIC REPLACE: Add new builder first, then remove old
+            # This prevents a gap where the layer is empty (which could emit zero)
+            self._active_builders[layer] = builder
+
+            # Track layer order (same logic as in add_builder)
+            if builder.config.order is not None:
+                self._layer_orders[layer] = builder.config.order
+            elif layer != "__base__":
+                if layer not in self._layer_orders:
+                    self._layer_orders[layer] = self._next_auto_order
+                    self._next_auto_order += 1
+
+            return True  # Handled, we manually added the builder
         elif behavior == "extend":
             if existing.lifecycle.hold_ms is not None:
                 existing.lifecycle.hold_ms += builder.config.hold_ms or 0
@@ -140,7 +183,7 @@ class RigState:
         """Handle behavior for base layer operations"""
         layer = builder.config.layer_name
 
-        if behavior == "reset" and layer == "__base__":
+        if behavior == "replace" and layer == "__base__":
             # For .to() operator, cancel all base builders with same property
             if builder.config.property:
                 layers_to_remove = [
@@ -203,7 +246,7 @@ class RigState:
                     f"Cannot mix modes on layer '{layer}'.\n"
                     f"Existing mode: '{existing_mode}'\n"
                     f"Attempted mode: '{new_mode}'\n\n"
-                    f"Each layer must use a single mode. Either use .reset or use separate layers for different modes:\n"
+                    f"Each layer must use a single mode. Either use .replace or use separate layers for different modes:\n"
                     f"  rig.layer('boost').speed.offset.to(100)\n"
                     f"  rig.layer('cap').speed.override.to(200)  # Different layer"
                 )
