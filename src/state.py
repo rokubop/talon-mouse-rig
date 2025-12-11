@@ -109,7 +109,12 @@ class RigState:
                 existing.lifecycle.hold_ms += builder.config.hold_ms or 0
             return True  # Handled, early return
         elif behavior == "throttle":
-            throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
+            # No args = ignore while any builder active on layer
+            if not builder.config.behavior_args:
+                return True  # Ignored, early return
+
+            # With args = ignore if builder was active within last X ms
+            throttle_ms = builder.config.behavior_args[0]
             if layer in self._throttle_times:
                 elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
                 if elapsed < throttle_ms:
@@ -117,8 +122,6 @@ class RigState:
             self._throttle_times[layer] = time.perf_counter()
             existing.add_child(builder)
             return True  # Handled, early return
-        elif behavior == "ignore":
-            return True  # Ignored, early return
         else:
             # Stack or queue - add as child
             existing.add_child(builder)

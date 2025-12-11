@@ -294,13 +294,11 @@ class RigBuilder:
     def _set_throttle(self, ms: Optional[float] = None) -> 'RigBuilder':
         """Internal: Set throttle behavior
 
-        If ms is None, sets behavior to 'ignore' (ignore while active)
-        If ms is provided, sets behavior to 'throttle' with rate limiting
+        If ms is None, ignores while any builder active on layer (throttle with no args)
+        If ms is provided, ignores if builder was active within last X ms (throttle with time limit)
         """
-        if ms is None:
-            self.config.behavior = "ignore"
-        else:
-            self.config.behavior = "throttle"
+        self.config.behavior = "throttle"
+        if ms is not None:
             self.config.behavior_args = (ms,)
         return self
 

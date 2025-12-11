@@ -450,3 +450,4 @@ POSITION_TESTS = [
     ("pos.by() twice", test_pos_by_twice),
     ("pos.to() then by()", test_pos_to_then_by),
 ]
+

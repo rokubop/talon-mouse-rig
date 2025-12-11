@@ -22,7 +22,6 @@ VALID_MODES = ['offset', 'override', 'scale']
 
 LAYER_TYPES = {
     '__base__': {'order': float('-inf')},
-    '__final__': {'order': float('inf')},
 }
 
 VALID_EASINGS = [
@@ -33,7 +32,7 @@ VALID_EASINGS = [
     'ease_in4', 'ease_out4', 'ease_in_out4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
-VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle', 'ignore']  # ignore is internal for throttle()
+VALID_BEHAVIORS = ['stack', 'reset', 'queue', 'extend', 'throttle']
 
 METHOD_SIGNATURES = {
     'over': {
@@ -353,7 +352,7 @@ class BuilderConfig:
         self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
 
         # Behavior
-        self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle, ignore
+        self.behavior: Optional[str] = None  # stack, reset, queue, extend, throttle
         self.behavior_args: tuple = ()
 
         # Lifecycle timing
