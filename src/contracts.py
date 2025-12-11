@@ -85,8 +85,8 @@ for behavior in VALID_BEHAVIORS:
         }
     elif behavior == 'stack':
         METHOD_SIGNATURES[behavior] = {
-            'params': ['max_count'],
-            'signature': f'{behavior}(max_count=None)',
+            'params': ['max'],
+            'signature': f'{behavior}(max=None)',
             'validations': {}
         }
     else:
@@ -321,7 +321,7 @@ class LifecycleMethods(Protocol):
 
 class BehaviorMethods(Protocol):
     """Contract for behavior modes (stack, reset, queue, etc.)"""
-    def stack(self, max_count: Optional[int] = None): ...
+    def stack(self, max: Optional[int] = None): ...
     def reset(self): ...
     def queue(self): ...
     def extend(self): ...

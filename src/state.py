@@ -124,6 +124,15 @@ class RigState:
             return True  # Handled, early return
         else:
             # Stack or queue - add as child
+            if behavior == "stack" and builder.config.behavior_args:
+                # Stack with max count - enforce limit
+                # Max includes parent + children, so max=2 means parent + 1 child
+                max_count = builder.config.behavior_args[0]
+                total_count = 1 + len(existing.children)  # parent + children
+                if total_count >= max_count:
+                    # Already at max, don't add
+                    return True  # Handled, early return
+
             existing.add_child(builder)
             return True  # Handled, early return
 

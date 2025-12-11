@@ -35,9 +35,9 @@ class BehaviorProxy:
         self.behavior_name = behavior_name
         self.has_args = has_args
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         method = getattr(self.builder, f'_set_{self.behavior_name}')
-        return method(*args)
+        return method(*args, **kwargs)
 
     def __getattr__(self, name):
         method = getattr(self.builder, f'_set_{self.behavior_name}')
@@ -258,9 +258,9 @@ class RigBuilder:
     def stack(self) -> BehaviorProxy:
         return BehaviorProxy(self, 'stack', has_args=True)
 
-    def _set_stack(self, max_count: Optional[int] = None) -> 'RigBuilder':
+    def _set_stack(self, max: Optional[int] = None) -> 'RigBuilder':
         self.config.behavior = "stack"
-        self.config.behavior_args = (max_count,) if max_count is not None else ()
+        self.config.behavior_args = (max,) if max is not None else ()
         return self
 
     @property
