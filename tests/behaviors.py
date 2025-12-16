@@ -106,24 +106,41 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
 
 
 def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
-    """Test: replace with pos.offset.by().over().revert() - should revert to start position"""
+    """Test: pos.offset.by().over().revert() - should revert back to start position"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx = 50
+
+    def check_pos():
+        x, y = ctrl.mouse_pos()
+        # After revert, should be back at start position
+        if x != start_x or y != start_y:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.offset.by(dx, 0).over(300).revert(300).then(check_pos)
+
+
+def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
+    """Test: replace().pos.offset.by().over().revert() - replace during animation, should still revert to start"""
     start_x, start_y = ctrl.mouse_pos()
     dx1 = 100
     dx2 = 50
 
     def check_pos():
         x, y = ctrl.mouse_pos()
-        # After revert, should be back at start position
-        if abs(x - start_x) > 2:
-            on_failure(f"Revert position wrong: expected x={start_x}, got {x}")
+        # After replace and revert, should be back at start position
+        if x != start_x or y != start_y:
+            on_failure(f"After replace+revert: expected ({start_x}, {start_y}), got ({x}, {y})")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
-    # First offset by dx1
-    rig.layer("test").pos.offset.by(dx1, 0).over(200)
-    # Replace with dx2 offset, then revert - should go back to start
-    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(200).revert(200).then(check_pos))
+    # Start first animation
+    rig.layer("test").pos.offset.by(dx1, 0).over(300).revert(300)
+    # Replace it mid-flight with a different offset
+    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
 
 
 def test_behavior_replace_pos_override_to_over(on_success, on_failure):
@@ -376,6 +393,7 @@ BEHAVIOR_TESTS = [
     ("behavior replace property syntax", test_behavior_replace_property_syntax),
     ("behavior replace()", test_behavior_replace_call_syntax),
     ("behavior pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
+    ("behavior replace pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
     ("behavior replace pos.override.to().over()", test_behavior_replace_pos_override_to_over),
     ("behavior replace speed.override.to().over()", test_behavior_replace_speed_override_to_over),
     ("behavior replace speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
