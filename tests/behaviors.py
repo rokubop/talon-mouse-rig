@@ -106,21 +106,24 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
 
 
 def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
-    """Test: replace with pos.offset.by().over().revert() - should revert to final target"""
+    """Test: replace with pos.offset.by().over().revert() - should revert to start position"""
     start_x, start_y = ctrl.mouse_pos()
     dx1 = 100
     dx2 = 50
 
     def check_pos():
         x, y = ctrl.mouse_pos()
-        # After replace animation, should be at dx2
-        expected_x = start_x + dx2
-        if abs(x - expected_x) > 2:
-            on_failure(f"Replace position wrong: expected x={expected_x}, got {x}")
+        # After revert, should be back at start position
+        if abs(x - start_x) > 2:
+            on_failure(f"Revert position wrong: expected x={start_x}, got {x}")
             return
+        on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos)
+    # First offset by dx1
+    rig.layer("test").pos.offset.by(dx1, 0).over(200)
+    # Replace with dx2 offset, then revert - should go back to start
+    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(200).revert(200).then(check_pos))
 
 
 def test_behavior_replace_pos_override_to_over(on_success, on_failure):

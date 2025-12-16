@@ -1096,6 +1096,11 @@ class ActiveBuilder:
             elif mode == "offset":
                 # Offset mode: animate offset from zero
                 neutral = Vec2(0, 0)
+                
+                # For replaced builders, use the intended final offset during revert
+                # (target_value was changed to a delta during replace)
+                revert_target = self._replace_final_target if hasattr(self, '_replace_final_target') else self.target_value
+                
                 if phase is None:
                     if self.lifecycle.has_reverted():
                         return neutral
@@ -1105,7 +1110,7 @@ class ActiveBuilder:
                 elif phase == LifecyclePhase.HOLD:
                     return self.target_value
                 elif phase == LifecyclePhase.REVERT:
-                    return self.target_value * (1.0 - progress)
+                    return revert_target * (1.0 - progress)
             else:  # override
                 # Override mode: animate absolute position from base
                 if phase is None:

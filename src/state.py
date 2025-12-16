@@ -124,12 +124,20 @@ class RigState:
             # Target: builder.target_value (e.g., 50 pixels from start)
             # Need to emit: target - current = 50 - 31 = 19 more pixels
 
+            # Capture the intended final offset BEFORE we modify builder.target_value
+            intended_final_offset = builder.target_value
+
             # Set base to ZERO and target to the DELTA we need to emit
             remaining_delta = builder.target_value - old_value
             builder.base_value = Vec2(0, 0)
             builder.target_value = remaining_delta
 
-            print(f"[REPLACE DEBUG] Current offset: {old_value}, Final target: {builder.target_value}")
+            # Store the intended final absolute offset for revert
+            # This is needed because we changed target_value to be a delta (remaining_delta),
+            # but revert needs to know the absolute final value to animate from
+            builder._replace_final_target = intended_final_offset
+
+            print(f"[REPLACE DEBUG] Current offset: {old_value}, Final target: {intended_final_offset}")
             print(f"[REPLACE DEBUG] Will emit delta: {remaining_delta} to reach final target")
             print(f"[REPLACE DEBUG] New builder base_value: {builder.base_value}")
             print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
@@ -629,10 +637,28 @@ class RigState:
                     builder._last_emitted_relative_pos = Vec2(0, 0)
                 if not hasattr(builder, '_total_emitted_int'):
                     builder._total_emitted_int = Vec2(0, 0)
+                
+                # Sync tracking for replaced builders entering REVERT phase
+                # This ensures revert emits correct deltas from the intended final offset
+                if (builder.lifecycle.phase == LifecyclePhase.REVERT and 
+                    hasattr(builder, '_replace_final_target') and 
+                    not hasattr(builder, '_revert_tracking_synced')):
+                    builder._last_emitted_relative_pos = builder._replace_final_target
+                    builder._total_emitted_int = Vec2(round(builder._replace_final_target.x), round(builder._replace_final_target.y))
+                    builder._revert_tracking_synced = True
 
                 # Compute integer delta accounting for accumulated error
                 target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
                 actual_delta_int = target_total_int - builder._total_emitted_int
+
+                # Debug output for revert
+                if builder.group_lifecycle and not builder.group_lifecycle.is_complete():
+                    print(f"[REVERT TICK] Layer: {layer_name}")
+                    print(f"[REVERT TICK] current_interpolated: {current_interpolated}")
+                    print(f"[REVERT TICK] _total_emitted_int: {builder._total_emitted_int}")
+                    print(f"[REVERT TICK] target_total_int: {target_total_int}")
+                    print(f"[REVERT TICK] actual_delta_int: {actual_delta_int}")
+                    print(f"[REVERT TICK] Mouse pos: {ctrl.mouse_pos()}")
 
                 relative_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
 
@@ -1292,7 +1318,27 @@ class RigState:
             builder = self._active_builders[layer]
 
             # Capture current aggregated value
-            current_value = builder.get_interpolated_value()
+            # For builders that were replaced, use the stored final target value instead
+            # This handles the case where target_value was changed to a delta during replace
+            if hasattr(builder, '_replace_final_target'):
+                # After replace, get_interpolated_value() returns the delta being emitted
+                # But for revert, we need the total intended final offset
+                current_value = builder._replace_final_target
+                
+                print(f"[TRIGGER_REVERT] Layer: {layer}")
+                print(f"[TRIGGER_REVERT] Using _replace_final_target: {current_value}")
+                print(f"[TRIGGER_REVERT] get_interpolated_value() would return: {builder.get_interpolated_value()}")
+                print(f"[TRIGGER_REVERT] Current _total_emitted_int: {builder._total_emitted_int if hasattr(builder, '_total_emitted_int') else 'not set'}")
+                
+                # CRITICAL: Update tracking to reflect the total offset that will be emitted
+                # Without this, the delta calculation thinks we've only emitted partial offset
+                if builder.config.property == "pos" and builder.config.movement_type == "relative":
+                    # Set tracking as if we've already emitted the full final offset
+                    builder._last_emitted_relative_pos = current_value
+                    builder._total_emitted_int = Vec2(round(current_value.x), round(current_value.y))
+                    print(f"[TRIGGER_REVERT] Updated _total_emitted_int to: {builder._total_emitted_int}")
+            else:
+                current_value = builder.get_interpolated_value()
 
             # Get base value (neutral/zero for the property type)
             # Use builder's own config since children might be empty after first revert
