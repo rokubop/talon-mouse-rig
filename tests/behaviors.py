@@ -105,6 +105,111 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
     cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
 
 
+def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
+    """Test: replace with pos.offset.by().over().revert() - should revert to final target"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx1 = 100
+    dx2 = 50
+
+    def check_pos():
+        x, y = ctrl.mouse_pos()
+        # After replace animation, should be at dx2
+        expected_x = start_x + dx2
+        if abs(x - expected_x) > 2:
+            on_failure(f"Replace position wrong: expected x={expected_x}, got {x}")
+            return
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.offset.by(dx1, 0).over(300)
+    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
+
+
+def test_behavior_replace_pos_override_to_over(on_success, on_failure):
+    """Test: replace with pos.override.to().over() - absolute positioning"""
+    start_x, start_y = ctrl.mouse_pos()
+    target1_x, target1_y = start_x + 100, start_y
+    target2_x, target2_y = start_x + 50, start_y
+
+    def check_replace():
+        x, y = ctrl.mouse_pos()
+        if abs(x - target2_x) > 2 or abs(y - target2_y) > 2:
+            on_failure(f"Replace position wrong: expected ({target2_x}, {target2_y}), got ({x}, {y})")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").pos.override.to(target1_x, target1_y).over(300)
+    cron.after("100ms", lambda: rig.layer("test").replace().pos.override.to(target2_x, target2_y).over(300).then(check_replace))
+
+
+def test_behavior_replace_speed_override_to_over(on_success, on_failure):
+    """Test: replace with speed.override.to().over()"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    def check_movement():
+        x, y = ctrl.mouse_pos()
+        # Should have moved right due to speed=5
+        if x <= start_x:
+            on_failure(f"No movement detected: start={start_x}, current={x}")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # Start with speed 10
+    rig.layer("test").speed.override.to(10).over(100)
+    # Replace with speed 5 after 50ms
+    cron.after("50ms", lambda: rig.layer("test").replace().speed.override.to(5).over(100))
+    # Check after movement (200ms total)
+    cron.after("250ms", check_movement)
+
+
+def test_behavior_replace_speed_offset_by_over_revert(on_success, on_failure):
+    """Test: replace with speed.offset.by().over().revert()"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    def check_revert():
+        x, y = ctrl.mouse_pos()
+        # After revert, speed should be 0, so minimal/no movement after this point
+        pos_at_revert = x
+
+        def check_stopped():
+            x2, y2 = ctrl.mouse_pos()
+            # Should have stopped (no significant movement after revert)
+            if abs(x2 - pos_at_revert) > 5:
+                on_failure(f"Speed not reverted: moved {abs(x2 - pos_at_revert)} pixels after revert")
+                return
+            on_success()
+
+        cron.after("100ms", check_stopped)
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").speed.offset.by(10).over(100)
+    cron.after("50ms", lambda: rig.layer("test").replace().speed.offset.by(5).over(100).revert(100))
+    cron.after("300ms", check_revert)
+
+
+def test_behavior_replace_direction_by_over_revert(on_success, on_failure):
+    """Test: replace with direction.offset.by().over().revert()"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    def check_direction():
+        x, y = ctrl.mouse_pos()
+        # After rotation, should have moved both right and down
+        if x <= start_x or y <= start_y:
+            on_failure(f"Direction change not detected: start=({start_x}, {start_y}), current=({x}, {y})")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # Start with rightward movement
+    rig.layer("test").speed.override.to(10)
+    rig.layer("test2").direction.offset.by(45).over(100)
+    # Replace with different rotation
+    cron.after("50ms", lambda: rig.layer("test2").replace().direction.offset.by(90).over(100).revert(100))
+    # Check after animations
+    cron.after("300ms", check_direction)
+
+
 # ============================================================================
 # QUEUE BEHAVIOR TESTS
 # ============================================================================
@@ -268,6 +373,11 @@ BEHAVIOR_TESTS = [
     ("behavior stack(max=2)", test_behavior_stack_call_syntax_with_max),
     ("behavior replace property syntax", test_behavior_replace_property_syntax),
     ("behavior replace()", test_behavior_replace_call_syntax),
+    ("behavior replace pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
+    ("behavior replace pos.override.to().over()", test_behavior_replace_pos_override_to_over),
+    ("behavior replace speed.override.to().over()", test_behavior_replace_speed_override_to_over),
+    ("behavior replace speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
+    ("behavior replace direction.offset.by().over().revert()", test_behavior_replace_direction_by_over_revert),
     ("behavior queue property syntax", test_behavior_queue_property_syntax),
     ("behavior queue(max=2)", test_behavior_queue_call_syntax_with_max),
     ("behavior extend property syntax", test_behavior_extend_property_syntax),
