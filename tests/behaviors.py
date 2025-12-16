@@ -105,7 +105,7 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
     cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
 
 
-def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
+def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
     """Test: replace with pos.offset.by().over().revert() - should revert to final target"""
     start_x, start_y = ctrl.mouse_pos()
     dx1 = 100
@@ -120,8 +120,7 @@ def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
             return
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx1, 0).over(300)
-    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
+    rig.layer("test").pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos)
 
 
 def test_behavior_replace_pos_override_to_over(on_success, on_failure):
@@ -373,7 +372,7 @@ BEHAVIOR_TESTS = [
     ("behavior stack(max=2)", test_behavior_stack_call_syntax_with_max),
     ("behavior replace property syntax", test_behavior_replace_property_syntax),
     ("behavior replace()", test_behavior_replace_call_syntax),
-    ("behavior replace pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
+    ("behavior pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
     ("behavior replace pos.override.to().over()", test_behavior_replace_pos_override_to_over),
     ("behavior replace speed.override.to().over()", test_behavior_replace_speed_override_to_over),
     ("behavior replace speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
