@@ -363,6 +363,39 @@ class RigBuilder:
 
         self._calculate_rate_durations()
 
+        # Execute based on behavior mode
+        if self.config.behavior == "queue":
+            self._execute_queue_behavior()
+        else:
+            self._execute_direct()
+
+    def _execute_queue_behavior(self):
+        """Execute builder with queue behavior - enqueue or start immediately"""
+        # Create temporary ActiveBuilder to get queue key
+        temp_active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
+        queue_key = self.rig_state._get_queue_key(self.config.layer_name, temp_active)
+        queue = self.rig_state._queue_manager.get_queue(queue_key)
+
+        # Capture config for execution callback
+        config = self.config
+        is_anon = self.is_anonymous
+
+        def execute_callback():
+            """Callback to execute this builder"""
+            new_builder = ActiveBuilder(config, self.rig_state, is_anon, queue=queue)
+            self.rig_state.add_builder(new_builder)
+
+        # Check if queue is actively executing OR has items waiting
+        if queue.current is not None or not queue.is_empty():
+            # Enqueue for later execution
+            self.rig_state._queue_manager.enqueue(queue_key, execute_callback)
+        else:
+            # First execution: set as current and execute immediately
+            queue.current = execute_callback
+            execute_callback()
+
+    def _execute_direct(self):
+        """Execute builder directly without queue behavior"""
         active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
         self.rig_state.add_builder(active)
 
@@ -784,7 +817,7 @@ class ActiveBuilder:
     This provides uniform handling for single builders and groups.
     """
 
-    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_anonymous: bool):
+    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_anonymous: bool, queue=None):
         import time
 
         self.config = config
@@ -792,6 +825,7 @@ class ActiveBuilder:
         self.is_anonymous = is_anonymous
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
+        self.queue = queue  # Optional queue for accessing accumulated state
 
         # For anonymous layers, set mode based on operator semantics
         if config.mode is None and is_anonymous:
@@ -837,7 +871,8 @@ class ActiveBuilder:
         elif config.operator in ("by", "add"):
             # For relative operations
             if config.property == "pos" and config.movement_type == "relative":
-                # pos.by() - pure delta, start at zero
+                # pos.by() - always start at zero for offset mode
+                # Queue accumulated state is tracked separately by the queue system
                 self.base_value = Vec2(0, 0)
             else:
                 # speed.by(), direction.by() - use base state
@@ -969,15 +1004,52 @@ class ActiveBuilder:
         """
         self.children.append(child)
 
-    def advance(self, current_time: float) -> bool:
+    def _trigger_queue_completion(self):
+        """Notify queue manager that this builder has completed"""
+        if self.config.behavior == "queue":
+            queue_key = self.rig_state._get_queue_key(self.layer, self)
+            final_value = self.get_interpolated_value()
+            self.rig_state._queue_manager.on_builder_complete(
+                queue_key, self.config.property, final_value
+            )
+
+    def _advance_children(self, current_time: float) -> list:
+        """Advance all children and return phase transitions
+
+        Returns:
+            List of (child, completed_phase) tuples for phase transition callbacks
+        """
+        phase_transitions = []
+
+        for child in self.children:
+            child_was_incomplete = not child.lifecycle.is_complete()
+            old_phase = child.lifecycle.phase
+
+            child.lifecycle.advance(current_time)
+            new_phase = child.lifecycle.phase
+
+            # Track phase transitions for callbacks
+            if old_phase != new_phase and old_phase is not None:
+                phase_transitions.append((child, old_phase))
+
+            # If child just completed and has queue behavior, trigger next
+            if child_was_incomplete and child.lifecycle.is_complete():
+                child._trigger_queue_completion()
+
+        return phase_transitions
+
+    def advance(self, current_time: float) -> tuple[bool, list]:
         """Advance this builder and all children forward in time.
 
         Args:
             current_time: Current timestamp from perf_counter() (captured once per frame)
 
         Returns:
-            True if still active, False if should be removed and garbage collected
+            (is_active, phase_transitions) where:
+            - is_active: True if still active, False if should be removed
+            - phase_transitions: List of (child, completed_phase) tuples
         """
+        child_phase_transitions = []
         group_reverted = False
         if self.group_lifecycle:
             self.group_lifecycle.advance(current_time)
@@ -986,24 +1058,28 @@ class ActiveBuilder:
                     group_reverted = True
                 self.group_lifecycle = None
                 self._marked_for_removal = True
-                return False
+                return (False, [])
+
+        # Track if lifecycle was incomplete before this advance
+        was_incomplete = not self.lifecycle.is_complete()
 
         # Update own lifecycle (only if no group lifecycle is active)
         self.lifecycle.advance(current_time)
 
-        active_children = []
-        for child in self.children:
-            child.lifecycle.advance(current_time)
-            if not child.lifecycle.should_be_garbage_collected():
-                active_children.append(child)
+        # If lifecycle just completed and this builder has queue behavior, trigger next
+        if was_incomplete and self.lifecycle.is_complete():
+            self._trigger_queue_completion()
 
-        self.children = active_children
+        # Advance all children and collect phase transitions
+        child_phase_transitions.extend(self._advance_children(current_time))
+        self.children = [c for c in self.children if not c.lifecycle.should_be_garbage_collected()]
 
         should_gc = self.lifecycle.should_be_garbage_collected()
         own_active = not should_gc
         has_children = len(self.children) > 0
 
-        return own_active or has_children
+        is_active = own_active or has_children
+        return (is_active, child_phase_transitions)
 
     def _get_own_value(self) -> Any:
         """Get just this builder's own value (not including children)

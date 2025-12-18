@@ -237,30 +237,28 @@ def test_behavior_queue_property_syntax(on_success, on_failure):
     """Test: layer().queue.pos.offset.by() - queue executes sequentially"""
     start_x, start_y = ctrl.mouse_pos()
     dx1, dy1 = 100, 0
-    dx2, dy2 = 50, 0
+    dx2, dy2 = 0, 100
 
     def check_after_first():
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx1
-        if abs(x - expected_x) > 2:
+        print("Checking after first:", x, y)
+        if x != expected_x:
             on_failure(f"After first: expected x={expected_x}, got {x}")
             return
 
     def check_after_second():
         x, y = ctrl.mouse_pos()
-        expected_x = start_x + dx1 + dx2
-        if abs(x - expected_x) > 2:
-            on_failure(f"After second: expected x={expected_x}, got {x}")
+        expected_y = start_y + dy2
+        print("Checking after second:", x, y)
+        if y != expected_y:
+            on_failure(f"After second: expected y={expected_y}, got {y}")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Queue both immediately - second should wait for first to complete
-    rig.layer("test").queue.pos.offset.by(dx1, dy1).over(300)
-    rig.layer("test").queue.pos.offset.by(dx2, dy2).over(300)
-
-    cron.after("350ms", check_after_first)
-    cron.after("650ms", check_after_second)
+    rig.layer("test").queue.pos.offset.by(dx1, dy1).over(300).then(check_after_first)
+    rig.layer("test").queue.pos.offset.by(dx2, dy2).over(300).then(check_after_second)
 
 
 def test_behavior_queue_call_syntax_with_max(on_success, on_failure):

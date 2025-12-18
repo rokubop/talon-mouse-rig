@@ -85,6 +85,31 @@ class RigState:
     def _generate_base_layer_name(self) -> str:
         return "__base__"
 
+    def _get_queue_key(self, layer: str, builder: 'ActiveBuilder') -> str:
+        """Get the queue key for a builder
+
+        Single source of truth for queue key generation.
+
+        Named layers use their layer name as the queue key, so all queue
+        operations on that layer share the same queue and accumulated state.
+
+        Anonymous (base) layers use a unique key per property/operator to
+        allow independent queues for different operations.
+
+        Args:
+            layer: The layer name
+            builder: The builder to generate a key for
+
+        Returns:
+            Queue key string for use with QueueManager
+        """
+        if builder.config.is_anonymous():
+            # Anonymous queue - unique per property/operator combination
+            return f"__queue_{builder.config.property}_{builder.config.operator}"
+        else:
+            # Named layer queue - use layer name
+            return layer
+
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
 
@@ -128,11 +153,11 @@ class RigState:
             if builder.config.property == "pos" and builder.config.mode == "offset":
                 # Get how much was already emitted by old builder
                 old_emitted = getattr(existing, '_total_emitted_int', Vec2(0, 0))
-                
+
                 # Transfer emission tracking to new builder so it knows where we are
                 builder._total_emitted_int = old_emitted
                 builder._last_emitted_relative_pos = old_value
-                
+
                 # Keep target as-is (the new absolute target)
                 # The frame loop will emit: target - already_emitted
                 print(f"[REPLACE DEBUG] pos.offset: transferred _total_emitted_int={old_emitted}, target={builder.target_value}")
@@ -187,9 +212,9 @@ class RigState:
             self._throttle_times[layer] = time.perf_counter()
             existing.add_child(builder)
             return True  # Handled, early return
-        else:
-            # Stack or queue - add as child
-            if behavior == "stack" and builder.config.behavior_args:
+        elif behavior == "stack":
+            # Stack - add as child
+            if builder.config.behavior_args:
                 # Stack with max count - enforce limit
                 # Max includes parent + children, so max=2 means parent + 1 child
                 max_count = builder.config.behavior_args[0]
@@ -200,6 +225,11 @@ class RigState:
 
             existing.add_child(builder)
             return True  # Handled, early return
+        elif behavior == "queue":
+            # Queue behavior: add as child so both builders coexist
+            # Each queue item will animate sequentially but both exist on the layer
+            existing.add_child(builder)
+            return True  # Handled, added as child
 
     def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str):
         """Handle behavior for base layer operations"""
@@ -247,6 +277,9 @@ class RigState:
 
         For user layers, if layer exists, add as child to existing builder.
         For base layers, operations execute with their configured lifecycle.
+
+        Args:
+            builder: The ActiveBuilder to add
         """
         layer = builder.config.layer_name
 
@@ -293,8 +326,11 @@ class RigState:
 
         # Start frame loop if builder has lifecycle
         if not builder.lifecycle.is_complete():
+            print(f"[ADD_BUILDER] Builder {layer} has lifecycle, ensuring frame loop")
             self._ensure_frame_loop_running()
             return
+        else:
+            print(f"[ADD_BUILDER] Builder {layer} lifecycle is complete!")
 
         # Handle instant completion
         self._handle_instant_completion(builder, layer)
@@ -323,11 +359,11 @@ class RigState:
             if layer in self._throttle_times:
                 del self._throttle_times[layer]
 
-            # Notify queue system
-            queue_key = layer
-            if layer == "__base__":
-                queue_key = f"__queue_{builder.config.property}_{builder.config.operator}"
-            self._queue_manager.on_builder_complete(queue_key)
+            # Notify queue system to start next item
+            if builder.config.behavior == "queue":
+                queue_key = self._get_queue_key(layer, builder)
+                final_value = builder.get_interpolated_value()
+                self._queue_manager.on_builder_complete(queue_key, builder.config.property, final_value)
 
         # Frame loop will be stopped by _tick_frame after final mouse movement
 
@@ -830,11 +866,15 @@ class RigState:
 
         for layer, builder in list(self._active_builders.items()):
             old_phase = builder.lifecycle.phase
-            builder.advance(current_time)
+            is_active, child_transitions = builder.advance(current_time)  # Returns (bool, list)
             new_phase = builder.lifecycle.phase
 
             if old_phase != new_phase and old_phase is not None:
                 phase_transitions.append((builder, old_phase))
+
+            # Add child phase transitions
+            if child_transitions:
+                phase_transitions.extend(child_transitions)
 
         return phase_transitions
 
@@ -856,7 +896,7 @@ class RigState:
                 continue
 
             # Final advance to ensure target achieved
-            still_active = builder.advance(current_time)
+            still_active, _ = builder.advance(current_time)
 
             if not still_active:
                 # For relative position builders, emit any remaining delta after final advance
@@ -879,7 +919,35 @@ class RigState:
                 completed.append(layer)
 
         for layer in completed:
-            self.remove_builder(layer)
+            builder = self._active_builders.get(layer)
+
+            # Check if this is a named layer queue that needs a placeholder
+            if builder and hasattr(builder, '_create_queue_placeholder'):
+                print(f"[STATE] Creating placeholder for queued layer {layer}")
+                # Capture the final accumulated value
+                final_value = builder.get_interpolated_value()
+
+                # Remove the completed builder
+                self.remove_builder(layer)
+
+                # Create a placeholder builder with no lifecycle
+                from .builder import RigBuilder
+                from .contracts import BuilderConfig
+
+                placeholder_config = BuilderConfig()
+                placeholder_config.layer_name = layer
+                placeholder_config.property = builder.config.property
+                placeholder_config.mode = builder.config.mode
+                placeholder_config.operator = "to"
+                placeholder_config.value = final_value
+                placeholder_config.movement_type = builder.config.movement_type
+                # No lifecycle - instant application
+
+                from .builder import ActiveBuilder
+                placeholder = ActiveBuilder(placeholder_config, self, is_anonymous=False)
+                self._active_builders[layer] = placeholder
+            else:
+                self.remove_builder(layer)
 
         return set(completed)
 
