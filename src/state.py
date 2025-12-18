@@ -116,23 +116,40 @@ class RigState:
             print(f"[REPLACE DEBUG] Old builder base_value: {existing.base_value}")
             print(f"[REPLACE DEBUG] Old builder target_value: {existing.target_value}")
             print(f"[REPLACE DEBUG] Old interpolated value: {old_value}")
+            print(f"[REPLACE DEBUG] Old _total_emitted_int: {getattr(existing, '_total_emitted_int', 'N/A')}")
             print(f"[REPLACE DEBUG] New builder initial base_value: {builder.base_value}")
             print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
+            print(f"[REPLACE DEBUG] Builder has revert: {builder.config.revert_ms is not None}")
 
-            # REPLACE semantics: Continue from current position to new absolute target
-            # Current: old_value (e.g., 31 pixels from start) - already emitted by old builder
-            # Target: builder.target_value (e.g., 50 pixels from start)
-            # Need to emit: target - current = 50 - 31 = 19 more pixels
+            # REPLACE semantics for pos.offset:
+            # The old builder has already emitted some pixels (tracked in _total_emitted_int)
+            # The new builder needs to continue from there to reach its target, then revert ALL the way to zero
 
-            # Set base to ZERO and target to the DELTA we need to emit
-            remaining_delta = builder.target_value - old_value
-            builder.base_value = Vec2(0, 0)
-            builder.target_value = remaining_delta
+            if builder.config.property == "pos" and builder.config.mode == "offset":
+                # Get how much was already emitted by old builder
+                old_emitted = getattr(existing, '_total_emitted_int', Vec2(0, 0))
+                
+                # Transfer emission tracking to new builder so it knows where we are
+                builder._total_emitted_int = old_emitted
+                builder._last_emitted_relative_pos = old_value
+                
+                # Keep target as-is (the new absolute target)
+                # The frame loop will emit: target - already_emitted
+                print(f"[REPLACE DEBUG] pos.offset: transferred _total_emitted_int={old_emitted}, target={builder.target_value}")
+            elif builder.config.movement_type == "absolute":
+                # Absolute positioning (pos.override.to): Keep target as absolute position
+                # Just update base_value to current position so animation goes from current -> target
+                builder.base_value = old_value
+                print(f"[REPLACE DEBUG] Absolute positioning: base={builder.base_value}, target={builder.target_value}")
+            else:
+                # Standard replace: emit only the remaining delta
+                remaining_delta = builder.target_value - old_value
+                builder.base_value = Vec2(0, 0)
+                builder.target_value = remaining_delta
+                print(f"[REPLACE DEBUG] Standard replace: delta={remaining_delta}")
 
-            print(f"[REPLACE DEBUG] Current offset: {old_value}, Final target: {builder.target_value}")
-            print(f"[REPLACE DEBUG] Will emit delta: {remaining_delta} to reach final target")
-            print(f"[REPLACE DEBUG] New builder base_value: {builder.base_value}")
-            print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
+            print(f"[REPLACE DEBUG] Final base_value: {builder.base_value}")
+            print(f"[REPLACE DEBUG] Final target_value: {builder.target_value}")
 
             # ATOMIC REPLACE: Add new builder first, then remove old
             # This prevents a gap where the layer is empty (which could emit zero)
