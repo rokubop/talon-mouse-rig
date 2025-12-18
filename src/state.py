@@ -136,15 +136,20 @@ class RigState:
                 # Keep target as-is (the new absolute target)
                 # The frame loop will emit: target - already_emitted
                 print(f"[REPLACE DEBUG] pos.offset: transferred _total_emitted_int={old_emitted}, target={builder.target_value}")
-            elif builder.config.movement_type == "absolute":
-                # Absolute positioning (pos.override.to): Keep target as absolute position
-                # Just update base_value to current position so animation goes from current -> target
+            elif builder.config.mode == "override":
+                # Override mode (absolute values): Keep target as-is
+                # Just update base_value to current value so animation goes from current -> target
+                # This applies to pos.override.to(), speed.override.to(), direction.override.to()
                 builder.base_value = old_value
-                print(f"[REPLACE DEBUG] Absolute positioning: base={builder.base_value}, target={builder.target_value}")
+                print(f"[REPLACE DEBUG] Override mode: base={builder.base_value}, target={builder.target_value}")
             else:
-                # Standard replace: emit only the remaining delta
+                # Standard replace for offset mode: emit only the remaining delta
                 remaining_delta = builder.target_value - old_value
-                builder.base_value = Vec2(0, 0)
+                # Use appropriate zero value based on property type
+                if isinstance(builder.base_value, Vec2):
+                    builder.base_value = Vec2(0, 0)
+                else:
+                    builder.base_value = 0.0
                 builder.target_value = remaining_delta
                 print(f"[REPLACE DEBUG] Standard replace: delta={remaining_delta}")
 
