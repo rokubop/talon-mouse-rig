@@ -131,7 +131,6 @@ class RigState:
             # Key: Set base_value to old value so tick animates old → new
 
             # Capture current value BEFORE any state changes
-            import time
             current_time = time.perf_counter()
             existing.advance(current_time)  # Ensure up-to-date
             old_value = existing.get_interpolated_value()

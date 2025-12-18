@@ -331,28 +331,35 @@ def test_behavior_extend_call_syntax(on_success, on_failure):
 # ============================================================================
 
 def test_behavior_throttle_property_syntax(on_success, on_failure):
-    """Test: layer().throttle.pos.offset.by() - throttle limits execution rate"""
+    """Test: layer().throttle.pos.offset.by() - throttle ignores while layer active"""
     start_x, start_y = ctrl.mouse_pos()
     dx = 100
 
-    call_count = {"value": 0}
+    first_completed = {"value": False}
+    second_completed = {"value": False}
 
-    def increment_count():
-        call_count["value"] += 1
+    def first_done():
+        first_completed["value"] = True
+
+    def second_done():
+        second_completed["value"] = True
 
     def check_throttle():
-        # Should have only executed once or twice due to default throttle
-        if call_count["value"] > 2:
-            on_failure(f"Throttle failed: executed {call_count['value']} times, expected <= 2")
+        # First should complete, second should have been ignored (throttled)
+        if not first_completed["value"]:
+            on_failure(f"Throttle: first builder didn't complete")
+            return
+        if second_completed["value"]:
+            on_failure(f"Throttle: second builder should have been ignored but it executed")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Rapid fire - should be throttled
-    for i in range(5):
-        rig.layer("test").throttle.pos.offset.by(dx, 0).over(100).then(increment_count)
-        actions.sleep("50ms")
-
+    # Start a long-running builder with throttle
+    rig.layer("test").throttle.pos.offset.by(dx, 0).over(300).then(first_done)
+    # Try to add another immediately - should be ignored because first is still active
+    cron.after("50ms", lambda: rig.layer("test").throttle.pos.offset.by(dx * 2, 0).over(100).then(second_done))
+    # Check after both would have completed
     cron.after("500ms", check_throttle)
 
 
@@ -375,9 +382,11 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Fire every 200ms for 1 second
-    for i in range(5):
-        rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count)
-        actions.sleep("200ms")
+    rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count)
+    cron.after("200ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("400ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("600ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("800ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
 
     cron.after("1200ms", check_throttle)
 
