@@ -273,10 +273,11 @@ class RigBuilder:
 
     @property
     def queue(self) -> BehaviorProxy:
-        return BehaviorProxy(self, 'queue')
+        return BehaviorProxy(self, 'queue', has_args=True)
 
-    def _set_queue(self) -> 'RigBuilder':
+    def _set_queue(self, max: Optional[int] = None) -> 'RigBuilder':
         self.config.behavior = "queue"
+        self.config.behavior_args = (max,) if max is not None else ()
         return self
 
     @property

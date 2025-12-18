@@ -228,6 +228,15 @@ class RigState:
         elif behavior == "queue":
             # Queue behavior: add as child so both builders coexist
             # Each queue item will animate sequentially but both exist on the layer
+            if builder.config.behavior_args:
+                # Queue with max count - enforce limit
+                # Max includes parent + children, so max=2 means parent + 1 child
+                max_count = builder.config.behavior_args[0]
+                total_count = 1 + len(existing.children)  # parent + children
+                if total_count >= max_count:
+                    # Already at max, don't add
+                    return True  # Handled, early return
+
             existing.add_child(builder)
             return True  # Handled, added as child
 
@@ -1329,6 +1338,7 @@ class RigState:
         self._active_builders.clear()
         self._layer_orders.clear()
         self._throttle_times.clear()
+        self._queue_manager.clear_all()
 
         # 3. Decelerate speed to 0
         if transition_ms is None or transition_ms == 0:
@@ -1363,6 +1373,7 @@ class RigState:
         """Bake all active builders immediately"""
         for layer in list(self._active_builders.keys()):
             self.remove_builder(layer, bake=True)
+        self._queue_manager.clear_all()
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
         """Trigger revert on builder tree

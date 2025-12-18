@@ -99,6 +99,12 @@ class QueueManager:
             self.queues[layer].clear()
             del self.queues[layer]
 
+    def clear_all(self) -> None:
+        """Clear all queues"""
+        for queue in self.queues.values():
+            queue.clear()
+        self.queues.clear()
+
     def is_active(self, layer: str) -> bool:
         """Check if a queue exists and has items"""
         return layer in self.queues and not self.queues[layer].is_empty()

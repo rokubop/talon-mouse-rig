@@ -280,6 +280,7 @@ def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
     rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
     rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
     rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
+    rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
     cron.after("400ms", check_result)
 
 
