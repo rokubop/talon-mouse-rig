@@ -32,7 +32,7 @@ VALID_EASINGS = [
     'ease_in4', 'ease_out4', 'ease_in_out4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
-VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'extend', 'throttle']
+VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'throttle']
 
 METHOD_SIGNATURES = {
     'over': {
@@ -114,12 +114,12 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction', 'vector',
     'state', 'base',
-    'stack', 'replace', 'queue', 'extend', 'throttle',
+    'stack', 'replace', 'queue', 'throttle',
 ]
 
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake',
-    'stack', 'replace', 'queue', 'extend', 'throttle',
+    'stack', 'replace', 'queue', 'throttle',
 ]
 
 # Valid LayerState attributes (properties and methods)
@@ -324,7 +324,6 @@ class BehaviorMethods(Protocol):
     def stack(self, max: Optional[int] = None): ...
     def reset(self): ...
     def queue(self): ...
-    def extend(self): ...
     def throttle(self, ms: Optional[float] = None): ...
 
 
@@ -352,7 +351,7 @@ class BuilderConfig:
         self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
 
         # Behavior
-        self.behavior: Optional[str] = None  # stack, replace, queue, extend, throttle
+        self.behavior: Optional[str] = None  # stack, replace, queue, throttle
         self.behavior_args: tuple = ()
 
         # Lifecycle timing
@@ -481,6 +480,21 @@ class BuilderConfig:
                     raise ConfigError(
                         "Invalid direction vector (0, 0).\n\n"
                         "Direction cannot be a zero vector - it must have a magnitude.\n\n"
+                        "To stop movement, use one of these instead:\n"
+                        "  rig.stop()             # Stop all movement instantly\n"
+                        "  rig.stop(500)          # Stop with 500ms transition\n"
+                        "  rig.speed.to(0)        # Set speed to zero\n"
+                        "  rig.layer('name').revert()  # Revert a layer"
+                    )
+
+        # Validate vector values
+        if self.property == "vector" and self.operator in ("to", "add", "by"):
+            if isinstance(self.value, (tuple, list)) and len(self.value) >= 2:
+                x, y = self.value[0], self.value[1]
+                if x == 0 and y == 0:
+                    raise ConfigError(
+                        "Invalid vector (0, 0).\n\n"
+                        "Vector cannot be a zero vector - it represents velocity (speed + direction).\n\n"
                         "To stop movement, use one of these instead:\n"
                         "  rig.stop()             # Stop all movement instantly\n"
                         "  rig.stop(500)          # Stop with 500ms transition\n"

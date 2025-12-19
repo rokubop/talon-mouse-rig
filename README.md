@@ -69,7 +69,6 @@ rig.layer("boost").stack.speed.add(10) # Default behavior stacks
 rig.layer("boost").stack(3).speed.add(10) # Max 3 stacks
 rig.layer("boost").queue.speed.add(10) # Queue instead of stack
 rig.layer("boost").queue().speed.add(10) # Queue until finished
-rig.layer("boost").extend.speed.add(10) # Extend hold time
 rig.layer("boost").reset.speed.add(10) # reset instead of stack
 rig.layer("boost").throttle.speed.add(10) # Ignore while active
 rig.layer("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
@@ -142,7 +141,6 @@ Done! 🎉
 - `.stack(max?)` - Stack effects (default: unlimited)
 - `.reset()` - reset previous effect
 - `.queue()` - Queue until current finishes
-- `.extend()` - Extend hold duration
 - `.throttle()` - Ignore while active (same as calling without args)
 - `.throttle(ms)` - Rate limit calls to once per ms
 

@@ -17,7 +17,7 @@ Phase 2: Canonical Value → Application
 
 import math
 from typing import Any, Union
-from .core import Vec2
+from .core import Vec2, EPSILON
 
 
 # =============================================================================
@@ -407,16 +407,17 @@ def apply_vector_mode(
         new_velocity = accumulated_velocity + canonical_value
 
         speed = new_velocity.magnitude()
-        try:
-            direction = new_velocity.normalized()
-        except:
-            # If magnitude is 0, keep current direction
+        # Preserve direction if new velocity is zero (from offsetting to zero)
+        if speed < EPSILON:
             direction = accumulated_direction
+        else:
+            direction = new_velocity.normalized()
 
         return speed, direction
 
     elif mode == "override":
         # Override: replace accumulated value
+        # Note: vector.to(0, 0) is now blocked by validation in contracts.py
         speed = canonical_value.magnitude()
         direction = canonical_value.normalized()
         return speed, direction
@@ -424,7 +425,11 @@ def apply_vector_mode(
     elif mode == "scale":
         # Scale: multiplicative factor
         speed = accumulated_speed * canonical_value.magnitude()
-        direction = (accumulated_direction * canonical_value.magnitude()).normalized()
+        # Preserve direction if speed becomes zero (from scaling to zero)
+        if speed < EPSILON:
+            direction = accumulated_direction
+        else:
+            direction = (accumulated_direction * canonical_value.magnitude()).normalized()
         return speed, direction
 
     return accumulated_speed, accumulated_direction

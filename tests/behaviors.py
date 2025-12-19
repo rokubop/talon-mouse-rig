@@ -285,48 +285,6 @@ def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
 
 
 # ============================================================================
-# EXTEND BEHAVIOR TESTS
-# ============================================================================
-
-def test_behavior_extend_property_syntax(on_success, on_failure):
-    """Test: layer().extend.pos.offset.by() - extend continues from current state"""
-    start_x, start_y = ctrl.mouse_pos()
-    dx1, dy1 = 100, 0
-    dx2, dy2 = 50, 0
-
-    def check_after_extend():
-        x, y = ctrl.mouse_pos()
-        expected_x = start_x + dx1 + dx2
-        if abs(x - expected_x) > 2:
-            on_failure(f"After extend: expected x={expected_x}, got {x}")
-            return
-        on_success()
-
-    rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx1, dy1).over(300)
-    cron.after("100ms", lambda: rig.layer("test").extend.pos.offset.by(dx2, dy2).over(300).then(check_after_extend))
-
-
-def test_behavior_extend_call_syntax(on_success, on_failure):
-    """Test: layer().extend().pos.offset.by() - extend using call syntax"""
-    start_x, start_y = ctrl.mouse_pos()
-    dx1 = 100
-    dx2 = 50
-
-    def check_result():
-        x, y = ctrl.mouse_pos()
-        expected_x = start_x + dx1 + dx2
-        if abs(x - expected_x) > 2:
-            on_failure(f"Extend failed: expected x={expected_x}, got {x}")
-            return
-        on_success()
-
-    rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx1, 0).over(300)
-    cron.after("100ms", lambda: rig.layer("test").extend().pos.offset.by(dx2, 0).over(300).then(check_result))
-
-
-# ============================================================================
 # THROTTLE BEHAVIOR TESTS
 # ============================================================================
 
@@ -408,8 +366,6 @@ BEHAVIOR_TESTS = [
     ("layer().replace().direction.offset.by().over().revert()", test_behavior_replace_direction_by_over_revert),
     ("layer().queue.pos.offset.by()", test_behavior_queue_property_syntax),
     ("layer().queue(max).pos.offset.by()", test_behavior_queue_call_syntax_with_max),
-    ("layer().extend.pos.offset.by()", test_behavior_extend_property_syntax),
-    ("layer().extend().pos.offset.by()", test_behavior_extend_call_syntax),
     ("layer().throttle.pos.offset.by()", test_behavior_throttle_property_syntax),
     ("layer().throttle(ms).pos.offset.by()", test_behavior_throttle_call_syntax_with_ms),
 ]

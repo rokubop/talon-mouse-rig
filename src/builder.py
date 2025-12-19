@@ -281,14 +281,6 @@ class RigBuilder:
         return self
 
     @property
-    def extend(self) -> BehaviorProxy:
-        return BehaviorProxy(self, 'extend')
-
-    def _set_extend(self) -> 'RigBuilder':
-        self.config.behavior = "extend"
-        return self
-
-    @property
     def throttle(self) -> BehaviorProxy:
         return BehaviorProxy(self, 'throttle', has_args=False)
 
@@ -352,7 +344,7 @@ class RigBuilder:
         if self.config.property is None and self.config.operator is None:
             if self.config.revert_ms is not None:
                 # This is a revert() call on an existing is_named_layer builder
-                self.rig_state.trigger_rever--t(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
+                self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return
 
             return

@@ -193,10 +193,6 @@ class RigState:
                     self._next_auto_order += 1
 
             return True  # Handled, we manually added the builder
-        elif behavior == "extend":
-            if existing.lifecycle.hold_ms is not None:
-                existing.lifecycle.hold_ms += builder.config.hold_ms or 0
-            return True  # Handled, early return
         elif behavior == "throttle":
             # No args = ignore while any builder active on layer
             if not builder.config.behavior_args:

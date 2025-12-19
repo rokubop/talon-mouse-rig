@@ -190,11 +190,6 @@ class Rig:
         return _BehaviorAccessor(self._state, "queue")
 
     @property
-    def extend(self):
-        """Extend behavior accessor"""
-        return _BehaviorAccessor(self._state, "extend")
-
-    @property
     def throttle(self):
         """Throttle behavior accessor"""
         return _BehaviorAccessor(self._state, "throttle")

@@ -337,26 +337,20 @@ def test_layer_direction_without_mode(on_success, on_failure):
 
 
 def test_vector_zero_zero(on_success, on_failure):
-    """Test: vector.to(0, 0) should be allowed (stops movement)"""
+    """Test: vector.to(0, 0) should error - invalid zero vector"""
     try:
         rig = actions.user.mouse_rig()
         rig.speed(5)
         rig.direction.to(1, 0)
-
-        # vector.to(0, 0) should be allowed - it stops movement
         rig.vector.to(0, 0)
-
-        actions.sleep("100ms")
-
-        # Check that speed is now 0
-        rig_check = actions.user.mouse_rig()
-        if abs(rig_check.state.speed) < 0.01:
-            on_success()
-        else:
-            on_failure(f"Expected speed ~0 after vector.to(0, 0), got {rig_check.state.speed}")
+        on_failure("Expected error for zero vector but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
-        on_failure(f"Unexpected error: {e}")
+        error_msg = str(e).lower()
+        if ("zero" in error_msg or "invalid" in error_msg) and ("stop" in error_msg or "speed.to(0)" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
 
 
 def test_position_zero_zero(on_success, on_failure):
@@ -473,7 +467,7 @@ VALIDATION_TESTS = [
     ("mixed operators (.to.add)", test_mixed_operators),
     ("layer without mode (speed)", test_layer_without_mode),
     ("layer without mode (direction)", test_layer_direction_without_mode),
-    ("vector.to(0, 0) allowed", test_vector_zero_zero),
+    ("zero vector not allowed", test_vector_zero_zero),
     ("pos.to(0, 0) allowed", test_position_zero_zero),
     ("duplicate mode specification", test_duplicate_mode_specification),
     ("accessing property as value", test_accessing_property_as_value),
