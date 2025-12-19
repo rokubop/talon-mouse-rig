@@ -9,7 +9,7 @@ Unified state manager with:
 
 import time
 import math
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
 from .core import Vec2, SubpixelAdjuster, mouse_move
 from .queue import QueueManager
@@ -18,6 +18,89 @@ from . import mode_operations
 
 if TYPE_CHECKING:
     from .builder import ActiveBuilder
+
+
+def apply_constraints(
+    value: Union[float, Vec2],
+    max_constraint: Any,
+    min_constraint: Any,
+    accumulated: Union[float, Vec2]
+) -> Union[float, Vec2]:
+    """Apply max/min constraints to a layer's contribution based on cumulative value.
+
+    Args:
+        value: The layer's current interpolated value (contribution)
+        max_constraint: Maximum allowed cumulative value (None = no max)
+        min_constraint: Minimum allowed cumulative value (None = no min)
+        accumulated: The current accumulated value from all previous layers
+
+    Returns:
+        Clamped value that won't push accumulated beyond constraints
+
+    Example:
+        # Scalar (speed/direction):
+        accumulated = 100, value = +50, max = 120
+        → returns 20 (can only add 20 to reach max)
+
+        # Vec2 (pos/vector):
+        accumulated = (100, 50), value = (30, 40), max = (120, 80)
+        → returns (20, 30) (clamp each component)
+    """
+    if max_constraint is None and min_constraint is None:
+        return value
+
+    # Handle scalar values (speed, direction)
+    if isinstance(value, (int, float)):
+        cumulative = accumulated + value
+
+        # Apply max constraint
+        if max_constraint is not None and cumulative > max_constraint:
+            value = max_constraint - accumulated
+
+        # Apply min constraint
+        if min_constraint is not None and cumulative < min_constraint:
+            value = min_constraint - accumulated
+
+        return value
+
+    # Handle Vec2 values (pos, vector)
+    elif isinstance(value, Vec2):
+        # Constraints can be tuples or scalars
+        if isinstance(max_constraint, (tuple, list)):
+            max_x, max_y = max_constraint
+        elif max_constraint is not None:
+            max_x = max_y = max_constraint
+        else:
+            max_x = max_y = None
+
+        if isinstance(min_constraint, (tuple, list)):
+            min_x, min_y = min_constraint
+        elif min_constraint is not None:
+            min_x = min_y = min_constraint
+        else:
+            min_x = min_y = None
+
+        # Compute cumulative values
+        cumulative_x = accumulated.x + value.x
+        cumulative_y = accumulated.y + value.y
+
+        # Clamp X component
+        new_x = value.x
+        if max_x is not None and cumulative_x > max_x:
+            new_x = max_x - accumulated.x
+        if min_x is not None and cumulative_x < min_x:
+            new_x = min_x - accumulated.x
+
+        # Clamp Y component
+        new_y = value.y
+        if max_y is not None and cumulative_y > max_y:
+            new_y = max_y - accumulated.y
+        if min_y is not None and cumulative_y < min_y:
+            new_y = min_y - accumulated.y
+
+        return Vec2(new_x, new_y)
+
+    return value
 
 
 class RigState:
@@ -400,6 +483,26 @@ class RigState:
         # Get property and mode from builder config
         prop = builder.config.property
         mode = builder.config.mode
+        max_constraint = builder.config.max_value
+        min_constraint = builder.config.min_value
+
+        # Validate constraints before applying them
+        if max_constraint is not None or min_constraint is not None:
+            builder.config.validate_constraints()
+
+        # Apply constraints for offset mode (additive operations)
+        if mode == "offset" and (max_constraint is not None or min_constraint is not None):
+            if prop == "speed":
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, self._base_speed)
+            elif prop == "direction":
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, self._base_direction)
+            elif prop == "vector":
+                current_velocity = self._base_direction * self._base_speed
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, current_velocity)
+            elif prop == "pos":
+                # For position, check against absolute base or (0, 0) if not tracking
+                base_pos = self._absolute_base_pos if self._absolute_base_pos is not None else Vec2(0, 0)
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, base_pos)
 
         if prop == "vector":
             # Decompose vector into speed and direction
@@ -574,6 +677,27 @@ class RigState:
         mode = builder.config.mode
         current_value = builder.get_interpolated_value()
         pos_is_override = False
+
+        # Apply constraints (only for offset mode with relative operations)
+        max_constraint = builder.config.max_value
+        min_constraint = builder.config.min_value
+
+        # Validate constraints before applying them
+        if max_constraint is not None or min_constraint is not None:
+            builder.config.validate_constraints()
+
+        if mode == "offset" and (max_constraint is not None or min_constraint is not None):
+            if prop == "speed":
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, speed)
+            elif prop == "direction":
+                # Direction constraints don't make much sense, but support them for consistency
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, direction)
+            elif prop == "vector":
+                # Vector constraints apply to the velocity vector
+                current_velocity = direction * speed
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, current_velocity)
+            elif prop == "pos":
+                current_value = apply_constraints(current_value, max_constraint, min_constraint, pos)
 
         if prop == "speed":
             speed = mode_operations.apply_scalar_mode(mode, current_value, speed)

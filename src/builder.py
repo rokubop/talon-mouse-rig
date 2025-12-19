@@ -251,6 +251,38 @@ class RigBuilder:
         return self
 
     # ========================================================================
+    # CONSTRAINT METHODS
+    # ========================================================================
+
+    def max(self, value: Any) -> 'RigBuilder':
+        """Set maximum constraint on operation result
+
+        Args:
+            value: Maximum value (scalar or tuple)
+
+        Examples:
+            rig.speed.add(10).max(15)  # Add 10, cap result at 15
+            rig.pos.add(100, 50).max((1920, 1080))  # Cap position at screen bounds
+        """
+        self.config.max_value = value
+        # Validation happens at execution time, not here
+        return self
+
+    def min(self, value: Any) -> 'RigBuilder':
+        """Set minimum constraint on operation result
+
+        Args:
+            value: Minimum value (scalar or tuple)
+
+        Examples:
+            rig.speed.sub(5).min(1)  # Subtract 5, floor result at 1
+            rig.pos.sub(100, 50).min((0, 0))  # Keep position on screen
+        """
+        self.config.min_value = value
+        # Validation happens at execution time, not here
+        return self
+
+    # ========================================================================
     # BEHAVIOR METHODS
     # ========================================================================
 
@@ -690,6 +722,19 @@ class PropertyBuilder:
         """
         return self.to(*args)
 
+    def __getattr__(self, name: str):
+        """Provide helpful errors for common mistakes"""
+        if name in ('max', 'min'):
+            raise ConfigError(
+                f"Cannot call .{name}() before an operation.\n\n"
+                f"Constraints must be applied after an operation:\n\n"
+                f"  ✗ rig.{self.property_name}.{name}(value).add(10)\n"
+                f"  ✓ rig.{self.property_name}.add(10).{name}(value)\n\n"
+                f"Constraints are applied to the operation result."
+            )
+        # Fall through to default AttributeError
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
     def _value_error(self):
         """Provide helpful error when PropertyBuilder is used as a value"""
         raise ConfigError(
@@ -980,6 +1025,17 @@ class ActiveBuilder:
                 mode = self.config.mode
                 current_value = self.target_value
 
+                # Apply constraints for offset mode
+                max_constraint = self.config.max_value
+                min_constraint = self.config.min_value
+                if mode == "offset" and (max_constraint is not None or min_constraint is not None):
+                    # Import here to avoid circular dependency
+                    from .state import apply_constraints
+                    # Sync to actual current mouse position first
+                    current_mouse_pos = ctrl.mouse_pos()
+                    current_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
+                    current_value = apply_constraints(current_value, max_constraint, min_constraint, current_pos)
+
                 # Sync to actual current mouse position (in case user manually moved it)
                 current_mouse_pos = ctrl.mouse_pos()
                 self.rig_state._internal_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
@@ -992,7 +1048,19 @@ class ActiveBuilder:
 
                 mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
             else:
+                # Relative movement - apply constraints based on current screen position
                 delta = self.target_value
+                max_constraint = self.config.max_value
+                min_constraint = self.config.min_value
+
+                if max_constraint is not None or min_constraint is not None:
+                    # Import here to avoid circular dependency
+                    from .state import apply_constraints
+                    # Get current position and apply constraints
+                    current_mouse_pos = ctrl.mouse_pos()
+                    current_pos = Vec2(current_mouse_pos[0], current_mouse_pos[1])
+                    delta = apply_constraints(delta, max_constraint, min_constraint, current_pos)
+
                 mouse_move_relative(int(delta.x), int(delta.y))
 
         # Add other property types here as needed (speed, direction, etc.)

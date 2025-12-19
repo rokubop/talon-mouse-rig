@@ -345,6 +345,10 @@ class BuilderConfig:
         self.mode: Optional[str] = None  # 'offset', 'override', or 'scale'
         self.order: Optional[int] = None  # Explicit layer ordering
 
+        # Value constraints (for operators: add, by, sub, mul, div - NOT for 'to')
+        self.max_value: Optional[Any] = None  # Maximum value constraint (scalar or tuple)
+        self.min_value: Optional[Any] = None  # Minimum value constraint (scalar or tuple)
+
         # Movement type (absolute vs relative positioning)
         self.movement_type: str = "relative"  # 'relative' or 'absolute'
 
@@ -486,6 +490,63 @@ class BuilderConfig:
                         "  rig.stop(500)          # Stop with 500ms transition\n"
                         "  rig.speed.to(0)        # Set speed to zero\n"
                         "  rig.layer('name').revert()  # Revert a layer"
+                    )
+
+    def validate_constraints(self) -> None:
+        """Validate that constraint values match the operation value type
+
+        Raises:
+            ConfigError: If constraint validation fails
+        """
+        if self.value is None:
+            return
+
+        # Determine if the value is a tuple/Vec2 or scalar
+        value_is_tuple = isinstance(self.value, (tuple, list))
+
+        for constraint_name, constraint_value in [("max", self.max_value), ("min", self.min_value)]:
+            if constraint_value is None:
+                continue
+
+            if value_is_tuple:
+                # Value is tuple, constraint must be tuple
+                if not isinstance(constraint_value, (tuple, list)) or len(constraint_value) != 2:
+                    raise ConfigError(
+                        f"Invalid {constraint_name} constraint: {repr(constraint_value)}\n"
+                        f"Value is a tuple, so {constraint_name} must also be a tuple of two numbers, e.g., {constraint_name}=(100, 200)"
+                    )
+                # Validate tuple elements are numbers
+                try:
+                    x, y = constraint_value
+                    if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                        raise ValueError()
+                except (TypeError, ValueError):
+                    raise ConfigError(
+                        f"Invalid {constraint_name} constraint: {repr(constraint_value)}\n"
+                        f"Tuple elements must be numbers, e.g., {constraint_name}=(100, 200)"
+                    )
+            else:
+                # Value is scalar, constraint must be scalar
+                if not isinstance(constraint_value, (int, float)):
+                    raise ConfigError(
+                        f"Invalid {constraint_name} constraint: {repr(constraint_value)}\n"
+                        f"Value is a number, so {constraint_name} must also be a number, e.g., {constraint_name}=100"
+                    )
+
+        # Validate that max > min if both are provided
+        if self.max_value is not None and self.min_value is not None:
+            if value_is_tuple:
+                max_x, max_y = self.max_value
+                min_x, min_y = self.min_value
+                if max_x <= min_x or max_y <= min_y:
+                    raise ConfigError(
+                        f"Invalid constraints: max={self.max_value} must be greater than min={self.min_value}\n"
+                        f"Both x and y components of max must be greater than min"
+                    )
+            else:
+                if self.max_value <= self.min_value:
+                    raise ConfigError(
+                        f"Invalid constraints: max={self.max_value} must be greater than min={self.min_value}"
                     )
 
     def validate_easing(self, easing: str, context: str = "easing") -> None:

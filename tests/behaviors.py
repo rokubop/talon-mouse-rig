@@ -392,24 +392,89 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
 
 
 # ============================================================================
+# CONSTRAINT + BEHAVIOR TESTS
+# ============================================================================
+
+def test_behavior_stack_with_constraints(on_success, on_failure):
+    """Test: Stack behavior with max constraints"""
+    rig = actions.user.mouse_rig()
+    rig.speed.to(2)  # Base speed (low-medium)
+
+    # Stack multiple layers, each with constraints
+    rig.layer("boost1").stack.speed.add(3).max(10)  # Add 3, cap at 10: 2 + 3 = 5
+    rig.layer("boost2").stack.speed.add(4).max(10)  # Add 4, cap at 10: 5 + 4 = 9
+    rig.layer("boost3").stack.speed.add(3).max(10)  # Add 3, cap at 10: 9 + 3 = 12 -> 10
+
+    def check():
+        rig_check = actions.user.mouse_rig()
+        # Should be clamped to 10 (high speed)
+        if abs(rig_check.state.speed - 10) > 1:
+            on_failure(f"Expected speed=10 with stacked constraints, got {rig_check.state.speed}")
+            return
+
+        # Should have all 3 layers active
+        if len(rig_check.state.layers) != 3:
+            on_failure(f"Expected 3 layers, got {len(rig_check.state.layers)}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check)
+
+
+def test_behavior_queue_with_constraints(on_success, on_failure):
+    """Test: Queue behavior with constraints"""
+    completed = {"count": 0}
+
+    def on_complete():
+        completed["count"] += 1
+
+    rig = actions.user.mouse_rig()
+    rig.speed.to(3)  # Base speed (regular)
+
+    # Queue operations with constraints
+    rig.layer("accel").queue.speed.add(4).max(10).over(100).then(on_complete)  # Add 4, cap at 10: 3 + 4 = 7
+    rig.layer("accel").queue.speed.add(5).max(10).over(100).then(on_complete)  # Add 5, cap at 10: 7 + 5 = 12 -> 10
+
+    def check():
+        rig_check = actions.user.mouse_rig()
+        # After both queued operations, should be capped at 10 (high speed)
+        if abs(rig_check.state.speed - 10) > 1:
+            on_failure(f"Expected speed=10 with queued constraints, got {rig_check.state.speed}")
+            return
+
+        if completed["count"] != 2:
+            on_failure(f"Expected 2 completions, got {completed['count']}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("350ms", check)
+
+
+# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
 BEHAVIOR_TESTS = [
-    ("behavior stack property syntax", test_behavior_stack_property_syntax),
-    ("behavior stack(max=2)", test_behavior_stack_call_syntax_with_max),
-    ("behavior replace property syntax", test_behavior_replace_property_syntax),
-    ("behavior replace()", test_behavior_replace_call_syntax),
-    ("behavior pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
-    ("behavior replace pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
-    ("behavior replace pos.override.to().over()", test_behavior_replace_pos_override_to_over),
-    ("behavior replace speed.override.to().over()", test_behavior_replace_speed_override_to_over),
-    ("behavior replace speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
-    ("behavior replace direction.offset.by().over().revert()", test_behavior_replace_direction_by_over_revert),
-    ("behavior queue property syntax", test_behavior_queue_property_syntax),
-    ("behavior queue(max=2)", test_behavior_queue_call_syntax_with_max),
-    ("behavior extend property syntax", test_behavior_extend_property_syntax),
-    ("behavior extend()", test_behavior_extend_call_syntax),
-    ("behavior throttle property syntax", test_behavior_throttle_property_syntax),
-    ("behavior throttle(500)", test_behavior_throttle_call_syntax_with_ms),
+    ("layer().stack.pos.offset.by()", test_behavior_stack_property_syntax),
+    ("layer().stack(max).pos.offset.by()", test_behavior_stack_call_syntax_with_max),
+    ("layer().replace.pos.offset.by()", test_behavior_replace_property_syntax),
+    ("layer().replace().pos.offset.by()", test_behavior_replace_call_syntax),
+    ("layer().pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
+    ("layer().replace().pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
+    ("layer().replace().pos.override.to().over()", test_behavior_replace_pos_override_to_over),
+    ("layer().replace().speed.override.to().over()", test_behavior_replace_speed_override_to_over),
+    ("layer().replace().speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
+    ("layer().replace().direction.offset.by().over().revert()", test_behavior_replace_direction_by_over_revert),
+    ("layer().queue.pos.offset.by()", test_behavior_queue_property_syntax),
+    ("layer().queue(max).pos.offset.by()", test_behavior_queue_call_syntax_with_max),
+    ("layer().extend.pos.offset.by()", test_behavior_extend_property_syntax),
+    ("layer().extend().pos.offset.by()", test_behavior_extend_call_syntax),
+    ("layer().throttle.pos.offset.by()", test_behavior_throttle_property_syntax),
+    ("layer().throttle(ms).pos.offset.by()", test_behavior_throttle_call_syntax_with_ms),
+    ("layer().stack.speed.add().max()", test_behavior_stack_with_constraints),
+    ("layer().queue.speed.add().max()", test_behavior_queue_with_constraints),
 ]

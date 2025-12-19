@@ -454,6 +454,141 @@ def test_accessing_property_as_value(on_success, on_failure):
 
 
 # ============================================================================
+# CONSTRAINT VALIDATION TESTS
+# ============================================================================
+
+def test_constraints_with_to_operator(on_success, on_failure):
+    """Test: Constraints are accepted with .to() operator (though ignored in override mode)"""
+    try:
+        rig = actions.user.mouse_rig()
+        # Constraints should be accepted but have no effect with .to() in override mode
+        rig.speed.to(100, max=50)  # Should work, but max is ignored
+        rig.layer("test").speed.override.to(100, max=50)  # Should work, but max is ignored
+
+        # Also test with layer + offset mode (where constraints DO apply)
+        rig.layer("offset_test").speed.offset.add(50).max(120)
+
+        on_success()
+    except Exception as e:
+        on_failure(f"Constraints with .to() should be accepted: {e}")
+
+
+def test_constraints_scalar_on_vec2(on_success, on_failure):
+    """Test: Scalar constraints on Vec2 properties should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.pos.to(100, 100)
+
+        # Scalar max on Vec2 should now error with validation
+        rig.pos.add(50, 50).max(130)
+
+        on_failure("Expected error for scalar constraint on Vec2 property but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "constraint" in error_msg and ("tuple" in error_msg or "two numbers" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_constraints_tuple_on_scalar(on_success, on_failure):
+    """Test: Tuple constraints on scalar properties should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.speed.to(50)
+
+        # Tuple max on scalar should now error with validation
+        rig.speed.add(100).max((120, 999))
+
+        on_failure("Expected error for tuple constraint on scalar property but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "constraint" in error_msg and "number" in error_msg:
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_constraints_max_less_than_min_vec2(on_success, on_failure):
+    """Test: max < min for Vec2 constraints should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.pos.to(100, 100)
+
+        # max < min should error
+        rig.pos.add(50, 50).max((200, 200)).min((300, 300))
+
+        on_failure("Expected error for max < min but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "constraint" in error_msg and ("greater" in error_msg or "max" in error_msg and "min" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_constraints_max_less_than_min_scalar(on_success, on_failure):
+    """Test: max < min for scalar constraints should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.speed.to(50)
+
+        # max < min should error
+        rig.speed.add(10).max(100).min(200)
+
+        on_failure("Expected error for max < min but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "constraint" in error_msg and ("greater" in error_msg or "max" in error_msg and "min" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_constraints_invalid_tuple_elements(on_success, on_failure):
+    """Test: Non-numeric tuple elements should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.pos.to(100, 100)
+
+        # Tuple with non-numeric elements should error
+        rig.pos.add(50, 50).max(("abc", 200))
+
+        on_failure("Expected error for non-numeric tuple elements but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "constraint" in error_msg and "number" in error_msg:
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
+def test_constraints_valid_vec2(on_success, on_failure):
+    """Test: Valid Vec2 constraints work correctly"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.pos.to(100, 100, max=(500, 500), min=(50, 50))
+        on_success()
+    except Exception as e:
+        on_failure(f"Valid Vec2 constraints should not error: {e}")
+
+
+def test_constraints_valid_scalar(on_success, on_failure):
+    """Test: Valid scalar constraints work correctly"""
+    try:
+        rig = actions.user.mouse_rig()
+        rig.speed.to(100, max=500, min=50)
+        on_success()
+    except Exception as e:
+        on_failure(f"Valid scalar constraints should not error: {e}")
+
+
+# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
@@ -477,4 +612,12 @@ VALIDATION_TESTS = [
     ("pos.to(0, 0) allowed", test_position_zero_zero),
     ("duplicate mode specification", test_duplicate_mode_specification),
     ("accessing property as value", test_accessing_property_as_value),
+    ("constraints with .to() operator accepted", test_constraints_with_to_operator),
+    ("constraints scalar on vec2 property", test_constraints_scalar_on_vec2),
+    ("constraints tuple on scalar property", test_constraints_tuple_on_scalar),
+    ("constraints max < min vec2", test_constraints_max_less_than_min_vec2),
+    ("constraints max < min scalar", test_constraints_max_less_than_min_scalar),
+    ("constraints invalid tuple elements", test_constraints_invalid_tuple_elements),
+    ("constraints valid vec2", test_constraints_valid_vec2),
+    ("constraints valid scalar", test_constraints_valid_scalar),
 ]
