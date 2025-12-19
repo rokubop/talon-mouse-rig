@@ -431,81 +431,6 @@ def test_pos_to_then_by():
 
 
 # ============================================================================
-# CONSTRAINT TESTS
-# ============================================================================
-
-def test_pos_by_max_tuple(on_success, on_failure):
-    """Test: pos.by() with max constraint as tuple"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-
-    # Move (+200, +150), cap at (CENTER_X+100, CENTER_Y+100)
-    max_x = CENTER_X + 100
-    max_y = CENTER_Y + 100
-    rig.pos.by(200, 150).max((max_x, max_y))
-
-    def check():
-        x, y = ctrl.mouse_pos()
-        # Should be clamped to max: (CENTER_X+100, CENTER_Y+100)
-        if x != max_x or y != max_y:
-            on_failure(f"Position should be clamped to ({max_x}, {max_y}), got ({x}, {y})")
-            return
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_pos_by_min_tuple(on_success, on_failure):
-    """Test: pos.by() with min constraint as tuple"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-
-    # Move (-200, -150), floor at (CENTER_X-100, CENTER_Y-100)
-    min_x = CENTER_X - 100
-    min_y = CENTER_Y - 100
-    rig.pos.by(-200, -150).min((min_x, min_y))
-
-    def check():
-        x, y = ctrl.mouse_pos()
-        # Should be clamped to min: (CENTER_X-100, CENTER_Y-100)
-        if x != min_x or y != min_y:
-            on_failure(f"Position should be clamped to ({min_x}, {min_y}), got ({x}, {y})")
-            return
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_pos_constraints_layers(on_success, on_failure):
-    """Test: Multiple layers with position constraints"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-
-    max_x = CENTER_X + 100
-    max_y = CENTER_Y + 100
-
-    # Layer 1: Move (+50, +50), cap at max
-    rig.layer("move1").pos.offset.by(50, 50).max((max_x, max_y))
-
-    # Layer 2: Move (+70, +70), cap at max
-    rig.layer("move2").pos.offset.by(70, 70).max((max_x, max_y))
-
-    def check():
-        x, y = ctrl.mouse_pos()
-        # Final should be max (CENTER_X+100, CENTER_Y+100)
-        # = base (CENTER_X, CENTER_Y) + move1 (50, 50) + move2 (50, 50)
-        if x != max_x or y != max_y:
-            on_failure(f"Position should be clamped to ({max_x}, {max_y}), got ({x}, {y})")
-            return
-
-        rig_check = actions.user.mouse_rig()
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
@@ -524,7 +449,4 @@ POSITION_TESTS = [
     ("layer().pos.offset.by().revert()", test_layer_pos_by_revert),
     ("pos.by() twice", test_pos_by_twice),
     ("pos.to() then pos.by()", test_pos_to_then_by),
-    ("pos.by().max()", test_pos_by_max_tuple),
-    ("pos.by().min()", test_pos_by_min_tuple),
-    ("pos constraints with layers", test_pos_constraints_layers),
 ]

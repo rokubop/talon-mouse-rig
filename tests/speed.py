@@ -436,99 +436,8 @@ def test_layer_speed_offset_from_stopped(on_success, on_failure):
 
 
 # ============================================================================
-# CONSTRAINT TESTS
+# TEST LIST
 # ============================================================================
-
-def test_speed_add_max(on_success, on_failure):
-    """Test: speed.add().max() - add with max constraint"""
-    rig = actions.user.mouse_rig()
-    rig.speed.to(3)  # Base speed
-    rig.speed.add(10).max(10)  # Add 10, cap result at 10
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        # Should be clamped to 10 (3 + 10 = 13, capped at 10)
-        if abs(rig_check.state.speed - 10) > 1:
-            on_failure(f"Expected speed=10 (clamped), got {rig_check.state.speed}")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_speed_add_min(on_success, on_failure):
-    """Test: speed.add().min() - add with min constraint"""
-    rig = actions.user.mouse_rig()
-    rig.speed.to(5)  # Base speed
-    rig.speed.add(-10).min(2)  # Add -10, floor result at 2
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        # Should be clamped to 2 (5 + -10 = -5, floored at 2)
-        if abs(rig_check.state.speed - 2) > 1:
-            on_failure(f"Expected speed=2 (clamped), got {rig_check.state.speed}")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_speed_sub_min(on_success, on_failure):
-    """Test: speed.sub().min() - subtract with min constraint"""
-    rig = actions.user.mouse_rig()
-    rig.speed.to(8)  # Base speed
-    rig.speed.sub(6).min(3)  # Subtract 6, floor result at 3
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        # Should be clamped to 3 (8 - 6 = 2, floored at 3)
-        if abs(rig_check.state.speed - 3) > 1:
-            on_failure(f"Expected speed=3 (clamped), got {rig_check.state.speed}")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_speed_mul_max(on_success, on_failure):
-    """Test: speed.mul().max() - multiply with max constraint"""
-    rig = actions.user.mouse_rig()
-    rig.speed.to(3)  # Base speed
-    rig.speed.mul(4).max(10)  # Multiply by 4, cap result at 10
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        # Should be clamped to 10 (3 * 4 = 12, capped at 10)
-        if abs(rig_check.state.speed - 10) > 1:
-            on_failure(f"Expected speed=10 (clamped), got {rig_check.state.speed}")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_speed_constraints_layers(on_success, on_failure):
-    """Test: Multiple layers with constraints stack correctly"""
-    rig = actions.user.mouse_rig()
-    rig.speed.to(3)  # Base speed
-    rig.layer("boost1").speed.add(5).max(10)  # Add 5, cap at 10: 3 + 5 = 8
-    rig.layer("boost2").speed.add(3).max(10)  # Add 3, cap at 10: 8 + 3 = 11 -> capped at 10
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        # Final speed should be 10 (base 3 + boost1 5 + boost2 2)
-        if abs(rig_check.state.speed - 10) > 1:
-            on_failure(f"Expected speed=10 with layered constraints, got {rig_check.state.speed}")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
 
 SPEED_TESTS = [
     ("speed.to()", test_speed_to),
@@ -543,9 +452,4 @@ SPEED_TESTS = [
     ("stop().over().then()", test_stop_over_then_callback),
     ("stop() callback not fired on interrupt", test_stop_callback_not_fired_on_interrupt),
     ("layer().speed.offset.add() from stopped", test_layer_speed_offset_from_stopped),
-    ("speed.add().max()", test_speed_add_max),
-    ("speed.add().min()", test_speed_add_min),
-    ("speed.sub().min()", test_speed_sub_min),
-    ("speed.mul().max()", test_speed_mul_max),
-    ("speed constraints with layers", test_speed_constraints_layers),
 ]

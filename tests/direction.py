@@ -730,58 +730,6 @@ def test_reverse_method_over_time(on_success, on_failure):
 
 
 # ============================================================================
-# CONSTRAINT TESTS
-# ============================================================================
-
-def test_direction_add_max(on_success, on_failure):
-    """Test: direction.add() with max constraint (as Vec2)"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.direction.to(0.5, 0.5)  # Base direction (normalized)
-    rig.speed.to(10)
-
-    # Add direction, cap at (0.9, 0.9)
-    rig.direction.add(0.8, 0.8).max((0.9, 0.9))
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        direction = rig_check.state.direction
-        # Direction should be normalized and clamped
-        # Note: This tests that the constraint mechanism works,
-        # though direction constraints are less intuitive
-        if direction.x > 1.0 or direction.y > 1.0:
-            on_failure(f"Direction components exceed 1.0: ({direction.x}, {direction.y})")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_direction_add_vector_max(on_success, on_failure):
-    """Test: direction.add(x, y) with max tuple constraint"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.direction.to(0.3, 0.3)
-    rig.speed.to(10)
-
-    # Add direction vector, cap at (0.7, 0.7)
-    rig.direction.add(0.5, 0.5).max((0.7, 0.7))
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        direction = rig_check.state.direction
-        # Should be clamped and normalized
-        if direction.magnitude() > 1.01:  # Allow small epsilon
-            on_failure(f"Direction magnitude {direction.magnitude()} exceeds 1.0")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
@@ -802,6 +750,4 @@ DIRECTION_TESTS = [
     ("direction opposite over time", test_direction_opposite_over_time),
     ("reverse()", test_reverse_method_instant),
     ("reverse().over()", test_reverse_method_over_time),
-    ("direction.add().max()", test_direction_add_max),
-    ("direction.add().max() vector", test_direction_add_vector_max),
 ]

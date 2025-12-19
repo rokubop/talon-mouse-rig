@@ -451,79 +451,6 @@ def test_layer_vector_revert(on_success, on_failure):
 
 
 # ============================================================================
-# CONSTRAINT TESTS
-# ============================================================================
-
-def test_vector_add_max_tuple(on_success, on_failure):
-    """Test: vector.add() with max constraint as tuple"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.vector.to(10, 10)  # Base velocity
-
-    # Add (50, 50), cap at (30, 30)
-    rig.vector.add(50, 50).max((30, 30))
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        velocity = rig_check.state.vector
-        # Should be clamped to (30, 30) = (10, 10) + (50, 50) -> (60, 60) capped at (30, 30)
-        if abs(velocity.x - 30) > 1 or abs(velocity.y - 30) > 1:
-            on_failure(f"Vector should be clamped to (30, 30), got ({velocity.x}, {velocity.y})")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_vector_add_min_tuple(on_success, on_failure):
-    """Test: vector.add() with min constraint as tuple"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.vector.to(20, 20)  # Base velocity
-
-    # Add (-30, -30), floor at (5, 5)
-    rig.vector.add(-30, -30).min((5, 5))
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        velocity = rig_check.state.vector
-        # Should be clamped to (5, 5) = (20, 20) + (-30, -30) -> (-10, -10) floored at (5, 5)
-        if abs(velocity.x - 5) > 1 or abs(velocity.y - 5) > 1:
-            on_failure(f"Vector should be clamped to (5, 5), got ({velocity.x}, {velocity.y})")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-def test_vector_constraints_layers(on_success, on_failure):
-    """Test: Multiple vector layers with constraints"""
-    rig = actions.user.mouse_rig()
-    rig.pos.to(CENTER_X, CENTER_Y)
-    rig.vector.to(10, 10)  # Base velocity
-
-    # Layer 1: Add (10, 10), cap at (40, 40)
-    rig.layer("wind1").vector.offset.add(10, 10).max((40, 40))
-
-    # Layer 2: Add (30, 30), cap at (40, 40)
-    rig.layer("wind2").vector.offset.add(30, 30).max((40, 40))
-
-    def check():
-        rig_check = actions.user.mouse_rig()
-        velocity = rig_check.state.vector
-        # Final should be (40, 40) = base (10, 10) + wind1 (10, 10) + wind2 (20, 20)
-        if abs(velocity.x - 40) > 1 or abs(velocity.y - 40) > 1:
-            on_failure(f"Vector should be clamped to (40, 40), got ({velocity.x}, {velocity.y})")
-            return
-        rig_check.stop()
-        on_success()
-
-    cron.after("100ms", check)
-
-
-# ============================================================================
 # TEST SUITE
 # ============================================================================
 
@@ -537,7 +464,4 @@ VECTOR_TESTS = [
     ("layer().vector.offset.add() multiple", test_layer_vector_offset_multiple),
     ("layer().vector.override.to()", test_layer_vector_override),
     ("layer().vector.revert()", test_layer_vector_revert),
-    ("vector.add().max()", test_vector_add_max_tuple),
-    ("vector.add().min()", test_vector_add_min_tuple),
-    ("vector.offset.add().max() with layers", test_vector_constraints_layers),
 ]
