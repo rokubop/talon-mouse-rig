@@ -50,6 +50,13 @@ mod.setting(
 )
 
 mod.setting(
+    "mouse_rig_relative_scale",
+    type=float,
+    default=1.0,
+    desc="Scale multiplier for relative mouse movement (pos.by). Adjust for gaming sensitivity or desktop precision."
+)
+
+mod.setting(
     "mouse_rig_manual_movement_timeout_ms",
     type=int,
     default=300,

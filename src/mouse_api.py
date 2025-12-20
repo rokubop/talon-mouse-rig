@@ -130,20 +130,14 @@ def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], Non
         )
 
     def move_relative(dx: float, dy: float) -> None:
-        # Query Windows mouse speed (1-20, default 10)
-        SPI_GETMOUSESPEED = 0x0070
-        mouse_speed = ctypes.c_int()
-        ctypes.windll.user32.SystemParametersInfoA(SPI_GETMOUSESPEED, 0, ctypes.byref(mouse_speed), 0)
-
-        # Calculate multiplier to convert pixels to mickeys
-        # At default speed (10), 1 mickey ≈ 1 pixel (1:1 ratio)
-        multiplier = 10.0 / mouse_speed.value if mouse_speed.value > 0 else 1.0
+        # Apply user-configurable scale for sensitivity control
+        scale = settings.get("user.mouse_rig_relative_scale", 1.0)
 
         # Relative movement using mickeys (device units)
         win32api.mouse_event(
             win32con.MOUSEEVENTF_MOVE,
-            int(dx * multiplier),
-            int(dy * multiplier)
+            int(dx * scale),
+            int(dy * scale)
         )
 
     return move_absolute, move_relative
@@ -161,7 +155,6 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
     INPUT_MOUSE = 0
     MOUSEEVENTF_ABSOLUTE = 0x8000
     MOUSEEVENTF_MOVE = 0x0001
-    SPI_GETMOUSESPEED = 0x0070
 
     # Structures
     class MOUSEINPUT(ctypes.Structure):
@@ -201,21 +194,13 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
         ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
 
     def move_relative(dx: float, dy: float) -> None:
-        # Query Windows mouse speed (1-20, default 10)
-        mouse_speed = ctypes.c_int()
-        ctypes.windll.user32.SystemParametersInfoA(SPI_GETMOUSESPEED, 0, ctypes.byref(mouse_speed), 0)
-
-        # Calculate divisor to convert pixels to mickeys
-        # Empirically determined: at speed 10, 1 mickey ≈ 1.5625 pixels
-        # So we need to send: pixels * (1/1.5625) = pixels * 0.64
-        # Adjust for other speeds proportionally
-        base_divisor = 0.64  # For speed 10
-        divisor = base_divisor * (mouse_speed.value / 10.0) if mouse_speed.value > 0 else base_divisor
+        # Apply user-configurable scale for sensitivity control
+        scale = settings.get("user.mouse_rig_relative_scale", 1.0)
 
         # Relative movement (no ABSOLUTE flag)
         input_struct = INPUT(type=INPUT_MOUSE)
-        input_struct.mi.dx = int(dx * divisor)
-        input_struct.mi.dy = int(dy * divisor)
+        input_struct.mi.dx = int(dx * scale)
+        input_struct.mi.dy = int(dy * scale)
         input_struct.mi.dwFlags = MOUSEEVENTF_MOVE
 
         ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
