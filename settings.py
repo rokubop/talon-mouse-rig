@@ -19,9 +19,9 @@ mod.setting(
     Options:
     - talon: Talon ctrl.mouse_move (cross-platform, default)
     - platform: Auto-detect best platform-specific API
-    - windows_raw: Windows win32api.mouse_event (legacy, requires pywin32)
-    - windows_sendinput: Windows SendInput (modern, recommended for Windows)
-    - macos: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
+    - windows_mouse_event: Windows win32api.mouse_event (legacy, requires pywin32)
+    - windows_send_input: Windows SendInput (modern, recommended for Windows)
+    - macos_warp: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
     - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
     """
 )
@@ -35,9 +35,9 @@ mod.setting(
     Options:
     - platform: Auto-detect best platform-specific API (recommended)
     - talon: Talon actions.mouse_nudge (cross-platform)
-    - windows_raw: Windows win32api.mouse_event (legacy, requires pywin32)
-    - windows_sendinput: Windows SendInput (modern, recommended for Windows)
-    - macos: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
+    - windows_mouse_event: Windows win32api.mouse_event (legacy, requires pywin32)
+    - windows_send_input: Windows SendInput (modern, recommended for Windows)
+    - macos_warp: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
     - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
     """
 )

@@ -2,9 +2,9 @@
 
 Supports multiple mouse movement backends:
 - talon: Cross-platform using Talon's ctrl.mouse_move (default)
-- windows_raw: Windows win32api.mouse_event (legacy API)
-- windows_sendinput: Windows SendInput (modern, recommended for Windows)
-- macos: macOS CGWarpMouseCursorPosition
+- windows_mouse_event: Windows win32api.mouse_event (legacy API)
+- windows_send_input: Windows SendInput (modern, recommended for Windows)
+- macos_warp: macOS CGWarpMouseCursorPosition
 - linux_x11: Linux X11 XWarpPointer
 
 Each API provides two movement modes:
@@ -21,37 +21,37 @@ from talon import ctrl, settings
 MOUSE_APIS = {
     'platform': 'Auto-detect best platform-specific API',
     'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
-    'windows_raw': 'Windows win32api.mouse_event (absolute positioning, legacy API)',
-    'windows_sendinput': 'Windows SendInput (modern, recommended for Windows)',
-    'macos': 'macOS CGWarpMouseCursorPosition (direct positioning)',
-    'linux_x11': 'Linux X11 XWarpPointer (direct positioning)',
+    'windows_mouse_event': 'Windows win32api.mouse_event (legacy API)',
+    'windows_send_input': 'Windows SendInput (modern, recommended)',
+    'macos_warp': 'macOS CGWarpMouseCursorPosition',
+    'linux_x11': 'Linux X11 XWarpPointer',
 }
 
 # Track availability of each API
-_windows_raw_available = False
-_windows_sendinput_available = False
-_macos_available = False
+_windows_mouse_event_available = False
+_windows_send_input_available = False
+_macos_warp_available = False
 _linux_x11_available = False
 
 # Check platform-specific availability
 if platform.system() == "Windows":
     try:
         import win32api, win32con  # type: ignore
-        _windows_raw_available = True
+        _windows_mouse_event_available = True
     except ImportError:
         pass
 
     try:
         import ctypes
         from ctypes import wintypes
-        _windows_sendinput_available = True
+        _windows_send_input_available = True
     except ImportError:
         pass
 
 elif platform.system() == "Darwin":
     try:
         import Quartz  # type: ignore
-        _macos_available = True
+        _macos_warp_available = True
     except ImportError:
         pass
 
@@ -70,13 +70,13 @@ def _get_platform_api() -> str:
     Falls back to 'talon' if no platform-specific API is available.
     """
     if platform.system() == "Windows":
-        if _windows_sendinput_available:
-            return "windows_sendinput"
-        elif _windows_raw_available:
-            return "windows_raw"
+        if _windows_send_input_available:
+            return "windows_send_input"
+        elif _windows_mouse_event_available:
+            return "windows_mouse_event"
     elif platform.system() == "Darwin":
-        if _macos_available:
-            return "macos"
+        if _macos_warp_available:
+            return "macos_warp"
     elif platform.system() == "Linux":
         if _linux_x11_available:
             return "linux_x11"
@@ -105,12 +105,13 @@ def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[
     return move_absolute, move_relative
 
 
-def _make_windows_raw_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """Windows mouse_event (legacy API)
 
     Returns (absolute_func, relative_func)
     """
     import win32api, win32con  # type: ignore
+    import ctypes
 
     def move_absolute(x: float, y: float) -> None:
         # Get screen dimensions
@@ -130,7 +131,6 @@ def _make_windows_raw_mouse_move() -> Tuple[Callable[[float, float], None], Call
 
     def move_relative(dx: float, dy: float) -> None:
         # Query Windows mouse speed (1-20, default 10)
-        import ctypes
         SPI_GETMOUSESPEED = 0x0070
         mouse_speed = ctypes.c_int()
         ctypes.windll.user32.SystemParametersInfoA(SPI_GETMOUSESPEED, 0, ctypes.byref(mouse_speed), 0)
@@ -149,7 +149,7 @@ def _make_windows_raw_mouse_move() -> Tuple[Callable[[float, float], None], Call
     return move_absolute, move_relative
 
 
-def _make_windows_sendinput_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """Windows SendInput (modern, recommended for Windows)
 
     Returns (absolute_func, relative_func)
@@ -223,7 +223,7 @@ def _make_windows_sendinput_mouse_move() -> Tuple[Callable[[float, float], None]
     return move_absolute, move_relative
 
 
-def _make_macos_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+def _make_macos_warp_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """macOS CoreGraphics mouse movement
 
     Returns (absolute_func, relative_func)
@@ -316,28 +316,28 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
         api_type = "talon"
 
     # Select appropriate API
-    if api_type == "windows_raw":
-        if not _windows_raw_available:
-            print("[Mouse Rig] windows_raw API requires pywin32, falling back to talon")
+    if api_type == "windows_mouse_event":
+        if not _windows_mouse_event_available:
+            print("[Mouse Rig] windows_mouse_event API requires pywin32, falling back to talon")
             api_type = "talon"
         else:
-            abs_func, rel_func = _make_windows_raw_mouse_move()
+            abs_func, rel_func = _make_windows_mouse_event_mouse_move()
             return abs_func if is_absolute else rel_func
 
-    elif api_type == "windows_sendinput":
-        if not _windows_sendinput_available:
-            print("[Mouse Rig] windows_sendinput API not available, falling back to talon")
+    elif api_type == "windows_send_input":
+        if not _windows_send_input_available:
+            print("[Mouse Rig] windows_send_input API not available, falling back to talon")
             api_type = "talon"
         else:
-            abs_func, rel_func = _make_windows_sendinput_mouse_move()
+            abs_func, rel_func = _make_windows_send_input_mouse_move()
             return abs_func if is_absolute else rel_func
 
-    elif api_type == "macos":
-        if not _macos_available:
-            print("[Mouse Rig] macos API requires pyobjc-framework-Quartz, falling back to talon")
+    elif api_type == "macos_warp":
+        if not _macos_warp_available:
+            print("[Mouse Rig] macos_warp API requires pyobjc-framework-Quartz, falling back to talon")
             api_type = "talon"
         else:
-            abs_func, rel_func = _make_macos_mouse_move()
+            abs_func, rel_func = _make_macos_warp_mouse_move()
             return abs_func if is_absolute else rel_func
 
     elif api_type == "linux_x11":

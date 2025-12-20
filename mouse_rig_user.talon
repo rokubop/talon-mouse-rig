@@ -48,5 +48,5 @@ rig rotate around: user.mouse_rig_direction_by(180, "1000")
 # Settings
 rig [set] scale <number>: user.mouse_rig_set_scale(number)
 rig [set] api talon: user.mouse_rig_set_api("talon")
-rig [set] api windows: user.mouse_rig_set_api("windows_sendinput")
-rig [set] api windows raw: user.mouse_rig_set_api("windows_raw")
+rig [set] api windows: user.mouse_rig_set_api("windows_send_input")
+rig [set] api windows raw: user.mouse_rig_set_api("windows_mouse_event")
