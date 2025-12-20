@@ -3,6 +3,7 @@ from talon import actions, ctrl, cron
 CENTER_X = 960
 CENTER_Y = 540
 TEST_OFFSET = 200
+POS_BY_TOLERANCE = 2  # Allow ±2 pixels for relative movement due to mickey-to-pixel conversion
 
 
 # ============================================================================
@@ -142,7 +143,9 @@ def test_pos_by(on_success, on_failure):
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx
         expected_y = start_y + dy
-        if x == expected_x and y == expected_y:
+        x_diff = abs(x - expected_x)
+        y_diff = abs(y - expected_y)
+        if x_diff <= POS_BY_TOLERANCE and y_diff <= POS_BY_TOLERANCE:
             # State checks with fresh rig reference
             rig_check = actions.user.mouse_rig()
             if len(rig_check.state.layers) != 0:
@@ -156,7 +159,7 @@ def test_pos_by(on_success, on_failure):
                 return
             on_success()
         else:
-            on_failure(f"Position wrong: expected ({expected_x}, {expected_y}), got ({x}, {y})")
+            on_failure(f"Position wrong: expected ({expected_x}, {expected_y}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
 
     cron.after("100ms", check_position)
 
@@ -170,8 +173,10 @@ def test_pos_by_over(on_success, on_failure):
 
     def check_position():
         x, y = ctrl.mouse_pos()
-        if x != target_x or y != target_y:
-            on_failure(f"Final position wrong: expected ({target_x}, {target_y}), got ({x}, {y})")
+        x_diff = abs(x - target_x)
+        y_diff = abs(y - target_y)
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"Final position wrong: expected ({target_x}, {target_y}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
             return
         on_success()
 
@@ -201,18 +206,24 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
 
     def check_after_over():
         x, y = ctrl.mouse_pos()
-        if x != (start_x + dx) or y != (start_y + dy):
-            on_failure(f"After over: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+        x_diff = abs(x - (start_x + dx))
+        y_diff = abs(y - (start_y + dy))
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After over: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
 
     def check_after_hold():
         x, y = ctrl.mouse_pos()
-        if x != (start_x + dx) or y != (start_y + dy):
-            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+        x_diff = abs(x - (start_x + dx))
+        y_diff = abs(y - (start_y + dy))
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
 
     def check_after_revert():
         x, y = ctrl.mouse_pos()
-        if x != start_x or y != start_y:
-            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+        x_diff = abs(x - start_x)
+        y_diff = abs(y - start_y)
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
             return
         on_success()
 
@@ -239,8 +250,10 @@ def test_pos_by_revert(on_success, on_failure):
 
     def check_position():
         x, y = ctrl.mouse_pos()
-        if x != start_x or y != start_y:
-            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+        x_diff = abs(x - start_x)
+        y_diff = abs(y - start_y)
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
             return
         on_success()
 
@@ -327,8 +340,10 @@ def test_layer_pos_by(on_success, on_failure):
 
     def check_target():
         x, y = ctrl.mouse_pos()
-        if x != (start_x + dx) or y != (start_y + dy):
-            on_failure(f"Final position wrong: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+        x_diff = abs(x - (start_x + dx))
+        y_diff = abs(y - (start_y + dy))
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"Final position wrong: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
             return
         # State checks - layer should still be active since no revert
         rig_check = actions.user.mouse_rig()
@@ -348,13 +363,17 @@ def test_layer_pos_by_revert(on_success, on_failure):
 
     def check_after_hold():
         x, y = ctrl.mouse_pos()
-        if x != (start_x + dx) or y != (start_y + dy):
-            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y})")
+        x_diff = abs(x - (start_x + dx))
+        y_diff = abs(y - (start_y + dy))
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After hold: expected ({start_x + dx}, {start_y + dy}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
 
     def check_after_revert():
         x, y = ctrl.mouse_pos()
-        if x != start_x or y != start_y:
-            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y})")
+        x_diff = abs(x - start_x)
+        y_diff = abs(y - start_y)
+        if x_diff > POS_BY_TOLERANCE or y_diff > POS_BY_TOLERANCE:
+            on_failure(f"After revert: expected ({start_x}, {start_y}), got ({x}, {y}), diff=({x_diff}, {y_diff})")
             return
         on_success()
 
@@ -394,9 +413,11 @@ def test_pos_by_twice():
 
     expected_x = start_x + dx1 + dx2
     expected_y = start_y + dy1 + dy2
+    x_diff = abs(x - expected_x)
+    y_diff = abs(y - expected_y)
 
-    assert x == expected_x, f"X position wrong: expected {expected_x}, got {x}"
-    assert y == expected_y, f"Y position wrong: expected {expected_y}, got {y}"
+    assert x_diff <= POS_BY_TOLERANCE, f"X position wrong: expected {expected_x}, got {x}, diff={x_diff}"
+    assert y_diff <= POS_BY_TOLERANCE, f"Y position wrong: expected {expected_y}, got {y}, diff={y_diff}"
 
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
@@ -420,9 +441,11 @@ def test_pos_to_then_by():
     x, y = ctrl.mouse_pos()
     expected_x = target_x + dx
     expected_y = target_y + dy
+    x_diff = abs(x - expected_x)
+    y_diff = abs(y - expected_y)
 
-    assert x == expected_x, f"X position wrong: expected {expected_x}, got {x}"
-    assert y == expected_y, f"Y position wrong: expected {expected_y}, got {y}"
+    assert x_diff <= POS_BY_TOLERANCE, f"X position wrong: expected {expected_x}, got {x}, diff={x_diff}"
+    assert y_diff <= POS_BY_TOLERANCE, f"Y position wrong: expected {expected_y}, got {y}, diff={y_diff}"
 
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"

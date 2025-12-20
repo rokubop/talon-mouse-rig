@@ -29,7 +29,7 @@ mod.setting(
 mod.setting(
     "mouse_rig_api_relative",
     type=str,
-    default="talon",
+    default="platform",
     desc="""API for relative movement (pos.by, speed.to, speed.by, vector.to, etc.).
 
     Options:
