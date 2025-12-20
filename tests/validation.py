@@ -1,4 +1,5 @@
 from talon import actions, ctrl, cron
+from .direction import get_angle_from_vector, angle_difference
 
 CENTER_X = 960
 CENTER_Y = 540
@@ -216,7 +217,6 @@ def test_angle_normalization(on_success, on_failure):
 
                 layer_state = list(rig_check.state.layers.values())[0]
                 # Should still be facing right (0 degrees) after 720 degrees rotation
-                from .direction import get_angle_from_vector, angle_difference
                 actual_angle = get_angle_from_vector(layer_state.direction_x, layer_state.direction_y)
 
                 if angle_difference(actual_angle, 0) < 5:

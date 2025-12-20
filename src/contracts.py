@@ -346,6 +346,7 @@ class BuilderConfig:
 
         # Movement type (absolute vs relative positioning)
         self.movement_type: str = "relative"  # 'relative' or 'absolute'
+        self._movement_type_explicit: bool = False  # True if user explicitly set via .absolute or .relative
 
         # Identity
         self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
@@ -407,11 +408,12 @@ class BuilderConfig:
         # is_named_layer builders must be explicitly reverted or baked
         return self.is_anonymous()
 
-    def validate_method_kwargs(self, method: str, **kwargs) -> None:
+    def validate_method_kwargs(self, method: str, mark_invalid: Optional[Callable[[], None]] = None, **kwargs) -> None:
         """Validate kwargs for a method call
 
         Args:
             method: Method name ('over', 'revert', 'hold', etc.)
+            mark_invalid: Optional callback to mark builder as invalid before raising
             **kwargs: The kwargs to validate
 
         Raises:
@@ -441,6 +443,8 @@ class BuilderConfig:
 
         # Raise error if any issues found
         if unknown or invalid_values:
+            if mark_invalid:
+                mark_invalid()
             raise ConfigError(format_validation_error(
                 method=method,
                 unknown_params=unknown if unknown else None,
@@ -448,8 +452,11 @@ class BuilderConfig:
                 provided_kwargs=kwargs
             ))
 
-    def validate_property_operator(self) -> None:
+    def validate_property_operator(self, mark_invalid: Optional[Callable[[], None]] = None) -> None:
         """Validate that operator is valid for the property
+
+        Args:
+            mark_invalid: Optional callback to mark builder as invalid before raising
 
         Raises:
             ConfigError: If validation fails
@@ -458,6 +465,8 @@ class BuilderConfig:
             return
 
         if self.property not in VALID_PROPERTIES:
+            if mark_invalid:
+                mark_invalid()
             valid_str = ', '.join(repr(p) for p in VALID_PROPERTIES)
             raise ConfigError(
                 f"Invalid property: {repr(self.property)}\n"
@@ -466,6 +475,8 @@ class BuilderConfig:
 
         valid_ops = VALID_OPERATORS.get(self.property, [])
         if self.operator not in valid_ops:
+            if mark_invalid:
+                mark_invalid()
             valid_str = ', '.join(repr(op) for op in valid_ops)
             raise ConfigError(
                 f"Invalid operator {repr(self.operator)} for property {repr(self.property)}\n"
@@ -477,6 +488,8 @@ class BuilderConfig:
             if isinstance(self.value, (tuple, list)) and len(self.value) >= 2:
                 x, y = self.value[0], self.value[1]
                 if x == 0 and y == 0:
+                    if mark_invalid:
+                        mark_invalid()
                     raise ConfigError(
                         "Invalid direction vector (0, 0).\n\n"
                         "Direction cannot be a zero vector - it must have a magnitude.\n\n"
@@ -492,6 +505,8 @@ class BuilderConfig:
             if isinstance(self.value, (tuple, list)) and len(self.value) >= 2:
                 x, y = self.value[0], self.value[1]
                 if x == 0 and y == 0:
+                    if mark_invalid:
+                        mark_invalid()
                     raise ConfigError(
                         "Invalid vector (0, 0).\n\n"
                         "Vector cannot be a zero vector - it represents velocity (speed + direction).\n\n"
@@ -502,17 +517,20 @@ class BuilderConfig:
                         "  rig.layer('name').revert()  # Revert a layer"
                     )
 
-    def validate_easing(self, easing: str, context: str = "easing") -> None:
+    def validate_easing(self, easing: str, context: str = "easing", mark_invalid: Optional[Callable[[], None]] = None) -> None:
         """Validate an easing value
 
         Args:
             easing: The easing string to validate
             context: Context for error message (e.g., 'over_easing', 'revert_easing')
+            mark_invalid: Optional callback to mark builder as invalid before raising
 
         Raises:
             ConfigError: If easing is invalid
         """
         if easing not in VALID_EASINGS:
+            if mark_invalid:
+                mark_invalid()
             valid_str = ', '.join(repr(e) for e in VALID_EASINGS)
             suggestion = suggest_correction(easing, VALID_EASINGS)
             msg = f"Invalid {context}: {repr(easing)}\n"
@@ -521,8 +539,11 @@ class BuilderConfig:
                 msg += f"\nDid you mean: {repr(suggestion)}?"
             raise ConfigError(msg)
 
-    def validate_mode(self) -> None:
+    def validate_mode(self, mark_invalid: Optional[Callable[[], None]] = None) -> None:
         """Validate that mode is set for layer operations
+
+        Args:
+            mark_invalid: Optional callback to mark builder as invalid before raising
 
         Raises:
             ConfigError: If mode is missing or invalid
@@ -532,6 +553,8 @@ class BuilderConfig:
             return
 
         if self.mode is None:
+            if mark_invalid:
+                mark_invalid()
             raise ConfigError(
                 f"Layer operations require an explicit mode.\n\n"
                 f"Available modes (modify the incoming value):\n"
@@ -546,14 +569,19 @@ class BuilderConfig:
             )
 
         if self.mode not in VALID_MODES:
+            if mark_invalid:
+                mark_invalid()
             valid_str = ', '.join(repr(m) for m in VALID_MODES)
             raise ConfigError(
                 f"Invalid mode: {repr(self.mode)}\n"
                 f"Valid modes: {valid_str}"
             )
 
-    def validate_hold(self) -> None:
+    def validate_hold(self, mark_invalid: Optional[Callable[[], None]] = None) -> None:
         """Validate that .hold() is followed by .revert() or .then()
+
+        Args:
+            mark_invalid: Optional callback to mark builder as invalid before raising
 
         Raises:
             ConfigError: If .hold() is used without .revert() or .then()
@@ -562,19 +590,22 @@ class BuilderConfig:
             # Check if there's a .then() callback specifically after the HOLD phase
             has_hold_callback = any(stage == LifecyclePhase.HOLD for stage, _ in self.then_callbacks)
             if not has_hold_callback:
+                if mark_invalid:
+                    mark_invalid()
                 raise ConfigError(
                     ".hold() must be followed by .revert() or .then()\n\n"
                     ".hold() is only useful when you need to wait before reverting or calling a callback.\n"
                     "If you want to keep the value, simply don't use .hold() at all, and you can .revert() later.\n\n"
                 )
 
-def validate_timing(value: Any, param_name: str, method: str = None) -> Optional[float]:
+def validate_timing(value: Any, param_name: str, method: str = None, mark_invalid: Optional[Callable[[], None]] = None) -> Optional[float]:
     """Validate timing parameters (ms, rate, etc.)
 
     Args:
         value: The value to validate
         param_name: Name of the parameter ('ms', 'rate', etc.)
         method: Name of the method being called ('over', 'hold', 'revert', 'stop')
+        mark_invalid: Optional callback to mark builder as invalid before raising
     """
     if value is None:
         return None
@@ -582,6 +613,8 @@ def validate_timing(value: Any, param_name: str, method: str = None) -> Optional
     method_str = f".{method}({param_name}=...)" if method else f"'{param_name}'"
 
     if not isinstance(value, (int, float)):
+        if mark_invalid:
+            mark_invalid()
         raise TypeError(
             f"Invalid type for {method_str}\n\n"
             f"Expected: number (int or float)\n"
@@ -592,6 +625,8 @@ def validate_timing(value: Any, param_name: str, method: str = None) -> Optional
     float_value = float(value)
 
     if float_value < 0:
+        if mark_invalid:
+            mark_invalid()
         raise ConfigError(
             f"Negative duration not allowed: {method_str}\n\n"
             f"Got: {value}\n\n"
@@ -601,17 +636,20 @@ def validate_timing(value: Any, param_name: str, method: str = None) -> Optional
     return float_value
 
 
-def validate_has_operation(config: 'BuilderConfig', method_name: str) -> None:
+def validate_has_operation(config: 'BuilderConfig', method_name: str, mark_invalid: Optional[Callable[[], None]] = None) -> None:
     """Validate that a timing method has a prior operation to apply to
 
     Args:
         config: The builder config to check
         method_name: Name of the timing method being called (for error message)
+        mark_invalid: Optional callback to mark builder as invalid before raising
 
     Raises:
         RigUsageError: If no operation (property/operator) has been set
     """
     if config.property is None or config.operator is None:
+        if mark_invalid:
+            mark_invalid()
         raise RigUsageError(
             f"Cannot call .{method_name}() without a prior operation. "
             f"You must set a property (e.g., .speed.to(5), .direction.by(90)) before calling .{method_name}()."

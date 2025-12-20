@@ -19,6 +19,7 @@ from talon import ctrl, settings
 
 # Available mouse APIs
 MOUSE_APIS = {
+    'platform': 'Auto-detect best platform-specific API',
     'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
     'windows_raw': 'Windows win32api.mouse_event (absolute positioning, legacy API)',
     'windows_sendinput': 'Windows SendInput (modern, recommended for Windows)',
@@ -60,6 +61,27 @@ elif platform.system() == "Linux":
         _linux_x11_available = True
     except ImportError:
         pass
+
+
+def _get_platform_api() -> str:
+    """Auto-detect the best platform-specific mouse API
+
+    Returns the recommended API name for the current platform.
+    Falls back to 'talon' if no platform-specific API is available.
+    """
+    if platform.system() == "Windows":
+        if _windows_sendinput_available:
+            return "windows_sendinput"
+        elif _windows_raw_available:
+            return "windows_raw"
+    elif platform.system() == "Darwin":
+        if _macos_available:
+            return "macos"
+    elif platform.system() == "Linux":
+        if _linux_x11_available:
+            return "linux_x11"
+
+    return "talon"
 
 
 def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
@@ -194,7 +216,6 @@ def _make_macos_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[
 
     def move_relative(dx: float, dy: float) -> None:
         # Get current position and add delta
-        from talon import ctrl
         current_x, current_y = ctrl.mouse_pos()
         Quartz.CGWarpMouseCursorPosition((current_x + dx, current_y + dy))
 
@@ -231,45 +252,81 @@ def get_mouse_move_functions() -> Tuple[Callable[[float, float], None], Callable
     """Get the appropriate mouse move functions based on settings
 
     Returns tuple of (absolute_func, relative_func) where:
-    - absolute_func: Takes (x, y) screen coordinates for cursor positioning
-    - relative_func: Takes (dx, dy) delta for relative movement (gaming)
+    - absolute_func: Takes (x, y) screen coordinates for cursor positioning (uses mouse_rig_api_absolute)
+    - relative_func: Takes (dx, dy) delta for relative movement (uses mouse_rig_api_relative)
 
     Falls back to Talon's mouse_move if the requested API is unavailable.
     """
-    api_type = settings.get("user.mouse_rig_api", "talon")
+    absolute_api = settings.get("user.mouse_rig_api_absolute", "talon")
+    relative_api = settings.get("user.mouse_rig_api_relative", "platform")
 
+    # Resolve 'platform' to actual API
+    if absolute_api == "platform":
+        absolute_api = _get_platform_api()
+    if relative_api == "platform":
+        relative_api = _get_platform_api()
+
+    # Get absolute function
+    absolute_func = _get_api_function(absolute_api, is_absolute=True)
+
+    # Get relative function
+    relative_func = _get_api_function(relative_api, is_absolute=False)
+
+    return absolute_func, relative_func
+
+
+def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, float], None]:
+    """Get a single mouse move function for the specified API
+
+    Args:
+        api_type: The API type string
+        is_absolute: True for absolute positioning, False for relative movement
+
+    Returns:
+        The appropriate mouse move function
+    """
     # Validate API type
     if api_type not in MOUSE_APIS:
         available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
-        print(f"[Mouse Rig] Invalid mouse_rig_api: '{api_type}'")
+        mode = "absolute" if is_absolute else "relative"
+        print(f"[Mouse Rig] Invalid mouse_rig_api_{mode}: '{api_type}'")
         print(f"[Mouse Rig] Available options: {available}")
         print(f"[Mouse Rig] Falling back to 'talon'")
-        return _make_talon_mouse_move()
+        api_type = "talon"
 
     # Select appropriate API
     if api_type == "windows_raw":
         if not _windows_raw_available:
             print("[Mouse Rig] windows_raw API requires pywin32, falling back to talon")
-            return _make_talon_mouse_move()
-        return _make_windows_raw_mouse_move()
+            api_type = "talon"
+        else:
+            abs_func, rel_func = _make_windows_raw_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "windows_sendinput":
         if not _windows_sendinput_available:
             print("[Mouse Rig] windows_sendinput API not available, falling back to talon")
-            return _make_talon_mouse_move()
-        return _make_windows_sendinput_mouse_move()
+            api_type = "talon"
+        else:
+            abs_func, rel_func = _make_windows_sendinput_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "macos":
         if not _macos_available:
             print("[Mouse Rig] macos API requires pyobjc-framework-Quartz, falling back to talon")
-            return _make_talon_mouse_move()
-        return _make_macos_mouse_move()
+            api_type = "talon"
+        else:
+            abs_func, rel_func = _make_macos_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "linux_x11":
         if not _linux_x11_available:
             print("[Mouse Rig] linux_x11 API requires python-xlib, falling back to talon")
-            return _make_talon_mouse_move()
-        return _make_linux_x11_mouse_move()
+            api_type = "talon"
+        else:
+            abs_func, rel_func = _make_linux_x11_mouse_move()
+            return abs_func if is_absolute else rel_func
 
-    else:  # talon (default)
-        return _make_talon_mouse_move()
+    # Default to talon
+    abs_func, rel_func = _make_talon_mouse_move()
+    return abs_func if is_absolute else rel_func

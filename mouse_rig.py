@@ -678,19 +678,6 @@ class Actions:
         if callback is not None:
             handle.then(callback)
 
-    def mouse_rig_set_api(api: str) -> None:
-        """Set mouse movement API
-
-        Args:
-            api: API type - 'talon', 'windows_raw', 'windows_sendinput', 'macos', 'linux_x11'
-        """
-        if api not in MOUSE_APIS:
-            available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
-            return
-        settings.set("user.mouse_rig_api", api)
-        # Reload to pick up the new API immediately
-        reload_rig()
-
     def mouse_rig_reload() -> None:
         """Reload/reset rig. Useful for development"""
         reload_rig()

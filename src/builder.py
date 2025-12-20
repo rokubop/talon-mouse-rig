@@ -91,12 +91,16 @@ class RigBuilder:
             self.config.layer_name = rig_state._generate_base_layer_name()
         else:
             if not layer or not layer.strip():
-                self._is_valid = False
+                self._mark_invalid()
                 raise ValueError("Empty layer name not allowed. Layer names must be non-empty strings.")
             self.config.layer_name = layer
 
         if order is not None:
             self.config.order = order
+
+    def _mark_invalid(self):
+        """Mark this builder as invalid so it won't execute on __del__"""
+        self._is_valid = False
 
     @property
     def is_anonymous(self) -> bool:
@@ -142,7 +146,7 @@ class RigBuilder:
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
         if self.config.operator is not None and any(name in ops for ops in VALID_OPERATORS.values()):
-            self._is_valid = False
+            self._mark_invalid()
             raise ConfigError(
                 f"Cannot call .{name}() after .{self.config.operator}() - duplicate operators not allowed.\n\n"
                 f"Each command can only have one operator.\n\n"
@@ -161,7 +165,7 @@ class RigBuilder:
             msg += f"\n\nAvailable properties: {', '.join(valid_properties)}"
             msg += f"\nAvailable methods: {', '.join(VALID_BUILDER_METHODS)}"
 
-        self._is_valid = False
+        self._mark_invalid()
         raise RigAttributeError(msg)
 
     # ========================================================================
@@ -186,15 +190,15 @@ class RigBuilder:
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
         all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
-        self.config.validate_method_kwargs('over', **all_kwargs)
+        self.config.validate_method_kwargs('over', self._mark_invalid, **all_kwargs)
 
-        validate_has_operation(self.config, 'over')
+        validate_has_operation(self.config, 'over', self._mark_invalid)
 
         if rate is not None:
-            self.config.over_rate = validate_timing(rate, 'rate', method='over')
+            self.config.over_rate = validate_timing(rate, 'rate', method='over', mark_invalid=self._mark_invalid)
             self.config.over_easing = easing
         else:
-            self.config.over_ms = validate_timing(ms, 'ms', method='over') if ms is not None else 0
+            self.config.over_ms = validate_timing(ms, 'ms', method='over', mark_invalid=self._mark_invalid) if ms is not None else 0
             self.config.over_easing = easing
 
         self.config.over_interpolation = interpolation
@@ -205,9 +209,9 @@ class RigBuilder:
         return self
 
     def hold(self, ms: float) -> 'RigBuilder':
-        validate_has_operation(self.config, 'hold')
+        validate_has_operation(self.config, 'hold', self._mark_invalid)
 
-        self.config.hold_ms = validate_timing(ms, 'ms', method='hold')
+        self.config.hold_ms = validate_timing(ms, 'ms', method='hold', mark_invalid=self._mark_invalid)
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self
 
@@ -229,13 +233,13 @@ class RigBuilder:
             interpolation: Interpolation method - "lerp" (default) or "slerp" (for direction)
         """
         all_kwargs = {'easing': easing, 'interpolation': interpolation, **kwargs}
-        self.config.validate_method_kwargs('revert', **all_kwargs)
+        self.config.validate_method_kwargs('revert', self._mark_invalid, **all_kwargs)
 
         if rate is not None:
-            self.config.revert_rate = validate_timing(rate, 'rate', method='revert')
+            self.config.revert_rate = validate_timing(rate, 'rate', method='revert', mark_invalid=self._mark_invalid)
             self.config.revert_easing = easing
         else:
-            self.config.revert_ms = validate_timing(ms, 'ms', method='revert') if ms is not None else 0
+            self.config.revert_ms = validate_timing(ms, 'ms', method='revert', mark_invalid=self._mark_invalid) if ms is not None else 0
             self.config.revert_easing = easing
 
         self.config.revert_interpolation = interpolation
@@ -351,8 +355,8 @@ class RigBuilder:
 
         # self._detect_and_apply_special_cases()
 
-        self.config.validate_mode()
-        self.config.validate_hold()
+        self.config.validate_mode(self._mark_invalid)
+        self.config.validate_hold(self._mark_invalid)
 
         self._calculate_rate_durations()
 
@@ -534,7 +538,7 @@ class PropertyBuilder:
         self.property_name = property_name
 
         if self.rig_builder.config.property is not None and self.rig_builder.config.property != property_name:
-            self.rig_builder._is_valid = False
+            self.rig_builder._mark_invalid()
             raise ConfigError(
                 f"Cannot combine multiple properties in one command.\n\n"
                 f"Attempting to set both '{self.rig_builder.config.property}' and '{property_name}'.\n\n"
@@ -563,9 +567,23 @@ class PropertyBuilder:
         self.rig_builder.config.mode = "scale"
         return self
 
+    @property
+    def absolute(self) -> 'PropertyBuilder':
+        """Explicitly use absolute positioning (screen coordinates) for this operation."""
+        self.rig_builder.config.movement_type = "absolute"
+        self.rig_builder.config._movement_type_explicit = True
+        return self
+
+    @property
+    def relative(self) -> 'PropertyBuilder':
+        """Explicitly use relative positioning (deltas) for this operation."""
+        self.rig_builder.config.movement_type = "relative"
+        self.rig_builder.config._movement_type_explicit = True
+        return self
+
     def _check_duplicate_mode(self, new_mode: str) -> None:
         if self.rig_builder.config.mode is not None:
-            self.rig_builder._is_valid = False
+            self.rig_builder._mark_invalid()
             existing_mode = self.rig_builder.config.mode
             raise ConfigError(
                 f"Cannot call .{new_mode} after .{existing_mode} - only one mode allowed.\n\n"
@@ -589,7 +607,7 @@ class PropertyBuilder:
             ConfigError: If an operator is already set
         """
         if self.rig_builder.config.operator is not None:
-            self.rig_builder._is_valid = False
+            self.rig_builder._mark_invalid()
             existing_op = self.rig_builder.config.operator
             raise ConfigError(
                 f"Cannot call .{new_operator}() after .{existing_op}() - duplicate operators not allowed.\n\n"
@@ -606,11 +624,13 @@ class PropertyBuilder:
         self._check_duplicate_operator("to")
         self.rig_builder.config.operator = "to"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
 
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
-            self.rig_builder.config.movement_type = "absolute"
+            # Set absolute for pos unless user explicitly set via .absolute/.relative
+            if not self.rig_builder.config._movement_type_explicit:
+                self.rig_builder.config.movement_type = "absolute"
 
         return self.rig_builder
 
@@ -618,12 +638,18 @@ class PropertyBuilder:
         self._check_duplicate_operator("add")
         self.rig_builder.config.operator = "add"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
 
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
-
+            # pos.by() defaults to absolute (pixels) unless explicitly set via .absolute/.relative
         self.rig_builder.config.movement_type = "relative"
+        #     if not self.rig_builder.config._movement_type_explicit:
+        #         self.rig_builder.config.movement_type = "absolute"
+        # else:
+        #     # Other properties default to relative
+        #     if not self.rig_builder.config._movement_type_explicit:
+        #         self.rig_builder.config.movement_type = "relative"
 
         return self.rig_builder
 
@@ -634,21 +660,21 @@ class PropertyBuilder:
         self._check_duplicate_operator("sub")
         self.rig_builder.config.operator = "sub"
         self.rig_builder.config.value = args[0] if len(args) == 1 else args
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
         return self.rig_builder
 
     def mul(self, value: float) -> RigBuilder:
         self._check_duplicate_operator("mul")
         self.rig_builder.config.operator = "mul"
         self.rig_builder.config.value = value
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
         return self.rig_builder
 
     def div(self, value: float) -> RigBuilder:
         self._check_duplicate_operator("div")
         self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
         return self.rig_builder
 
     def bake(self) -> RigBuilder:
@@ -660,7 +686,7 @@ class PropertyBuilder:
         """
         self.rig_builder.config.operator = "bake"
         self.rig_builder.config.value = None
-        self.rig_builder.config.validate_property_operator()
+        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
         return self.rig_builder
 
     def revert(self, ms: Optional[float] = None, easing: str = "linear", **kwargs) -> RigBuilder:

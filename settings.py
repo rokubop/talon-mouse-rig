@@ -11,10 +11,35 @@ mod.setting("mouse_rig_frame_interval",
 )
 
 mod.setting(
-    "mouse_rig_api",
+    "mouse_rig_api_absolute",
     type=str,
     default="talon",
-    desc="Options: 'talon', 'windows_raw', 'windows_sendinput', 'macos', 'linux_x11'"
+    desc="""API for absolute positioning (pos.to).
+
+    Options:
+    - talon: Talon ctrl.mouse_move (cross-platform, default)
+    - platform: Auto-detect best platform-specific API
+    - windows_raw: Windows win32api.mouse_event (legacy, requires pywin32)
+    - windows_sendinput: Windows SendInput (modern, recommended for Windows)
+    - macos: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
+    - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
+    """
+)
+
+mod.setting(
+    "mouse_rig_api_relative",
+    type=str,
+    default="talon",
+    desc="""API for relative movement (pos.by, speed.to, speed.by, vector.to, etc.).
+
+    Options:
+    - platform: Auto-detect best platform-specific API (recommended)
+    - talon: Talon actions.mouse_nudge (cross-platform)
+    - windows_raw: Windows win32api.mouse_event (legacy, requires pywin32)
+    - windows_sendinput: Windows SendInput (modern, recommended for Windows)
+    - macos: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
+    - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
+    """
 )
 
 mod.setting(

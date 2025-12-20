@@ -21,3 +21,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test outputs
+test_results.txt

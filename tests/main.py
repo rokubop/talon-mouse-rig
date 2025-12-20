@@ -2,6 +2,7 @@ from talon import actions, ctrl, cron
 import time
 import inspect
 import re
+from datetime import datetime
 
 CENTER_X = 960
 CENTER_Y = 540
@@ -14,7 +15,9 @@ _test_runner_state = {
     "interval_job": None,
     "stop_requested": False,
     "passed_count": 0,
-    "failed_count": 0
+    "failed_count": 0,
+    "all_tests_running": False,
+    "test_results_file": None
 }
 
 
@@ -114,7 +117,7 @@ def move_to_center():
     actions.sleep("200ms")
 
 
-def run_single_test(test_name, test_func, on_complete=None, test_group=None):
+def run_single_test(test_name, test_func, on_complete=None, test_group=None, fast_mode=False):
     actions.user.ui_elements_set_state("current_test", test_name)
     actions.user.ui_elements_set_state("test_result", None)
 
@@ -138,7 +141,8 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
             actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(True)
-        cron.after("1s", clear_and_complete)
+        delay = "200ms" if fast_mode else "1s"
+        cron.after(delay, clear_and_complete)
 
     def on_test_failure(error_msg):
         actions.user.mouse_rig().stop()
@@ -156,7 +160,8 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
             actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(False)
-        cron.after("1s", clear_and_complete)
+        delay = "200ms" if fast_mode else "1s"
+        cron.after(delay, clear_and_complete)
 
     try:
         # Skip move_to_center for validation and contract tests
@@ -191,7 +196,8 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None):
             actions.user.ui_elements_unhighlight(test_button_id)
             if on_complete:
                 on_complete(False)
-        cron.after("2s", clear_and_complete)
+        delay = "200ms" if fast_mode else "2s"
+        cron.after(delay, clear_and_complete)
 
 
 def run_all_tests(tests, group_name):
@@ -275,6 +281,8 @@ def stop_all_tests():
     _test_runner_state["stop_requested"] = False
     _test_runner_state["current_test_index"] = 0
     _test_runner_state["tests"] = []
+    _test_runner_state["all_tests_running"] = False
+    _test_runner_state["test_results_file"] = None
 
     actions.user.ui_elements_set_state("run_all_Position", False)
     actions.user.ui_elements_set_state("run_all_Speed", False)
@@ -283,7 +291,120 @@ def stop_all_tests():
     actions.user.ui_elements_set_state("run_all_Validation", False)
     actions.user.ui_elements_set_state("run_all_Contracts", False)
     actions.user.ui_elements_set_state("run_all_Behaviors", False)
+    actions.user.ui_elements_set_state("run_all_tests_global", False)
     actions.user.ui_elements_set_state("current_test", None)
+
+
+def run_all_tests_global(test_groups):
+    """Run all tests from all groups with 0 delay"""
+    import os
+    
+    if _test_runner_state["running"]:
+        return
+
+    # Create test results file
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    results_file = os.path.join(os.path.dirname(test_dir), "test_results.txt")
+    _test_runner_state["test_results_file"] = results_file
+    
+    # Write header to file
+    with open(results_file, "w") as f:
+        f.write(f"Test Run Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 70 + "\n\n")
+
+    # Collect all tests from all groups
+    all_tests = []
+    for group_name, tests in test_groups:
+        for test_name, test_func in tests:
+            all_tests.append((test_name, test_func, group_name))
+    
+    _test_runner_state["running"] = True
+    _test_runner_state["all_tests_running"] = True
+    _test_runner_state["current_test_index"] = 0
+    _test_runner_state["tests"] = all_tests
+    _test_runner_state["stop_requested"] = False
+    _test_runner_state["passed_count"] = 0
+    _test_runner_state["failed_count"] = 0
+    
+    actions.user.ui_elements_set_state("run_all_tests_global", True)
+
+    def run_next_test():
+        if _test_runner_state["stop_requested"]:
+            finalize_results()
+            return
+
+        if _test_runner_state["current_test_index"] >= len(_test_runner_state["tests"]):
+            finalize_results()
+            return
+
+        test_name, test_func, group_name = _test_runner_state["tests"][_test_runner_state["current_test_index"]]
+        _test_runner_state["current_test_index"] += 1
+
+        def on_test_complete(success):
+            actions.user.mouse_rig().stop()
+
+            if success:
+                _test_runner_state["passed_count"] += 1
+                result_msg = f"PASSED: {group_name} - {test_name}\n"
+            else:
+                _test_runner_state["failed_count"] += 1
+                result_msg = f"FAILED: {group_name} - {test_name}\n"
+            
+            # Write result to file only if running global tests
+            if _test_runner_state["test_results_file"]:
+                with open(_test_runner_state["test_results_file"], "a") as f:
+                    f.write(result_msg)
+
+            if _test_runner_state["running"]:
+                run_next_test()
+
+        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=group_name, fast_mode=True)
+
+    def finalize_results():
+        passed = _test_runner_state["passed_count"]
+        failed = _test_runner_state["failed_count"]
+        total = passed + failed
+        all_passed = failed == 0
+        
+        # Write summary to file
+        with open(_test_runner_state["test_results_file"], "a") as f:
+            f.write("\n" + "="*70 + "\n")
+            f.write(f"Test Run Complete: {passed}/{total} passed\n")
+            if failed > 0:
+                f.write(f"Failed: {failed}\n")
+            f.write("="*70 + "\n")
+        
+        print(f"Test results written to: {_test_runner_state['test_results_file']}")
+        
+        actions.user.ui_elements_set_state("test_summary", {
+            "passed": passed,
+            "failed": failed,
+            "total": total,
+            "all_passed": all_passed
+        })
+
+        print(f"\n{'='*50}")
+        print(f"Test Run Complete: {passed}/{total} passed")
+        if failed > 0:
+            print(f"Failed: {failed}")
+        print(f"{'='*50}\n")
+
+        def clear_summary():
+            actions.user.ui_elements_set_state("test_summary", None)
+            stop_all_tests()
+
+        cron.after("3s", clear_summary)
+
+    run_next_test()
+
+
+def toggle_run_all_tests_global(test_groups):
+    """Toggle running all tests from all groups"""
+    if _test_runner_state["all_tests_running"]:
+        _test_runner_state["stop_requested"] = True
+        stop_all_tests()
+    else:
+        run_all_tests_global(test_groups)
 
 
 def toggle_run_all(tests, group_name):
@@ -305,6 +426,33 @@ def test_runner_ui(test_groups):
         ["screen", "window", "div", "button", "state", "icon", "text"]
     )
 
+    # Run All Tests button at top
+    run_all_tests_active = state.get("run_all_tests_global", False)
+    run_all_tests_icon = "stop" if run_all_tests_active else "play"
+    run_all_tests_label = "Stop All Tests" if run_all_tests_active else "Run All Tests"
+    run_all_tests_color = "#ff5555" if run_all_tests_active else "#0088ff"
+    
+    run_all_tests_button = div(
+        flex_direction="row",
+        justify_content="center",
+        margin_bottom=24
+    )[
+        button(
+            padding=10,
+            padding_left=16,
+            padding_right=16,
+            background_color=run_all_tests_color,
+            flex_direction="row",
+            align_items="center",
+            gap=8,
+            border_radius=4,
+            on_click=lambda e: toggle_run_all_tests_global(test_groups)
+        )[
+            icon(run_all_tests_icon, size=14, color="white"),
+            text(run_all_tests_label, color="white", font_weight="bold", font_size=13)
+        ]
+    ]
+
     groups = []
 
     for group_name, tests in test_groups:
@@ -312,7 +460,7 @@ def test_runner_ui(test_groups):
         run_all_active = state.get(state_key, False)
         is_collapsed, set_collapsed = state.use(f"collapsed_{group_name}", True)
         run_all_icon = "stop" if run_all_active else "play"
-        run_all_label = f"Run All {group_name}"
+        run_all_label = f"Stop All {group_name}" if run_all_active else f"Run All {group_name}"
         run_all_color = "#ff5555" if run_all_active else "#00aa00"
         chevron_icon = "chevron_right" if is_collapsed else "chevron_down"
 
@@ -409,6 +557,7 @@ def test_runner_ui(test_groups):
             overflow_y="auto",
             max_height=1000
         )[
+            run_all_tests_button,
             *groups
         ]
     ]
