@@ -13,6 +13,7 @@ from .contracts import (
     LifecyclePhase,
     validate_timing,
     validate_has_operation,
+    validate_api_has_operation,
     ConfigError,
     RigAttributeError,
     find_closest_match,
@@ -308,6 +309,42 @@ class RigBuilder:
         return self
 
     # ========================================================================
+    # API OVERRIDE
+    # ========================================================================
+
+    def api(self, api: str) -> 'RigBuilder':
+        """Override mouse API for this operation
+
+        Can be chained anywhere in the builder chain. The API will be used for
+        whatever movement type this builder performs (absolute or relative).
+
+        Examples:
+            rig.pos.by(100, 0).api("talon")
+            rig.pos.to(500, 300).api("talon")
+            rig.layer("test").speed.to(50).api("windows_send_input")
+            rig.speed.to(50).api("talon").over(1000)
+
+        Args:
+            api: Mouse API to use ('talon', 'platform', 'windows_send_input', etc.)
+
+        Returns:
+            self for chaining
+        """
+        # Validate API name
+        from .mouse_api import MOUSE_APIS
+        if api not in MOUSE_APIS:
+            available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
+            self._mark_invalid()
+            raise ConfigError(
+                f"Invalid API: '{api}'\n\n"
+                f"Available APIs: {available}"
+            )
+
+        # Set API override
+        self.config.api_override = api
+        return self
+
+    # ========================================================================
     # STRING REPRESENTATION
     # ========================================================================
 
@@ -351,6 +388,7 @@ class RigBuilder:
                 self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return
 
+            validate_api_has_operation(self.config, self._mark_invalid)
             return
 
         # self._detect_and_apply_special_cases()
@@ -579,6 +617,25 @@ class PropertyBuilder:
         """Explicitly use relative positioning (deltas) for this operation."""
         self.rig_builder.config.movement_type = "relative"
         self.rig_builder.config._movement_type_explicit = True
+        return self
+
+    def api(self, api: str) -> 'PropertyBuilder':
+        """Override mouse API for this property operation
+
+        Allows .api() to be called after a property name, preserving the property context.
+
+        Examples:
+            rig.pos.api("talon").offset.by(100, 0)
+            rig.layer("test").speed.api("talon").offset.to(50)
+
+        Args:
+            api: Mouse API to use ('talon', 'platform', etc.)
+
+        Returns:
+            self for continued chaining
+        """
+        # Delegate to RigBuilder's api method, but return PropertyBuilder to maintain chain
+        self.rig_builder.api(api)
         return self
 
     def _check_duplicate_mode(self, new_mode: str) -> None:
@@ -1021,11 +1078,24 @@ class ActiveBuilder:
                 self.rig_state._internal_pos = new_pos
                 self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
 
-                mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
+                # Use API override if specified
+                if self.config.api_override is not None:
+                    from .mouse_api import get_mouse_move_functions
+                    move_absolute, _ = get_mouse_move_functions(self.config.api_override, None)
+                    move_absolute(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
+                else:
+                    mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
             else:
                 # Relative movement
                 delta = self.target_value
-                mouse_move_relative(int(delta.x), int(delta.y))
+
+                # Use API override if specified
+                if self.config.api_override is not None:
+                    from .mouse_api import get_mouse_move_functions
+                    _, move_relative = get_mouse_move_functions(None, self.config.api_override)
+                    move_relative(int(delta.x), int(delta.y))
+                else:
+                    mouse_move_relative(int(delta.x), int(delta.y))
 
         # Add other property types here as needed (speed, direction, etc.)
 

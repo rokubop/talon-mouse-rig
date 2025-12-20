@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import Vec2, SubpixelAdjuster, mouse_move
+from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative
 from .queue import QueueManager
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
 from . import mode_operations
@@ -454,7 +454,11 @@ class RigState:
             will_be_active = self._has_movement() or active_count > 0
             is_relative = builder.config.movement_type == "relative"
             if not will_be_active and not is_relative and self._absolute_base_pos is not None:
-                mouse_move(int(self._absolute_base_pos.x), int(self._absolute_base_pos.y))
+                move_absolute_override, _ = self._get_override_functions()
+                if move_absolute_override is not None:
+                    move_absolute_override(int(self._absolute_base_pos.x), int(self._absolute_base_pos.y))
+                else:
+                    mouse_move(int(self._absolute_base_pos.x), int(self._absolute_base_pos.y))
 
         if self._should_frame_loop_be_active():
             self._ensure_frame_loop_running()
@@ -706,6 +710,30 @@ class RigState:
 
         return has_absolute_position, absolute_target, relative_delta, relative_position_updates
 
+    def _has_api_overrides(self) -> bool:
+        """Check if any active builder has API overrides"""
+        for builder in self._active_builders.values():
+            if builder.config.api_override is not None:
+                return True
+        return False
+
+    def _get_override_functions(self):
+        """Get override functions if any builder has overrides, otherwise None
+        
+        Returns (move_absolute, move_relative) or (None, None)
+        """
+        if not self._has_api_overrides():
+            return None, None
+        
+        # Find override (last one wins if multiple)
+        api_override = None
+        for builder in self._active_builders.values():
+            if builder.config.api_override is not None:
+                api_override = builder.config.api_override
+        
+        from .mouse_api import get_mouse_move_functions
+        return get_mouse_move_functions(api_override, api_override)
+
     def _emit_mouse_movement(self, has_absolute_position: bool, absolute_target: Optional[Vec2], frame_delta: Vec2):
         """Emit mouse movement based on accumulated deltas
 
@@ -714,20 +742,27 @@ class RigState:
             absolute_target: Target position for absolute mode
             frame_delta: Accumulated delta from velocity and relative position builders
         """
+        # Get override functions if any builder has them
+        move_absolute_override, move_relative_override = self._get_override_functions()
+        
         if has_absolute_position:
             final_pos = absolute_target + frame_delta
             self._absolute_current_pos = final_pos
-            from .core import mouse_move
             new_x = int(round(final_pos.x))
             new_y = int(round(final_pos.y))
             current_x, current_y = ctrl.mouse_pos()
             if new_x != current_x or new_y != current_y:
-                mouse_move(new_x, new_y)
+                if move_absolute_override is not None:
+                    move_absolute_override(new_x, new_y)
+                else:
+                    mouse_move(new_x, new_y)
                 self._expected_mouse_pos = (new_x, new_y)
         else:
             if frame_delta.x != 0 or frame_delta.y != 0:
-                from .core import mouse_move_relative
-                mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
+                if move_relative_override is not None:
+                    move_relative_override(round(frame_delta.x), round(frame_delta.y))
+                else:
+                    mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
                 self._expected_mouse_pos = ctrl.mouse_pos()
 
     def _update_relative_position_tracking(self, relative_position_updates: list, completed_layers: set):
@@ -917,8 +952,11 @@ class RigState:
                     final_delta_int = final_target_int - builder._total_emitted_int
 
                     if final_delta_int.x != 0 or final_delta_int.y != 0:
-                        from .core import mouse_move_relative
-                        mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
+                        _, move_relative_override = self._get_override_functions()
+                        if move_relative_override is not None:
+                            move_relative_override(int(final_delta_int.x), int(final_delta_int.y))
+                        else:
+                            mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
 
                 completed.append(layer)
 

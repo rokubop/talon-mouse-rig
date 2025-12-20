@@ -136,7 +136,7 @@ def test_pos_by(on_success, on_failure):
     dx, dy = TEST_OFFSET, -TEST_OFFSET
 
     rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy)
+    rig.api("talon").pos.by(dx, dy)
 
     # Wait for garbage collection, then check position
     def check_position():
@@ -193,7 +193,7 @@ def test_pos_by_over(on_success, on_failure):
             return
 
     rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy).over(500).then(check_position)
+    rig.api("talon").pos.by(dx, dy).over(500).then(check_position)
     cron.after("600ms", check_state)
 
 
@@ -239,7 +239,7 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
             on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
             return
 
-    rig.pos.by(dx, dy).over(300).then(check_after_over).hold(300).then(check_after_hold).revert(300).then(check_after_revert)
+    rig.api("talon").pos.by(dx, dy).over(300).then(check_after_over).hold(300).then(check_after_hold).revert(300).then(check_after_revert)
     cron.after("1000ms", check_state)
 
 
@@ -270,7 +270,7 @@ def test_pos_by_revert(on_success, on_failure):
             return
 
     rig = actions.user.mouse_rig()
-    rig.pos.by(dx, dy).revert(400).then(check_position)
+    rig.api("talon").pos.by(dx, dy).revert(400).then(check_position)
     cron.after("500ms", check_state)
 
 
@@ -353,7 +353,7 @@ def test_layer_pos_by(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx, dy).over(300).then(check_target)
+    rig.layer("test").api("talon").pos.offset.by(dx, dy).over(300).then(check_target)
 
 
 def test_layer_pos_by_revert(on_success, on_failure):
@@ -390,7 +390,7 @@ def test_layer_pos_by_revert(on_success, on_failure):
             return
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx, dy).hold(500).then(check_after_hold).revert(300).then(check_after_revert)
+    rig.layer("test").api("talon").pos.offset.by(dx, dy).hold(500).then(check_after_hold).revert(300).then(check_after_revert)
     cron.after("900ms", check_state)
 
 
@@ -405,8 +405,8 @@ def test_pos_by_twice():
     dx2, dy2 = 0, 100
 
     rig = actions.user.mouse_rig()
-    rig.pos.by(dx1, dy1)
-    rig.pos.by(dx2, dy2)
+    rig.api("talon").pos.by(dx1, dy1)
+    rig.api("talon").pos.by(dx2, dy2)
 
     actions.sleep("100ms")
     x, y = ctrl.mouse_pos()
@@ -435,7 +435,7 @@ def test_pos_to_then_by():
     rig.pos.to(target_x, target_y)
     actions.sleep("100ms")
 
-    rig.pos.by(dx, dy)
+    rig.api("talon").pos.by(dx, dy)
     actions.sleep("100ms")
 
     x, y = ctrl.mouse_pos()

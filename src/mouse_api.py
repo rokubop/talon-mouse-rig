@@ -13,7 +13,7 @@ Each API provides two movement modes:
 """
 
 import platform
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 from talon import ctrl, settings
 
 
@@ -254,8 +254,12 @@ def _make_linux_x11_mouse_move() -> Tuple[Callable[[float, float], None], Callab
     return move_absolute, move_relative
 
 
-def get_mouse_move_functions() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+def get_mouse_move_functions(absolute_override: Optional[str] = None, relative_override: Optional[str] = None) -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """Get the appropriate mouse move functions based on settings
+
+    Args:
+        absolute_override: Optional override for absolute API (takes precedence over settings)
+        relative_override: Optional override for relative API (takes precedence over settings)
 
     Returns tuple of (absolute_func, relative_func) where:
     - absolute_func: Takes (x, y) screen coordinates for cursor positioning (uses mouse_rig_api_absolute)
@@ -263,8 +267,8 @@ def get_mouse_move_functions() -> Tuple[Callable[[float, float], None], Callable
 
     Falls back to Talon's mouse_move if the requested API is unavailable.
     """
-    absolute_api = settings.get("user.mouse_rig_api_absolute", "talon")
-    relative_api = settings.get("user.mouse_rig_api_relative", "platform")
+    absolute_api = absolute_override if absolute_override is not None else settings.get("user.mouse_rig_api_absolute", "talon")
+    relative_api = relative_override if relative_override is not None else settings.get("user.mouse_rig_api_relative", "platform")
 
     # Resolve 'platform' to actual API
     if absolute_api == "platform":

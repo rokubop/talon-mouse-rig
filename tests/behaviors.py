@@ -27,9 +27,9 @@ def test_behavior_stack_property_syntax(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # First offset: down, shorter transition
-    rig.layer("test").stack.pos.offset.by(dx1, dy1).over(400)
+    rig.layer("test").stack.api("talon").pos.offset.by(dx1, dy1).over(400)
     # Second offset: right, longer transition, starts while first is active
-    cron.after("200ms", lambda: rig.layer("test").stack.pos.offset.by(dx2, dy2).over(400))
+    cron.after("200ms", lambda: rig.layer("test").stack.api("talon").pos.offset.by(dx2, dy2).over(400))
     # Check after second completes (first will have finished already)
     cron.after("1000ms", check_stacked)
 
@@ -50,9 +50,9 @@ def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Add 3 stacks but max is 2
-    rig.layer("test").stack(max=2).pos.offset.by(dx, 0).over(100)
-    cron.after("50ms", lambda: rig.layer("test").stack(max=2).pos.offset.by(dx, 0).over(100))
-    cron.after("100ms", lambda: rig.layer("test").stack(max=2).pos.offset.by(dx, 0).over(100))
+    rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100)
+    cron.after("50ms", lambda: rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100))
+    cron.after("100ms", lambda: rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100))
     cron.after("400ms", check_result)
 
 
@@ -82,8 +82,8 @@ def test_behavior_replace_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx1, dy1).over(300).then(check_first)
-    cron.after("100ms", lambda: rig.layer("test").replace.pos.offset.by(dx2, dy2).over(300).then(check_replace))
+    rig.layer("test").api("talon").pos.offset.by(dx1, dy1).over(300).then(check_first)
+    cron.after("100ms", lambda: rig.layer("test").api("talon").replace.pos.offset.by(dx2, dy2).over(300).then(check_replace))
 
 
 def test_behavior_replace_call_syntax(on_success, on_failure):
@@ -101,8 +101,8 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx1, 0).over(300)
-    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
+    rig.layer("test").pos.api("talon").offset.by(dx1, 0).over(300)
+    cron.after("100ms", lambda: rig.layer("test").api("talon").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
 
 
 def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
@@ -119,7 +119,7 @@ def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.offset.by(dx, 0).over(300).revert(300).then(check_pos)
+    rig.layer("test").api("talon").pos.offset.by(dx, 0).over(300).revert(300).then(check_pos)
 
 
 def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
@@ -138,9 +138,9 @@ def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Start first animation
-    rig.layer("test").pos.offset.by(dx1, 0).over(300).revert(300)
+    rig.layer("test").pos.offset.api("talon").by(dx1, 0).over(300).revert(300)
     # Replace it mid-flight with a different offset
-    cron.after("100ms", lambda: rig.layer("test").replace().pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
+    cron.after("100ms", lambda: rig.layer("test").replace().api("talon").pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
 
 
 def test_behavior_replace_pos_override_to_over(on_success, on_failure):
@@ -257,8 +257,8 @@ def test_behavior_queue_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").queue.pos.offset.by(dx1, dy1).over(300).then(check_after_first)
-    rig.layer("test").queue.pos.offset.by(dx2, dy2).over(300).then(check_after_second)
+    rig.layer("test").queue.pos.api("talon").offset.by(dx1, dy1).over(300).then(check_after_first)
+    rig.layer("test").queue.pos.api("talon").offset.by(dx2, dy2).over(300).then(check_after_second)
 
 
 def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
@@ -277,10 +277,10 @@ def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Queue 3 items but max is 2
-    rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.offset.by(dx, 0).over(100)
+    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
+    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
+    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
+    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
     cron.after("400ms", check_result)
 
 
@@ -314,9 +314,9 @@ def test_behavior_throttle_property_syntax(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Start a long-running builder with throttle
-    rig.layer("test").throttle.pos.offset.by(dx, 0).over(300).then(first_done)
+    rig.layer("test").throttle.api("talon").pos.offset.by(dx, 0).over(300).then(first_done)
     # Try to add another immediately - should be ignored because first is still active
-    cron.after("50ms", lambda: rig.layer("test").throttle.pos.offset.by(dx * 2, 0).over(100).then(second_done))
+    cron.after("50ms", lambda: rig.layer("test").throttle.api("talon").pos.offset.by(dx * 2, 0).over(100).then(second_done))
     # Check after both would have completed
     cron.after("500ms", check_throttle)
 
@@ -340,11 +340,11 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
 
     rig = actions.user.mouse_rig()
     # Fire every 200ms for 1 second
-    rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count)
-    cron.after("200ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("400ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("600ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("800ms", lambda: rig.layer("test").throttle(500).pos.offset.by(dx, 0).over(100).then(increment_count))
+    rig.layer("test").throttle(500).api("talon").pos.offset.by(dx, 0).over(100).then(increment_count)
+    cron.after("200ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("400ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("600ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
+    cron.after("800ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
 
     cron.after("1200ms", check_throttle)
 

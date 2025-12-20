@@ -447,6 +447,22 @@ def test_accessing_property_as_value(on_success, on_failure):
         on_failure(f"Unexpected error in test setup: {e}")
 
 
+def test_api_without_operation(on_success, on_failure):
+    """Test: calling .api() without an operation should error"""
+    try:
+        rig = actions.user.mouse_rig()
+        builder = rig.api("talon")
+        builder._execute()  # Force execution to catch validation error
+        on_failure("Expected error but operation succeeded")
+    except Exception as e:
+        print(f"  Error message: {e}")
+        error_msg = str(e).lower()
+        if "api" in error_msg and ("operation" in error_msg or "chained" in error_msg):
+            on_success()
+        else:
+            on_failure(f"Error occurred but message unclear: {e}")
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -471,4 +487,5 @@ VALIDATION_TESTS = [
     ("pos.to(0, 0) allowed", test_position_zero_zero),
     ("duplicate mode specification", test_duplicate_mode_specification),
     ("accessing property as value", test_accessing_property_as_value),
+    ("api without operation", test_api_without_operation),
 ]

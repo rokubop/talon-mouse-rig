@@ -108,7 +108,7 @@ PARAMETER_SUGGESTIONS = {
 
 # Valid method/property names for Rig class
 VALID_RIG_METHODS = [
-    'layer', 'stop', 'reverse', 'bake',
+    'layer', 'api', 'stop', 'reverse', 'bake',
 ]
 
 VALID_RIG_PROPERTIES = [
@@ -118,7 +118,7 @@ VALID_RIG_PROPERTIES = [
 ]
 
 VALID_BUILDER_METHODS = [
-    'over', 'hold', 'revert', 'then', 'bake',
+    'over', 'hold', 'revert', 'then', 'bake', 'api',
     'stack', 'replace', 'queue', 'throttle',
 ]
 
@@ -367,6 +367,9 @@ class BuilderConfig:
         self.revert_easing: str = "linear"
         self.revert_rate: Optional[float] = None
         self.revert_interpolation: str = "lerp"
+
+        # API override (set via .api())
+        self.api_override: Optional[str] = None
 
         # Callbacks (stage -> callback)
         self.then_callbacks: list[tuple[str, Callable]] = []
@@ -653,4 +656,31 @@ def validate_has_operation(config: 'BuilderConfig', method_name: str, mark_inval
         raise RigUsageError(
             f"Cannot call .{method_name}() without a prior operation. "
             f"You must set a property (e.g., .speed.to(5), .direction.by(90)) before calling .{method_name}()."
+        )
+
+
+def validate_api_has_operation(config: 'BuilderConfig', mark_invalid: Optional[Callable] = None):
+    """Validate that api() is not called alone without an operation
+
+    Args:
+        config: BuilderConfig to validate
+        mark_invalid: Optional callback to mark builder invalid
+
+    Raises:
+        ConfigError: If api() was called without any operation
+    """
+    if config.api_override is not None and config.property is None and config.operator is None:
+        if mark_invalid:
+            mark_invalid()
+        raise ConfigError(
+            "api() must be chained with an operation - it cannot be used alone.\n\n"
+            "The api() method is for overriding the mouse API for specific one-line operations:\n\n"
+            "  ✓ rig.api(\"talon\").pos.by(100, 0)\n"
+            "  ✓ rig.pos.by(100, 0).api(\"talon\")\n"
+            "  ✗ rig.api(\"talon\")  # No operation specified\n\n"
+            "To change the default mouse API globally, use Talon settings:\n\n"
+            "  # In your .talon or .py file:\n"
+            "  settings():\n"
+            "    user.mouse_rig_api_absolute = \"talon\"\n"
+            "    user.mouse_rig_api_relative = \"platform\""
         )

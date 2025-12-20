@@ -170,6 +170,20 @@ class Rig:
         """
         return RigBuilder(self._state, layer=name, order=order)
 
+    def api(self, api: str) -> RigBuilder:
+        """Set API override for mouse operations
+
+        Args:
+            api: Mouse API to use ('talon', 'platform', 'windows_send_input', etc.)
+
+        Returns:
+            RigBuilder with API pre-configured
+
+        Example:
+            rig.api("talon").pos.by(100, 0)
+        """
+        return RigBuilder(self._state).api(api)
+
     # ========================================================================
     # BEHAVIOR SUGAR (returns builder with behavior pre-set)
     # ========================================================================

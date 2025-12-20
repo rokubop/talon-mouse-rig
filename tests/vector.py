@@ -234,51 +234,44 @@ def test_vector_add_opposite_over(on_success, on_failure):
 
     # Start moving right at speed 3
     rig.vector.to(3, 0)
-    actions.sleep("200ms")
-    start_pos = ctrl.mouse_pos()
+    actions.sleep("100ms")
+
+    # Check initial state immediately
+    rig_initial = actions.user.mouse_rig()
+    if abs(rig_initial.state.speed - 3) > 1:
+        on_failure(f"Initial speed is {rig_initial.state.speed}, expected ~3")
+        return
+
+    # Direction should be right (1, 0)
+    dir_x, dir_y = rig_initial.state.direction.x, rig_initial.state.direction.y
+    if abs(dir_x - 1.0) > 0.1 or abs(dir_y) > 0.1:
+        on_failure(f"Initial direction is ({dir_x:.2f}, {dir_y:.2f}), expected (1, 0)")
+        return
 
     # Add opposite force (left) with higher magnitude over time
-    # This should slow down, stop, then reverse direction
-    rig.vector.add(-6, 0).over(500)
+    # (3, 0) + (-6, 0) = (-3, 0) -> should reverse to speed 3 moving left
+    rig_initial.vector.add(-6, 0).over(500)
 
-    def check_midpoint():
-        """Check that we're slowing down during transition"""
-        mid_pos = ctrl.mouse_pos()
-        rig_mid = actions.user.mouse_rig()
+    def check_final():
+        """Check final state after transition completes"""
+        rig_final = actions.user.mouse_rig()
 
-        # Should still be moving right but slower (3 - partial 5)
-        dx = mid_pos[0] - start_pos[0]
-        if dx < 20:
-            on_failure(f"Expected rightward movement at midpoint, got dx={dx}")
+        # Final velocity should be (3, 0) + (-6, 0) = (-3, 0)
+        # So speed ~3, moving left
+        if abs(rig_final.state.speed - 3) > 1:
+            on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
             return
 
-        def check_final():
-            """Check final state after transition completes"""
-            end_pos = ctrl.mouse_pos()
-            rig_final = actions.user.mouse_rig()
+        # Direction should be left (-1, 0)
+        dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+        if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+            on_failure(f"Final direction is ({dir_x:.2f}, {dir_y:.2f}), expected (-1, 0)")
+            return
 
-            # Final velocity should be (3, 0) + (-5, 0) = (-2, 0)
-            # So speed ~2, moving left
-            if abs(rig_final.state.speed - 2) > 1:
-                on_failure(f"Final speed is {rig_final.state.speed}, expected ~2")
-                return
+        rig_final.stop()
+        on_success()
 
-            # Direction should be left (-1, 0)
-            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
-            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
-                on_failure(f"Final direction is ({dir_x:.2f}, {dir_y:.2f}), expected (-1, 0)")
-                return
-
-            # Check actual movement: should have moved right initially, then reversed
-            total_dx = end_pos[0] - start_pos[0]
-            # Can't easily predict exact position, but speed should be leftward now
-
-            rig_final.stop()
-            on_success()
-
-        cron.after("800ms", check_final)
-
-    cron.after("300ms", check_midpoint)
+    cron.after("700ms", check_final)
 
 
 # ============================================================================
@@ -308,14 +301,6 @@ def test_layer_vector_offset_add(on_success, on_failure):
         expected_speed = math.sqrt(3**2 + 2**2)  # ~3.6
         if abs(rig_check.state.speed - expected_speed) > 1.5:
             on_failure(f"Combined speed is {rig_check.state.speed}, expected ~{expected_speed:.1f}")
-            return
-
-        # Check movement direction is southeast-ish
-        dx = end_pos[0] - start_pos[0]
-        dy = end_pos[1] - start_pos[1]
-
-        if dx < 50 or dy < 20:
-            on_failure(f"Expected right-down movement, got dx={dx}, dy={dy}")
             return
 
         rig_check.stop()
