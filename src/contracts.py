@@ -626,8 +626,9 @@ class BuilderConfig:
         Raises:
             ConfigError: If mode is missing or invalid
         """
-        # Mode is only required for modifier layers (not base)
-        if not self.is_modifier_layer():
+        # Mode validation is only necessary for user-named layers
+        # Auto-named modifiers and base layers are always valid by construction
+        if not self.is_user_named:
             return
 
         if self.mode is None:

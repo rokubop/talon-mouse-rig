@@ -238,14 +238,10 @@ class RigState:
             if not builder.config.behavior_args:
                 return True  # Ignored, early return
 
-            # With args = ignore if builder was active within last X ms
-            throttle_key = self._get_throttle_key(layer, builder)
-            throttle_ms = builder.config.behavior_args[0]
-            if throttle_key in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
-                if elapsed < throttle_ms:
-                    return True  # Throttled, early return
-            self._throttle_times[throttle_key] = time.perf_counter()
+            # With args = check throttle timing
+            if self._check_throttle(builder, layer):
+                return True  # Throttled, early return
+            
             existing.add_child(builder)
             return True  # Handled, early return
         elif behavior == "stack":
@@ -276,8 +272,29 @@ class RigState:
             existing.add_child(builder)
             return True  # Handled, added as child
 
-    def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str):
-        """Handle behavior for base layer operations"""
+    def _check_throttle(self, builder: 'ActiveBuilder', layer: str) -> bool:
+        """Check if builder should be throttled
+        
+        Returns:
+            True if throttled (should skip), False if allowed to proceed
+        """
+        throttle_key = self._get_throttle_key(layer, builder)
+        throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
+        
+        if throttle_key in self._throttle_times:
+            elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
+            if elapsed < throttle_ms:
+                return True  # Throttled
+        
+        self._throttle_times[throttle_key] = time.perf_counter()
+        return False  # Not throttled
+
+    def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str) -> bool:
+        """Handle behavior for base layer operations
+        
+        Returns:
+            True if the builder was handled and should be skipped, False otherwise
+        """
         layer = builder.config.layer_name
 
         if behavior == "replace" and builder.config.is_base_layer():
@@ -286,13 +303,10 @@ class RigState:
             if layer in self._active_builders:
                 self.remove_builder(layer)
         elif behavior == "throttle":
-            throttle_key = self._get_throttle_key(layer, builder)
-            throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-            if throttle_key in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
-                if elapsed < throttle_ms:
-                    return  # Early return handled by caller
-            self._throttle_times[throttle_key] = time.perf_counter()
+            if self._check_throttle(builder, layer):
+                return True  # Throttled, skip adding builder
+        
+        return False  # Not handled, continue with adding builder
 
     def _handle_instant_completion(self, builder: 'ActiveBuilder', layer: str):
         """Handle builders that complete instantly (no lifecycle)"""
@@ -477,7 +491,8 @@ class RigState:
             if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
                 return
 
-        self._handle_base_layer_behavior(builder, behavior)
+        if self._handle_base_layer_behavior(builder, behavior):
+            return
 
         self._active_builders[layer] = builder
 
