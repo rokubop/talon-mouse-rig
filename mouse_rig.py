@@ -549,6 +549,11 @@ class Actions:
         """Reload/reset rig. Useful for development"""
         reload_rig()
 
+    def mouse_rig_reset() -> None:
+        """Reset rig to default state (speed=0, direction=right, clear all layers)"""
+        rig = actions.user.mouse_rig()
+        rig.reset()
+
     def mouse_rig_test_toggle_ui():
         """Show the QA UI for mouse rig development"""
         from .tests.main import toggle_test_ui

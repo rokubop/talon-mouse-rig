@@ -60,6 +60,15 @@ def test_speed_to_over(on_success, on_failure):
             return
         on_success()
 
+    def check_intermidate():
+        rig_mid = actions.user.mouse_rig()
+        if rig_mid.state.speed <= 5 or rig_mid.state.speed >= 15:
+            on_failure(f"Intermediate speed wrong: expected between 5 and 15, got {rig_mid.state.speed}")
+            return
+        if rig_mid.state.speed.target != target_speed:
+            on_failure(f"Intermediate target wrong: expected {target_speed}, got {rig_mid.state.target}")
+            return
+
     def check_state():
         rig_check = actions.user.mouse_rig()
         if len(rig_check.state.layers) != 0:
@@ -70,6 +79,7 @@ def test_speed_to_over(on_success, on_failure):
             return
 
     rig.speed.to(target_speed).over(500).then(check_speed)
+    cron.after("100ms", check_intermidate)
     cron.after("600ms", check_state)
 
 

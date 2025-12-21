@@ -14,7 +14,7 @@ from talon import cron, ctrl, settings
 from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative
 from .queue import QueueManager
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
-from . import mode_operations
+from . import mode_operations, rate_utils
 from .contracts import BuilderConfig
 
 if TYPE_CHECKING:
@@ -407,8 +407,55 @@ class RigState:
                     return
                 else:
                     # Different target - replace old builder with new one
+                    # IMPORTANT: Capture the old builder's current animated value BEFORE removing it
+                    # This value becomes the starting point for the new builder's animation
                     if layer in self._active_builders:
+                        old_builder = self._active_builders[layer]
+                        old_current_value = old_builder.get_interpolated_value()
+
+                        # Remove the old builder
                         self.remove_builder(layer)
+
+                        # Update the new builder's base_value to start from the old builder's current position
+                        # This ensures smooth transitions when replacing rate-based animations
+                        builder.base_value = old_current_value
+
+                        # Recalculate target_value based on the new base_value
+                        builder.target_value = builder._calculate_target_value()
+
+                        # Recalculate rate-based duration with the new base_value
+                        if builder.config.over_rate is not None:
+                            if builder.config.property == "speed":
+                                builder.config.over_ms = rate_utils.calculate_speed_duration(
+                                    builder.base_value, builder.target_value, builder.config.over_rate
+                                )
+                            elif builder.config.property == "direction":
+                                if builder.config.operator == "to":
+                                    target_dir = Vec2.from_tuple(builder.config.value).normalized()
+                                    builder.config.over_ms = rate_utils.calculate_direction_duration(
+                                        builder.base_value, target_dir, builder.config.over_rate
+                                    )
+                                elif builder.config.operator in ("by", "add"):
+                                    angle_delta = builder.config.value[0] if isinstance(builder.config.value, tuple) else builder.config.value
+                                    builder.config.over_ms = rate_utils.calculate_direction_by_duration(
+                                        angle_delta, builder.config.over_rate
+                                    )
+                            elif builder.config.property == "pos":
+                                if builder.config.operator == "to":
+                                    target_pos = Vec2.from_tuple(builder.config.value)
+                                    builder.config.over_ms = rate_utils.calculate_position_duration(
+                                        builder.base_value, target_pos, builder.config.over_rate
+                                    )
+                                elif builder.config.operator in ("by", "add"):
+                                    offset = Vec2.from_tuple(builder.config.value)
+                                    builder.config.over_ms = rate_utils.calculate_position_by_duration(
+                                        offset, builder.config.over_rate
+                                    )
+                            elif builder.config.property == "vector":
+                                target_vec = Vec2.from_tuple(builder.config.value) if builder.config.operator == "to" else builder.base_value + Vec2.from_tuple(builder.config.value)
+                                builder.config.over_ms = rate_utils.calculate_vector_duration(
+                                    builder.base_value, target_vec, builder.config.over_rate, builder.config.over_rate
+                                )
 
             # Cache this builder
             self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
@@ -1749,6 +1796,45 @@ class RigState:
         for layer in list(self._active_builders.keys()):
             self.remove_builder(layer, bake=True)
         self._queue_manager.clear_all()
+
+    def reset(self):
+        """Reset everything to default state
+
+        Clears all layers, resets base speed to 0, base direction to (1, 0),
+        position tracking to None, and stops the frame loop.
+
+        This is useful when direction or other properties persist from previous
+        operations and you want a clean slate.
+        """
+        # Stop frame loop
+        self._stop_frame_loop()
+
+        # Clear all active builders and tracking
+        self._active_builders.clear()
+        self._layer_orders.clear()
+        self._throttle_times.clear()
+        self._rate_builder_cache.clear()
+        self._debounce_pending.clear()
+        self._queue_manager.clear_all()
+
+        # Reset base state to defaults
+        self._base_speed = 0.0
+        self._base_direction = Vec2(1, 0)
+        self._absolute_base_pos = None
+        self._absolute_current_pos = None
+
+        # Reset subpixel tracking
+        self._subpixel_adjuster.reset()
+
+        # Reset manual movement tracking
+        self._last_manual_movement_time = None
+        self._expected_mouse_pos = None
+
+        # Reset auto-order counter
+        self._next_auto_order = 0
+
+        # Clear stop callbacks
+        self._stop_callbacks.clear()
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
         """Trigger revert on builder tree

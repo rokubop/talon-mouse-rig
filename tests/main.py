@@ -206,6 +206,9 @@ def run_all_tests(tests, group_name):
     if _test_runner_state["running"]:
         return
 
+    # Reset rig to clean state before starting test group
+    actions.user.mouse_rig().reset()
+
     _test_runner_state["running"] = True
     _test_runner_state["current_test_index"] = 0
     _test_runner_state["tests"] = tests
@@ -319,6 +322,9 @@ def run_all_tests_global(test_groups):
     for group_name, tests in test_groups:
         for test_name, test_func in tests:
             all_tests.append((test_name, test_func, group_name))
+
+    # Reset rig to clean state before starting global test run
+    actions.user.mouse_rig().reset()
 
     _test_runner_state["running"] = True
     _test_runner_state["all_tests_running"] = True

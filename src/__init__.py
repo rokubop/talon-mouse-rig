@@ -208,6 +208,11 @@ class Rig:
         """Throttle behavior accessor"""
         return _BehaviorAccessor(self._state, "throttle")
 
+    @property
+    def debounce(self):
+        """Debounce behavior accessor"""
+        return _BehaviorAccessor(self._state, "debounce")
+
     # ========================================================================
     # SPECIAL OPERATIONS
     # ========================================================================
@@ -227,6 +232,17 @@ class Rig:
         ms = validate_timing(ms, 'ms', method='stop')
         self._state.stop(ms, easing)
         return StopHandle(self._state)
+
+    def reset(self):
+        """Reset everything to default state
+
+        Clears all layers, resets base speed to 0, base direction to (1, 0),
+        and clears all tracking. Useful when properties persist unexpectedly.
+
+        Example:
+            rig.reset()  # Clean slate
+        """
+        self._state.reset()
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
         """Reverse direction (180° flip with optional smooth transition through zero)

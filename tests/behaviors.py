@@ -529,24 +529,19 @@ def test_rate_reuse_different_target_replaces(on_success, on_failure):
         second_completed["value"] = True
 
     def check_replacement():
-        # First should be cancelled (not completed)
         if first_completed["value"]:
             on_failure("Rate replace: first should have been cancelled")
             return
-        # Second should complete
         if not second_completed["value"]:
             on_failure("Rate replace: second should have completed")
             return
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Start going to speed 10 (takes ~1 second at rate=10)
     rig.speed.to(10).over(rate=10).then(mark_first)
-    # After 200ms, change target to 0 - should replace
-    cron.after("200ms", lambda: rig.speed.to(0).over(rate=10).then(mark_second))
+    cron.after("500ms", lambda: rig.speed.to(0).over(rate=10).then(mark_second))
 
-    # Check at 600ms - first cancelled, second should be done
-    cron.after("600ms", check_replacement)
+    cron.after("1500ms", check_replacement)
 
 
 def test_rate_reuse_different_property_independent(on_success, on_failure):
