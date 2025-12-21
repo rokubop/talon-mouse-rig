@@ -131,7 +131,7 @@ def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], Non
 
     def move_relative(dx: float, dy: float) -> None:
         # Apply user-configurable scale for sensitivity control
-        scale = settings.get("user.mouse_rig_relative_scale", 1.0)
+        scale = settings.get("user.mouse_rig_scale", 1.0)
 
         # Relative movement using mickeys (device units)
         win32api.mouse_event(
@@ -195,7 +195,7 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
 
     def move_relative(dx: float, dy: float) -> None:
         # Apply user-configurable scale for sensitivity control
-        scale = settings.get("user.mouse_rig_relative_scale", 1.0)
+        scale = settings.get("user.mouse_rig_scale", 1.0)
 
         # Relative movement (no ABSOLUTE flag)
         input_struct = INPUT(type=INPUT_MOUSE)

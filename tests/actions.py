@@ -432,133 +432,6 @@ def test_action_go_down(on_success, on_failure):
 
 
 # ============================================================================
-# LAYER ACTION TESTS
-# ============================================================================
-
-def test_action_layer_speed_offset_by(on_success, on_failure):
-    """Test: actions.user.mouse_rig_layer_speed_offset_by() - speed layer offset"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(5)
-    actions.user.mouse_rig_layer_speed_offset_by("boost", 3)
-
-    def check_after_offset():
-        speed = actions.user.mouse_rig_state_speed()
-        if speed != 8:
-            on_failure(f"Speed with offset wrong: expected 8, got {speed}")
-            return
-
-        actions.user.mouse_rig_layer_revert("boost")
-
-        def check_after_revert():
-            speed = actions.user.mouse_rig_state_speed()
-            if speed != 5:
-                on_failure(f"Speed after revert wrong: expected 5, got {speed}")
-                return
-            actions.user.mouse_rig_stop()
-            on_success()
-
-        cron.after("50ms", check_after_revert)
-
-    cron.after("50ms", check_after_offset)
-
-
-def test_action_layer_speed_offset_to(on_success, on_failure):
-    """Test: actions.user.mouse_rig_layer_speed_offset_to() - speed layer offset to"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(5)
-    actions.user.mouse_rig_layer_speed_offset_to("adjust", 2)
-
-    def check_after_offset():
-        speed = actions.user.mouse_rig_state_speed()
-        if speed != 7:
-            on_failure(f"Speed with offset wrong: expected 7, got {speed}")
-            return
-
-        actions.user.mouse_rig_layer_revert("adjust")
-
-        def check_after_revert():
-            speed = actions.user.mouse_rig_state_speed()
-            if speed != 5:
-                on_failure(f"Speed after revert wrong: expected 5, got {speed}")
-                return
-            actions.user.mouse_rig_stop()
-            on_success()
-
-        cron.after("50ms", check_after_revert)
-
-    cron.after("50ms", check_after_offset)
-
-
-def test_action_layer_speed_override_to(on_success, on_failure):
-    """Test: actions.user.mouse_rig_layer_speed_override_to() - speed layer override"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(10)
-    actions.user.mouse_rig_layer_speed_override_to("precision", 2)
-
-    def check_after_override():
-        speed = actions.user.mouse_rig_state_speed()
-        if speed != 2:
-            on_failure(f"Speed with override wrong: expected 2, got {speed}")
-            return
-
-        actions.user.mouse_rig_layer_revert("precision")
-
-        def check_after_revert():
-            speed = actions.user.mouse_rig_state_speed()
-            if speed != 10:
-                on_failure(f"Speed after revert wrong: expected 10, got {speed}")
-                return
-            actions.user.mouse_rig_stop()
-            on_success()
-
-        cron.after("50ms", check_after_revert)
-
-    cron.after("50ms", check_after_override)
-
-
-def test_action_layer_speed_offset_over_hold_revert(on_success, on_failure):
-    """Test: actions.user.mouse_rig_layer_speed_offset_by(name, val, over, hold, revert)"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(5)
-
-    def check_after_revert():
-        speed = actions.user.mouse_rig_state_speed()
-        if abs(speed - 5) > 0.1:
-            on_failure(f"Speed after revert wrong: expected 5, got {speed}")
-            return
-        actions.user.mouse_rig_stop()
-        on_success()
-
-    # Offset by 5 over 200ms, hold 200ms, revert over 200ms
-    actions.user.mouse_rig_layer_speed_offset_by("temp_boost", 5, 200, 200, 200)
-    cron.after("700ms", check_after_revert)
-
-
-def test_action_layer_revert_over(on_success, on_failure):
-    """Test: actions.user.mouse_rig_layer_revert(name, over_ms) - animated revert"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(5)
-    actions.user.mouse_rig_layer_speed_offset_by("manual_layer", 5)
-
-    # Speed should be 10 now
-    if actions.user.mouse_rig_state_speed() != 10:
-        on_failure(f"Speed before revert wrong: expected 10, got {actions.user.mouse_rig_state_speed()}")
-        return
-
-    def check_after_revert():
-        speed = actions.user.mouse_rig_state_speed()
-        if abs(speed - 5) > 0.1:
-            on_failure(f"Speed after revert wrong: expected 5, got {speed}")
-            return
-        actions.user.mouse_rig_stop()
-        on_success()
-
-    # Revert layer over 300ms
-    actions.user.mouse_rig_layer_revert("manual_layer", 300, "ease_out")
-    cron.after("400ms", check_after_revert)
-
-
-# ============================================================================
 # STATE GETTER TESTS
 # ============================================================================
 
@@ -604,39 +477,6 @@ def test_action_state_getters(on_success, on_failure):
         on_success()
 
     cron.after("50ms", check_state)
-
-
-def test_action_state_layer(on_success, on_failure):
-    """Test: actions.user.mouse_rig_state_layer() - layer state"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_speed_to(5)
-    actions.user.mouse_rig_layer_speed_offset_by("test_layer", 2)
-
-    def check_layer_exists():
-        layer = actions.user.mouse_rig_state_layer("test_layer")
-        if not layer:
-            on_failure(f"Layer should exist, got: {layer}")
-            return
-
-        layers = actions.user.mouse_rig_state_layers()
-        if "test_layer" not in layers:
-            on_failure(f"Layer should be in layers list, got: {layers}")
-            return
-
-        actions.user.mouse_rig_layer_revert("test_layer")
-
-        def check_layer_removed():
-            layer = actions.user.mouse_rig_state_layer("test_layer")
-            if layer:
-                on_failure(f"Layer should not exist after revert, got: {layer}")
-                return
-
-            actions.user.mouse_rig_stop()
-            on_success()
-
-        cron.after("50ms", check_layer_removed)
-
-    cron.after("50ms", check_layer_exists)
 
 
 def test_action_stop(on_success, on_failure):
@@ -699,13 +539,7 @@ ACTIONS_TESTS = [
     ("actions.user.mouse_rig_go_right()", test_action_go_right),
     ("actions.user.mouse_rig_go_up()", test_action_go_up),
     ("actions.user.mouse_rig_go_down()", test_action_go_down),
-    ("actions.user.mouse_rig_layer_speed_offset_by()", test_action_layer_speed_offset_by),
-    ("actions.user.mouse_rig_layer_speed_offset_to()", test_action_layer_speed_offset_to),
-    ("actions.user.mouse_rig_layer_speed_override_to()", test_action_layer_speed_override_to),
-    ("actions.user.mouse_rig_layer_speed_offset_by() hold revert", test_action_layer_speed_offset_over_hold_revert),
-    ("actions.user.mouse_rig_layer_revert() over", test_action_layer_revert_over),
     ("actions.user.mouse_rig_state_*()", test_action_state_getters),
-    ("actions.user.mouse_rig_state_layer()", test_action_state_layer),
     ("actions.user.mouse_rig_stop()", test_action_stop),
     ("actions.user.mouse_rig_stop() over", test_action_stop_over),
 ]

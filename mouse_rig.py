@@ -461,6 +461,7 @@ class Actions:
             easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
         """
         actions.user.mouse_rig_go_direction(0, -1, initial_speed, target_speed, over_ms, easing)
+
     def mouse_rig_go_down(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
         """Move down, setting direction and starting speed if stopped.
 
@@ -481,198 +482,6 @@ class Actions:
             easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
         """
         actions.user.mouse_rig_go_direction(0, 1, initial_speed, target_speed, over_ms, easing)
-
-    def mouse_rig_layer_speed_offset_by(
-            layer_name: str,
-            value: float | int,
-            over_ms: int = None,
-            hold_ms: int = None,
-            revert_ms: int = None
-        ) -> None:
-        """Create a named speed layer that offsets the base speed.
-        Multiple invocations stack and the layer can be reverted by name.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).speed.offset.by(value).over(over_ms).hold(hold_ms).revert(revert_ms)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_speed_offset_by("boost", 5)                 # instant add
-        mouse_rig_layer_speed_offset_by("boost", 5, 1000)           # add over 1s, stay
-        mouse_rig_layer_speed_offset_by("boost", 5, 1000, 0, 1000)  # add 1s, revert 1s
-        mouse_rig_layer_speed_offset_by("boost", 5, 0, 500, 0)      # instant, hold 500ms, revert
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.offset.by(value)
-        if over_ms is not None:
-            builder = builder.over(over_ms)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms)
-
-    def mouse_rig_layer_speed_offset_to(
-            layer_name: str,
-            offset: float | int,
-            over_ms: int = None,
-            hold_ms: int = None,
-            revert_ms: int = None
-        ) -> None:
-        """Create a named speed layer that offsets the base speed to an exact value.
-        Multiple layers combine and the layer can be reverted by name.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).speed.offset.to(offset).over(over_ms).hold(hold_ms).revert(revert_ms)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_speed_offset_to("boost", 5)                 # instant set
-        mouse_rig_layer_speed_offset_to("boost", 5, 1000)           # set over 1s, stay
-        mouse_rig_layer_speed_offset_to("boost", 5, 1000, 0, 1000)  # set 1s, revert 1s
-        mouse_rig_layer_speed_offset_to("boost", 5, 0, 500, 0)      # instant, hold 500ms, revert
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.offset.to(offset)
-        if over_ms is not None:
-            builder = builder.over(over_ms)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms)
-
-    def mouse_rig_layer_speed_override_to(
-            layer_name: str,
-            value: float | int,
-            over_ms: int = None,
-            hold_ms: int = None,
-            revert_ms: int = None
-        ) -> None:
-        """Create a named speed layer that overrides the current speed to an exact value.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).speed.override.to(value).over(over_ms).hold(hold_ms).revert(revert_ms)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_speed_override_to("precision", 2)                 # instant override
-        mouse_rig_layer_speed_override_to("precision", 2, 1000)           # override over 1s, stay
-        mouse_rig_layer_speed_override_to("precision", 2, 1000, 0, 1000)  # override 1s, revert 1s
-        mouse_rig_layer_speed_override_to("precision", 2, 0, 500, 0)      # instant, hold 500ms, revert
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).speed.override.to(value)
-        if over_ms is not None:
-            builder = builder.over(over_ms)
-        if hold_ms is not None:
-            builder = builder.hold(hold_ms)
-        if revert_ms is not None:
-            builder = builder.revert(revert_ms)
-
-    def mouse_rig_layer_pos_override_to(
-            layer_name: str,
-            x: float,
-            y: float,
-            over_ms: int = None,
-            easing: str = None,
-            callback: callable = None
-        ) -> None:
-        """Create a named position layer that overrides the mouse position.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).pos.override.to(x, y).over(over_ms, easing).then(callback)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_pos_override_to("center", 960, 540)              # instant override
-        mouse_rig_layer_pos_override_to("center", 960, 540, 500)         # override over 500ms
-        mouse_rig_layer_pos_override_to("center", 960, 540, 500, "ease") # override with easing
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).pos.override.to(x, y)
-        if over_ms is not None:
-            builder = builder.over(over_ms, easing)
-        if callback is not None:
-            builder.then(callback)
-
-    def mouse_rig_layer_pos_offset_by(
-            layer_name: str,
-            dx: float,
-            dy: float,
-            over_ms: int = None,
-            easing: str = None,
-            callback: callable = None,
-            api: str = None
-        ) -> None:
-        """Create a named position layer that offsets the mouse position.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).pos.offset.by(dx, dy).api(api).over(over_ms, easing).then(callback)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_pos_offset_by("shake", 10, 5)              # instant offset
-        mouse_rig_layer_pos_offset_by("shake", 10, 5, 100)         # offset over 100ms
-        mouse_rig_layer_pos_offset_by("shake", 10, 5, 100, "ease") # offset with easing
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        builder = rig.layer(layer_name).pos.offset.by(dx, dy)
-        if api is not None:
-            builder = builder.api(api)
-        if over_ms is not None:
-            builder = builder.over(over_ms, easing)
-        if callback is not None:
-            builder.then(callback)
-
-    def mouse_rig_layer_revert(
-            layer_name: str,
-            revert_ms: int = None,
-            easing: str = None,
-            callback: callable = None
-        ) -> None:
-        """Revert a layer by name, optionally over time.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.layer(layer_name).revert(ms, easing).then(callback)
-        ```
-
-        Examples:
-        ```python
-        mouse_rig_layer_revert("boost")                    # instant revert
-        mouse_rig_layer_revert("boost", 500)               # revert over 500ms
-        mouse_rig_layer_revert("boost", 500, "ease_out")   # revert with easing
-        ```
-        """
-        rig = actions.user.mouse_rig()
-        if rig.state.layer(layer_name):
-            if revert_ms is not None:
-                handle = rig.layer(layer_name).revert(revert_ms, easing)
-            else:
-                handle = rig.layer(layer_name).revert()
-
-            if callback is not None:
-                handle.then(callback)
 
     def mouse_rig_state_speed() -> float:
         """Get current speed from rig state"""
@@ -695,14 +504,9 @@ class Actions:
         return rig.state.direction.y
 
     def mouse_rig_state_pos() -> tuple:
-        """Get current position (x, y) from rig state"""
+        """Get current position (x, y) from rig state - may be incorrect due to platform based movement"""
         rig = actions.user.mouse_rig()
         return (rig.state.pos.x, rig.state.pos.y)
-
-    def mouse_rig_state_layer(layer_name: str) -> bool:
-        """Check if a layer exists in rig state"""
-        rig = actions.user.mouse_rig()
-        return rig.state.layer(layer_name)
 
     def mouse_rig_state_is_moving() -> bool:
         """Check if mouse is currently moving (speed > 0)"""
@@ -717,14 +521,6 @@ class Actions:
         """
         rig = actions.user.mouse_rig()
         return rig.state.direction_cardinal
-
-    def mouse_rig_state_layers() -> list:
-        """Get list of active layer names.
-
-        Returns list of user-defined layer names (excludes anonymous base layers).
-        """
-        rig = actions.user.mouse_rig()
-        return rig.state.layers
 
     def mouse_rig_stop(stop_ms: float = None, easing: str = None, callback: callable = None) -> None:
         """Stop the mouse rig and remove all layers, optionally over time.
@@ -757,10 +553,3 @@ class Actions:
         """Show the QA UI for mouse rig development"""
         from .tests.main import toggle_test_ui
         toggle_test_ui()
-
-    def mouse_rig_test_one():
-        """Run test one from mouse rig tests"""
-        # print("x", actions.mouse_x())
-        # print("y", actions.mouse_y())
-        # print(ctrl.mouse_pos())
-        actions.user.mouse_rig_go_right(5, 10, 1000, "linear")
