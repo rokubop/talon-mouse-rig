@@ -10,7 +10,7 @@ TEST_OFFSET = 200
 # ============================================================================
 
 def test_behavior_stack_property_syntax(on_success, on_failure):
-    """Test: layer().stack.pos.offset.by() - stack behavior using property syntax"""
+    """Test: pos.offset.by().stack() - stack behavior using implicit layers"""
     start_x, start_y = ctrl.mouse_pos()
     dx1, dy1 = 0, 100
     dx2, dy2 = 100, 0
@@ -26,16 +26,16 @@ def test_behavior_stack_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # First offset: down, shorter transition
-    rig.layer("test").stack.api("talon").pos.offset.by(dx1, dy1).over(400)
+    # First offset: down, shorter transition (implicit layer: "pos.offset")
+    rig.pos.offset.by(dx1, dy1).stack().api("talon").over(400)
     # Second offset: right, longer transition, starts while first is active
-    cron.after("200ms", lambda: rig.layer("test").stack.api("talon").pos.offset.by(dx2, dy2).over(400))
+    cron.after("200ms", lambda: rig.pos.offset.by(dx2, dy2).stack().api("talon").over(400))
     # Check after second completes (first will have finished already)
     cron.after("1000ms", check_stacked)
 
 
 def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
-    """Test: layer().stack(max=2).pos.offset.by() - stack with max count"""
+    """Test: pos.offset.by().stack(max=2) - stack with max count"""
     start_x, start_y = ctrl.mouse_pos()
     dx = 50
 
@@ -49,10 +49,10 @@ def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Add 3 stacks but max is 2
-    rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100)
-    cron.after("50ms", lambda: rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100))
-    cron.after("100ms", lambda: rig.layer("test").stack(max=2).pos.api("talon").offset.by(dx, 0).over(100))
+    # Add 3 stacks but max is 2 (implicit layer: "pos.offset")
+    rig.pos.offset.by(dx, 0).stack(max=2).api("talon").over(100)
+    cron.after("50ms", lambda: rig.pos.offset.by(dx, 0).stack(max=2).api("talon").over(100))
+    cron.after("100ms", lambda: rig.pos.offset.by(dx, 0).stack(max=2).api("talon").over(100))
     cron.after("400ms", check_result)
 
 
@@ -61,7 +61,7 @@ def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
 # ============================================================================
 
 def test_behavior_replace_property_syntax(on_success, on_failure):
-    """Test: layer().replace.pos.offset.by() - replace old offset with new"""
+    """Test: pos.offset.by().replace() - replace old offset with new"""
     start_x, start_y = ctrl.mouse_pos()
     dx1, dy1 = 100, 0
     dx2, dy2 = 50, 0
@@ -82,12 +82,13 @@ def test_behavior_replace_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").api("talon").pos.offset.by(dx1, dy1).over(300).then(check_first)
-    cron.after("100ms", lambda: rig.layer("test").api("talon").replace.pos.offset.by(dx2, dy2).over(300).then(check_replace))
+    # Implicit layer "pos.offset"
+    rig.pos.offset.by(dx1, dy1).api("talon").over(300).then(check_first)
+    cron.after("100ms", lambda: rig.pos.offset.by(dx2, dy2).replace().api("talon").over(300).then(check_replace))
 
 
 def test_behavior_replace_call_syntax(on_success, on_failure):
-    """Test: layer().replace().pos.offset.by() - replace using call syntax"""
+    """Test: pos.offset.by().replace() - replace using call syntax"""
     start_x, start_y = ctrl.mouse_pos()
     dx1 = 100
     dx2 = 50
@@ -101,8 +102,9 @@ def test_behavior_replace_call_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.api("talon").offset.by(dx1, 0).over(300)
-    cron.after("100ms", lambda: rig.layer("test").api("talon").replace().pos.offset.by(dx2, 0).over(300).then(check_replace))
+    # Implicit layer "pos.offset"
+    rig.pos.offset.by(dx1, 0).api("talon").over(300)
+    cron.after("100ms", lambda: rig.pos.offset.by(dx2, 0).replace().api("talon").over(300).then(check_replace))
 
 
 def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
@@ -119,7 +121,8 @@ def test_behavior_pos_offset_by_over_revert(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").api("talon").pos.offset.by(dx, 0).over(300).revert(300).then(check_pos)
+    # Implicit layer "pos.offset"
+    rig.pos.offset.by(dx, 0).api("talon").over(300).revert(300).then(check_pos)
 
 
 def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
@@ -137,10 +140,10 @@ def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Start first animation
-    rig.layer("test").pos.offset.api("talon").by(dx1, 0).over(300).revert(300)
+    # Start first animation (implicit layer "pos.offset")
+    rig.pos.offset.by(dx1, 0).api("talon").over(300).revert(300)
     # Replace it mid-flight with a different offset
-    cron.after("100ms", lambda: rig.layer("test").replace().api("talon").pos.offset.by(dx2, 0).over(300).revert(300).then(check_pos))
+    cron.after("100ms", lambda: rig.pos.offset.by(dx2, 0).replace().api("talon").over(300).revert(300).then(check_pos))
 
 
 def test_behavior_replace_pos_override_to_over(on_success, on_failure):
@@ -157,8 +160,9 @@ def test_behavior_replace_pos_override_to_over(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").pos.override.to(target1_x, target1_y).over(300)
-    cron.after("100ms", lambda: rig.layer("test").replace().pos.override.to(target2_x, target2_y).over(300).then(check_replace))
+    # Implicit layer "pos.override"
+    rig.pos.override.to(target1_x, target1_y).over(300)
+    cron.after("100ms", lambda: rig.pos.override.to(target2_x, target2_y).replace().over(300).then(check_replace))
 
 
 def test_behavior_replace_speed_override_to_over(on_success, on_failure):
@@ -174,10 +178,10 @@ def test_behavior_replace_speed_override_to_over(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Start with speed 10
-    rig.layer("test").speed.override.to(10).over(100)
+    # Start with speed 10 (implicit layer "speed.override")
+    rig.speed.override.to(10).over(100)
     # Replace with speed 5 after 50ms
-    cron.after("50ms", lambda: rig.layer("test").replace().speed.override.to(5).over(100))
+    cron.after("50ms", lambda: rig.speed.override.to(5).replace().over(100))
     # Check after movement (200ms total)
     cron.after("250ms", check_movement)
 
@@ -202,8 +206,9 @@ def test_behavior_replace_speed_offset_by_over_revert(on_success, on_failure):
         cron.after("100ms", check_stopped)
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").speed.offset.by(10).over(100)
-    cron.after("50ms", lambda: rig.layer("test").replace().speed.offset.by(5).over(100).revert(100))
+    # Implicit layer "speed.offset"
+    rig.speed.offset.by(10).over(100)
+    cron.after("50ms", lambda: rig.speed.offset.by(5).replace().over(100).revert(100))
     cron.after("300ms", check_revert)
 
 
@@ -220,11 +225,12 @@ def test_behavior_replace_direction_by_over_revert(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Start with rightward movement
-    rig.layer("test").speed.override.to(10)
-    rig.layer("test2").direction.offset.by(45).over(100)
+    # Start with rightward movement (implicit layer "speed.override")
+    rig.speed.override.to(10)
+    # Rotate direction (implicit layer "direction.offset")
+    rig.direction.offset.by(45).over(100)
     # Replace with different rotation
-    cron.after("50ms", lambda: rig.layer("test2").replace().direction.offset.by(90).over(100).revert(100))
+    cron.after("50ms", lambda: rig.direction.offset.by(90).replace().over(100).revert(100))
     # Check after animations
     cron.after("300ms", check_direction)
 
@@ -234,7 +240,7 @@ def test_behavior_replace_direction_by_over_revert(on_success, on_failure):
 # ============================================================================
 
 def test_behavior_queue_property_syntax(on_success, on_failure):
-    """Test: layer().queue.pos.offset.by() - queue executes sequentially"""
+    """Test: pos.offset.by().queue() - queue executes sequentially"""
     start_x, start_y = ctrl.mouse_pos()
     dx1, dy1 = 100, 0
     dx2, dy2 = 0, 100
@@ -257,12 +263,13 @@ def test_behavior_queue_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").queue.pos.api("talon").offset.by(dx1, dy1).over(300).then(check_after_first)
-    rig.layer("test").queue.pos.api("talon").offset.by(dx2, dy2).over(300).then(check_after_second)
+    # Implicit layer "pos.offset"
+    rig.pos.offset.by(dx1, dy1).queue().api("talon").over(300).then(check_after_first)
+    rig.pos.offset.by(dx2, dy2).queue().api("talon").over(300).then(check_after_second)
 
 
 def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
-    """Test: layer().queue(max=2).pos.offset.by() - queue with max limit"""
+    """Test: pos.offset.by().queue(max=2) - queue with max limit"""
     start_x, start_y = ctrl.mouse_pos()
     dx = 50
 
@@ -276,11 +283,11 @@ def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Queue 3 items but max is 2
-    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
-    rig.layer("test").queue(max=2).pos.api("talon").offset.by(dx, 0).over(100)
+    # Queue 3 items but max is 2 (implicit layer "pos.offset")
+    rig.pos.offset.by(dx, 0).queue(max=2).api("talon").over(100)
+    rig.pos.offset.by(dx, 0).queue(max=2).api("talon").over(100)
+    rig.pos.offset.by(dx, 0).queue(max=2).api("talon").over(100)
+    rig.pos.offset.by(dx, 0).queue(max=2).api("talon").over(100)
     cron.after("400ms", check_result)
 
 
@@ -289,7 +296,7 @@ def test_behavior_queue_call_syntax_with_max(on_success, on_failure):
 # ============================================================================
 
 def test_behavior_throttle_property_syntax(on_success, on_failure):
-    """Test: layer().throttle.pos.offset.by() - throttle ignores while layer active"""
+    """Test: pos.offset.by().throttle() - throttle ignores while layer active"""
     start_x, start_y = ctrl.mouse_pos()
     dx = 100
 
@@ -313,16 +320,16 @@ def test_behavior_throttle_property_syntax(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Start a long-running builder with throttle
-    rig.layer("test").throttle.api("talon").pos.offset.by(dx, 0).over(300).then(first_done)
+    # Start a long-running builder with throttle (implicit layer "pos.offset")
+    rig.pos.offset.by(dx, 0).throttle().api("talon").over(300).then(first_done)
     # Try to add another immediately - should be ignored because first is still active
-    cron.after("50ms", lambda: rig.layer("test").throttle.api("talon").pos.offset.by(dx * 2, 0).over(100).then(second_done))
+    cron.after("50ms", lambda: rig.pos.offset.by(dx * 2, 0).throttle().api("talon").over(100).then(second_done))
     # Check after both would have completed
     cron.after("500ms", check_throttle)
 
 
 def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
-    """Test: layer().throttle(500).pos.offset.by() - throttle with custom ms"""
+    """Test: pos.offset.by().throttle(500) - throttle with custom ms"""
     start_x, start_y = ctrl.mouse_pos()
     dx = 50
 
@@ -339,12 +346,12 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    # Fire every 200ms for 1 second
-    rig.layer("test").throttle(500).api("talon").pos.offset.by(dx, 0).over(100).then(increment_count)
-    cron.after("200ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("400ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("600ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
-    cron.after("800ms", lambda: rig.layer("test").throttle(500).pos.api("talon").offset.by(dx, 0).over(100).then(increment_count))
+    # Fire every 200ms for 1 second (implicit layer "pos.offset")
+    rig.pos.offset.by(dx, 0).throttle(500).api("talon").over(100).then(increment_count)
+    cron.after("200ms", lambda: rig.pos.offset.by(dx, 0).throttle(500).api("talon").over(100).then(increment_count))
+    cron.after("400ms", lambda: rig.pos.offset.by(dx, 0).throttle(500).api("talon").over(100).then(increment_count))
+    cron.after("600ms", lambda: rig.pos.offset.by(dx, 0).throttle(500).api("talon").over(100).then(increment_count))
+    cron.after("800ms", lambda: rig.pos.offset.by(dx, 0).throttle(500).api("talon").over(100).then(increment_count))
 
     cron.after("1200ms", check_throttle)
 
@@ -458,7 +465,7 @@ def test_behavior_debounce_cancels_previous(on_success, on_failure):
 
 
 def test_behavior_debounce_layer(on_success, on_failure):
-    """Test: debounce works with layers"""
+    """Test: debounce works with implicit layers"""
     start_x, start_y = ctrl.mouse_pos()
 
     executed = {"value": False}
@@ -473,7 +480,8 @@ def test_behavior_debounce_layer(on_success, on_failure):
         on_success()
 
     rig = actions.user.mouse_rig()
-    rig.layer("test").speed.offset.by(10).debounce(150).over(100).then(mark_executed)
+    # Implicit layer "speed.offset"
+    rig.speed.offset.by(10).debounce(150).over(100).then(mark_executed)
 
     cron.after("400ms", check_executed)
 
@@ -651,24 +659,24 @@ def test_queue_base_independent_properties(on_success, on_failure):
 # ============================================================================
 
 BEHAVIOR_TESTS = [
-    ("layer().stack.pos.offset.by()", test_behavior_stack_property_syntax),
-    ("layer().stack(max).pos.offset.by()", test_behavior_stack_call_syntax_with_max),
-    ("layer().replace.pos.offset.by()", test_behavior_replace_property_syntax),
-    ("layer().replace().pos.offset.by()", test_behavior_replace_call_syntax),
-    ("layer().pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
-    ("layer().replace().pos.offset.by().over().revert()", test_behavior_replace_pos_offset_by_over_revert),
-    ("layer().replace().pos.override.to().over()", test_behavior_replace_pos_override_to_over),
-    ("layer().replace().speed.override.to().over()", test_behavior_replace_speed_override_to_over),
-    ("layer().replace().speed.offset.by().over().revert()", test_behavior_replace_speed_offset_by_over_revert),
-    ("layer().replace().direction.offset.by().over().revert()", test_behavior_replace_direction_by_over_revert),
-    ("layer().queue.pos.offset.by()", test_behavior_queue_property_syntax),
-    ("layer().queue(max).pos.offset.by()", test_behavior_queue_call_syntax_with_max),
-    ("layer().throttle.pos.offset.by()", test_behavior_throttle_property_syntax),
-    ("layer().throttle(ms).pos.offset.by()", test_behavior_throttle_call_syntax_with_ms),
+    ("pos.offset.by().stack()", test_behavior_stack_property_syntax),
+    ("pos.offset.by().stack(max)", test_behavior_stack_call_syntax_with_max),
+    ("pos.offset.by().replace()", test_behavior_replace_property_syntax),
+    ("pos.offset.by().replace() call", test_behavior_replace_call_syntax),
+    ("pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
+    ("pos.offset.by().replace().revert()", test_behavior_replace_pos_offset_by_over_revert),
+    ("pos.override.to().replace()", test_behavior_replace_pos_override_to_over),
+    ("speed.override.to().replace()", test_behavior_replace_speed_override_to_over),
+    ("speed.offset.by().replace().revert()", test_behavior_replace_speed_offset_by_over_revert),
+    ("direction.offset.by().replace().revert()", test_behavior_replace_direction_by_over_revert),
+    ("pos.offset.by().queue()", test_behavior_queue_property_syntax),
+    ("pos.offset.by().queue(max)", test_behavior_queue_call_syntax_with_max),
+    ("pos.offset.by().throttle()", test_behavior_throttle_property_syntax),
+    ("pos.offset.by().throttle(ms)", test_behavior_throttle_call_syntax_with_ms),
     ("base throttle per property+operation", test_behavior_throttle_base_per_operation),
     ("debounce basic delay", test_behavior_debounce_basic),
     ("debounce cancels previous", test_behavior_debounce_cancels_previous),
-    ("layer debounce", test_behavior_debounce_layer),
+    ("implicit layer debounce", test_behavior_debounce_layer),
     ("rate reuse same target ignored", test_rate_reuse_same_target_ignored),
     ("rate reuse different target replaces", test_rate_reuse_different_target_replaces),
     ("rate reuse different property independent", test_rate_reuse_different_property_independent),

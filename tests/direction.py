@@ -273,20 +273,27 @@ def test_direction_add_vector(on_success, on_failure):
 # ============================================================================
 
 def test_layer_direction_offset_by(on_success, on_failure):
-    """Test: layer().direction.offset.by(degrees) - layer direction offset"""
+    """Test: direction.offset.by(degrees) - direction offset mode"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)  # Base: 0deg
-    rig.layer("wind").direction.offset.by(90)  # Offset: +90deg
+    rig.direction.offset.by(90)  # Offset: +90deg
 
     def check_result():
         rig_check = actions.user.mouse_rig()
 
-        if "wind" not in rig_check.state.layers:
-            on_failure("Expected 'wind' layer but not found")
+        # Check direction offset state
+        offset_state = rig_check.state.direction.offset
+        if not offset_state:
+            on_failure("Expected direction.offset state but not found")
+            return
+
+        # Check layer exists in rig.state.layers
+        if "direction.offset" not in rig_check.state.layers:
+            on_failure("Expected 'direction.offset' layer in rig.state.layers")
             return
 
         # Check overall rig direction (should be pointing down/right at 90deg)
@@ -295,14 +302,9 @@ def test_layer_direction_offset_by(on_success, on_failure):
             on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected (0, 1)")
             return
 
-        # Check layer properties
-        layer_state = rig_check.state.layer("wind")
-        if layer_state.mode != "offset":
-            on_failure(f"Layer mode is '{layer_state.mode}', expected 'offset'")
-            return
-
-        if layer_state.value != 90:
-            on_failure(f"Layer value is {layer_state.value}, expected 90")
+        # Check offset value
+        if offset_state.value != 90:
+            on_failure(f"Offset value is {offset_state.value}, expected 90")
             return
 
         on_success()
@@ -311,20 +313,27 @@ def test_layer_direction_offset_by(on_success, on_failure):
 
 
 def test_layer_direction_offset_by_over(on_success, on_failure):
-    """Test: layer().direction.offset.by(degrees).over(ms) - smooth layer offset rotation"""
+    """Test: direction.offset.by(degrees).over(ms) - smooth offset rotation"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
-    rig.layer("wind").direction.offset.by(180).over(500)
+    rig.direction.offset.by(180).over(500)
 
     def check_final_direction():
         rig_check = actions.user.mouse_rig()
 
-        if "wind" not in rig_check.state.layers:
-            on_failure("Expected 'wind' layer but not found")
+        # Check direction offset state
+        offset_state = rig_check.state.direction.offset
+        if not offset_state:
+            on_failure("Expected direction.offset state but not found")
+            return
+
+        # Check layer exists in rig.state.layers
+        if "direction.offset" not in rig_check.state.layers:
+            on_failure("Expected 'direction.offset' layer in rig.state.layers")
             return
 
         # Check overall rig direction (should be pointing left at 180deg)
@@ -333,14 +342,9 @@ def test_layer_direction_offset_by_over(on_success, on_failure):
             on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected (-1, 0)")
             return
 
-        # Check layer properties
-        layer_state = rig_check.state.layer("wind")
-        if layer_state.mode != "offset":
-            on_failure(f"Layer mode is '{layer_state.mode}', expected 'offset'")
-            return
-
-        if layer_state.value != 180:
-            on_failure(f"Layer value is {layer_state.value}, expected 180")
+        # Check offset value
+        if offset_state.value != 180:
+            on_failure(f"Offset value is {offset_state.value}, expected 180")
             return
 
         on_success()
@@ -349,7 +353,7 @@ def test_layer_direction_offset_by_over(on_success, on_failure):
 
 
 def test_layer_direction_offset_add_vector(on_success, on_failure):
-    """Test: layer().direction.offset.add(x, y) - add vector to layer direction offset"""
+    """Test: direction.offset.add(x, y) - add vector to direction offset"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
@@ -358,14 +362,21 @@ def test_layer_direction_offset_add_vector(on_success, on_failure):
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
-    rig.layer("wind").direction.offset.add(0, 1)
+    rig.direction.offset.add(0, 1)
 
     def check_movement():
         end_pos = ctrl.mouse_pos()
         rig_check = actions.user.mouse_rig()
 
-        if "wind" not in rig_check.state.layers:
-            on_failure("Expected 'wind' layer but not found")
+        # Check direction offset state exists
+        offset_state = rig_check.state.direction.offset
+        if not offset_state:
+            on_failure("Expected direction.offset state but not found")
+            return
+
+        # Check layer exists in rig.state.layers
+        if "direction.offset" not in rig_check.state.layers:
+            on_failure("Expected 'direction.offset' layer in rig.state.layers")
             return
 
         # Check overall rig direction (base (1,0) + offset (0,1) normalized = (0.71, 0.71))
@@ -373,12 +384,6 @@ def test_layer_direction_offset_add_vector(on_success, on_failure):
         expected_x, expected_y = 0.707, 0.707
         if abs(direction.x - expected_x) > 0.1 or abs(direction.y - expected_y) > 0.1:
             on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected ({expected_x:.2f}, {expected_y:.2f})")
-            return
-
-        # Check layer properties
-        layer_state = rig_check.state.layer("wind")
-        if layer_state.mode != "offset":
-            on_failure(f"Layer mode is '{layer_state.mode}', expected 'offset'")
             return
 
         success, error = check_movement_direction(start_pos, end_pos, 45, tolerance_degrees=60)
@@ -392,7 +397,7 @@ def test_layer_direction_offset_add_vector(on_success, on_failure):
 
 
 def test_layer_direction_override_to(on_success, on_failure):
-    """Test: layer().direction.override.to(x, y) - layer absolute direction"""
+    """Test: direction.override.to(x, y) - absolute direction override"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
@@ -401,26 +406,26 @@ def test_layer_direction_override_to(on_success, on_failure):
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
-    rig.layer("wind").direction.override.to(0, -1)
+    rig.direction.override.to(0, -1)
 
     def check_movement():
         end_pos = ctrl.mouse_pos()
         rig_check = actions.user.mouse_rig()
 
-        if "wind" not in rig_check.state.layers:
-            on_failure("Expected 'wind' layer but not found")
+        # Check direction override state exists
+        if not rig_check.state.direction.override:
+            on_failure("Expected direction.override state but not found")
+            return
+
+        # Check layer exists in rig.state.layers
+        if "direction.override" not in rig_check.state.layers:
+            on_failure("Expected 'direction.override' layer in rig.state.layers")
             return
 
         # Check overall rig direction (should be overridden to up at 270deg)
         direction = rig_check.state.direction
         if abs(direction.x) > 0.1 or abs(direction.y + 1.0) > 0.1:
             on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected (0, -1)")
-            return
-
-        # Check layer properties
-        layer_state = rig_check.state.layer("wind")
-        if layer_state.mode != "override":
-            on_failure(f"Layer mode is '{layer_state.mode}', expected 'override'")
             return
 
         success, error = check_movement_direction(start_pos, end_pos, 270)
@@ -434,36 +439,36 @@ def test_layer_direction_override_to(on_success, on_failure):
 
 
 def test_layer_direction_override_to_over(on_success, on_failure):
-    """Test: layer().direction.override.to(x, y).over(ms) - smooth layer override rotation"""
+    """Test: direction.override.to(x, y).over(ms) - smooth override rotation"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
-    rig.layer("wind").direction.override.to(1, 0)
+    rig.direction.override.to(1, 0)
 
     def start_override():
         rig_override = actions.user.mouse_rig()
-        rig_override.layer("wind").direction.override.to(0, 1).over(500)
+        rig_override.direction.override.to(0, 1).over(500)
 
         def check_final_direction():
             rig_check = actions.user.mouse_rig()
 
-            if "wind" not in rig_check.state.layers:
-                on_failure("Expected 'wind' layer but not found")
+            # Check direction override state exists
+            if not rig_check.state.direction.override:
+                on_failure("Expected direction.override state but not found")
+                return
+
+            # Check layer exists in rig.state.layers
+            if "direction.override" not in rig_check.state.layers:
+                on_failure("Expected 'direction.override' layer in rig.state.layers")
                 return
 
             # Check overall rig direction (should be down at 90deg)
             direction = rig_check.state.direction
             if abs(direction.x) > 0.1 or abs(direction.y - 1.0) > 0.1:
                 on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected (0, 1)")
-                return
-
-            # Check layer properties
-            layer_state = rig_check.state.layer("wind")
-            if layer_state.mode != "override":
-                on_failure(f"Layer mode is '{layer_state.mode}', expected 'override'")
                 return
 
             on_success()
@@ -474,20 +479,26 @@ def test_layer_direction_override_to_over(on_success, on_failure):
 
 
 def test_layer_direction_override_to_over_revert(on_success, on_failure):
-    """Test: layer().direction.override.to(x, y).over(ms).revert(ms) - override with revert"""
+    """Test: direction.override.to(x, y).over(ms).revert(ms) - override with revert"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
 
     rig.speed(TEST_SPEED)
     rig.direction.to(0, 1)
-    rig.layer("wind").direction.override.to(1, 0).over(500).hold(300).revert(500)
+    rig.direction.override.to(1, 0).over(500).hold(300).revert(500)
 
     def check_during_override():
         rig_check = actions.user.mouse_rig()
 
-        if "wind" not in rig_check.state.layers:
-            on_failure("Expected 'wind' layer during override")
+        # Check direction override state exists during override
+        if not rig_check.state.direction.override:
+            on_failure("Expected direction.override state during override")
+            return
+
+        # Check layer exists in rig.state.layers during override
+        if "direction.override" not in rig_check.state.layers:
+            on_failure("Expected 'direction.override' layer in rig.state.layers during override")
             return
 
         # Check overall rig direction during override (should be right at 0deg)
@@ -496,14 +507,13 @@ def test_layer_direction_override_to_over_revert(on_success, on_failure):
             on_failure(f"Rig direction during override is ({direction.x:.2f}, {direction.y:.2f}), expected (1, 0)")
             return
 
-        # Check layer properties
-        layer_state = rig_check.state.layer("wind")
-        if layer_state.mode != "override":
-            on_failure(f"Layer mode is '{layer_state.mode}', expected 'override'")
-            return
-
         def check_after_revert():
             rig_check2 = actions.user.mouse_rig()
+
+            # Check layer is removed after revert
+            if "direction.override" in rig_check2.state.layers:
+                on_failure("Expected 'direction.override' layer to be removed after revert")
+                return
 
             # Check rig direction after revert (should be back to base: down at 90deg)
             direction2 = rig_check2.state.direction
@@ -519,7 +529,7 @@ def test_layer_direction_override_to_over_revert(on_success, on_failure):
 
 
 def test_layer_direction_with_callbacks(on_success, on_failure):
-    """Test: layer().direction.override.to().over().then().hold().then().revert().then()"""
+    """Test: direction.override.to().over().then().hold().then().revert().then()"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     actions.sleep("100ms")
@@ -537,7 +547,7 @@ def test_layer_direction_with_callbacks(on_success, on_failure):
 
     rig.speed(TEST_SPEED)
     rig.direction.to(1, 0)
-    rig.layer("wind").direction.override.to(0, 1).over(300).then(callback1).hold(300).then(callback2).revert(300).then(callback3)
+    rig.direction.override.to(0, 1).over(300).then(callback1).hold(300).then(callback2).revert(300).then(callback3)
 
     def check_callbacks():
         expected_order = ["after_over", "after_hold", "after_revert"]
@@ -546,8 +556,15 @@ def test_layer_direction_with_callbacks(on_success, on_failure):
             return
 
         rig_check = actions.user.mouse_rig()
-        if len(rig_check.state.layers) != 0:
-            on_failure(f"Expected no active layers, got: {rig_check.state.layers}")
+
+        # After revert completes, the override mode should be gone
+        if rig_check.state.direction.override:
+            on_failure(f"Expected no direction.override state after revert, but found one")
+            return
+
+        # Check layer is removed from rig.state.layers after revert
+        if "direction.override" in rig_check.state.layers:
+            on_failure("Expected 'direction.override' layer to be removed after revert")
             return
 
         on_success()
@@ -740,13 +757,13 @@ DIRECTION_TESTS = [
     ("direction.by().over()", test_direction_by_over),
     ("direction.add()", test_direction_add),
     ("direction.add() vector", test_direction_add_vector),
-    ("layer().direction.offset.by()", test_layer_direction_offset_by),
-    ("layer().direction.offset.by().over()", test_layer_direction_offset_by_over),
-    ("layer().direction.offset.add() vector", test_layer_direction_offset_add_vector),
-    ("layer().direction.override.to()", test_layer_direction_override_to),
-    ("layer().direction.override.to().over()", test_layer_direction_override_to_over),
-    ("layer().direction.override.to().over().revert()", test_layer_direction_override_to_over_revert),
-    ("layer().direction with callbacks", test_layer_direction_with_callbacks),
+    ("direction.offset.by()", test_layer_direction_offset_by),
+    ("direction.offset.by().over()", test_layer_direction_offset_by_over),
+    ("direction.offset.add() vector", test_layer_direction_offset_add_vector),
+    ("direction.override.to()", test_layer_direction_override_to),
+    ("direction.override.to().over()", test_layer_direction_override_to_over),
+    ("direction.override.to().over().revert()", test_layer_direction_override_to_over_revert),
+    ("direction.override with callbacks", test_layer_direction_with_callbacks),
     ("direction opposite over time", test_direction_opposite_over_time),
     ("reverse()", test_reverse_method_instant),
     ("reverse().over()", test_reverse_method_over_time),

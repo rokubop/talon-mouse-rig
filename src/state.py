@@ -344,19 +344,19 @@ class RigState:
             if not builder.config.behavior_args:
                 from .contracts import ConfigError
                 raise ConfigError("debounce() requires a delay in milliseconds")
-            
+
             delay_ms = builder.config.behavior_args[0]
             debounce_key = self._get_debounce_key(layer, builder.config)
-            
+
             # Cancel any existing pending debounce for this key
             if debounce_key in self._debounce_pending:
                 _, _, _, old_cron_job = self._debounce_pending[debounce_key]
                 if old_cron_job is not None:
                     cron.cancel(old_cron_job)
-            
+
             # Store pending builder
             target_time = time.perf_counter() + (delay_ms / 1000.0)
-            
+
             # Schedule execution with cron fallback if no frame loop
             cron_job = None
             if self._frame_loop_job is None:
@@ -372,9 +372,9 @@ class RigState:
                         from .builder import ActiveBuilder
                         actual_builder = ActiveBuilder(config, self, is_anon)
                         self.add_builder(actual_builder)
-                
+
                 cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
-            
+
             # Store pending builder (will be checked by frame loop if active)
             self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_anonymous(), cron_job)
             return
@@ -385,11 +385,11 @@ class RigState:
             # This is a rate-based operation
             if rate_cache_key in self._rate_builder_cache:
                 cached_builder, cached_target = self._rate_builder_cache[rate_cache_key]
-                
+
                 # Check if target matches (with epsilon comparison for floats)
                 targets_match = False
                 new_target = builder.target_value
-                
+
                 if isinstance(new_target, (int, float)) and isinstance(cached_target, (int, float)):
                     from .core import EPSILON
                     targets_match = abs(new_target - cached_target) < EPSILON
@@ -401,7 +401,7 @@ class RigState:
                     targets_match = abs(new_target.x - cached_target.x) < EPSILON and abs(new_target.y - cached_target.y) < EPSILON
                 else:
                     targets_match = new_target == cached_target
-                
+
                 if targets_match and layer in self._active_builders:
                     # Same target, builder already in progress - ignore new call
                     return
@@ -409,7 +409,7 @@ class RigState:
                     # Different target - replace old builder with new one
                     if layer in self._active_builders:
                         self.remove_builder(layer)
-            
+
             # Cache this builder
             self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
 
@@ -909,24 +909,24 @@ class RigState:
             current_time: Current timestamp from perf_counter()
         """
         ready_keys = []
-        
+
         for debounce_key, (target_time, config, is_anon, cron_job) in list(self._debounce_pending.items()):
             if current_time >= target_time:
                 ready_keys.append(debounce_key)
-        
+
         # Execute ready builders
         for debounce_key in ready_keys:
             target_time, config, is_anon, cron_job = self._debounce_pending[debounce_key]
             del self._debounce_pending[debounce_key]
-            
+
             # Cancel cron if it exists (shouldn't fire since we're executing now)
             if cron_job is not None:
                 cron.cancel(cron_job)
-            
+
             # Clear debounce behavior so builder executes normally
             config.behavior = None
             config.behavior_args = ()
-            
+
             # Create and add the actual builder
             from .builder import ActiveBuilder
             actual_builder = ActiveBuilder(config, self, is_anon)
@@ -1286,28 +1286,6 @@ class RigState:
 
     # Public API for reading state
     @property
-    def pos(self) -> Vec2:
-        """Current computed position"""
-        return self._compute_current_state()[0]
-
-    @property
-    def speed(self) -> float:
-        """Current computed speed"""
-        return self._compute_current_state()[1]
-
-    @property
-    def direction(self) -> Vec2:
-        """Current computed direction"""
-        return self._compute_current_state()[2]
-
-    @property
-    def vector(self) -> Vec2:
-        """Current computed velocity vector (speed * direction)"""
-        speed = self.speed
-        direction = self.direction
-        return direction * speed
-
-    @property
     def direction_cardinal(self) -> Optional[str]:
         """Current direction as cardinal/intercardinal string
 
@@ -1315,8 +1293,8 @@ class RigState:
                        "up_right", "up_left", "down_right", "down_left"
         or None if direction is zero vector.
         """
-        direction = self.direction
-        return self._get_cardinal_direction(direction)
+        direction_vec = self._compute_current_state()[2]
+        return self._get_cardinal_direction(direction_vec)
 
     @property
     def layers(self) -> list[str]:
@@ -1496,6 +1474,212 @@ class RigState:
     def base(self) -> 'RigState.BaseState':
         """Access to base (baked) state only"""
         return RigState.BaseState(self)
+
+    # Smart property accessors for computed values with layer mode access
+    class SmartPropertyState:
+        """Smart accessor that provides both computed value and layer mode states"""
+        def __init__(self, rig_state: 'RigState', property_name: str, computed_value):
+            self._rig_state = rig_state
+            self._property_name = property_name
+            self._computed_value = computed_value
+
+        @property
+        def value(self):
+            """Current computed value (includes all layers)"""
+            return self._computed_value
+
+        @property
+        def target(self):
+            """Target value from base layer animation (None if no base animation)"""
+            # Find base (anonymous) layers for this property
+            for layer_name, builder in self._rig_state._active_builders.items():
+                if (builder.config.is_anonymous() and
+                    builder.config.property == self._property_name and
+                    not builder.lifecycle.is_complete()):
+                    return builder.target_value
+            return None
+
+        # Shortcuts for Vec2 properties (pos, direction, vector)
+        @property
+        def x(self):
+            """X component of the computed value (shortcut to .value.x)"""
+            if not hasattr(self._computed_value, 'x'):
+                raise AttributeError(f"Property '{self._property_name}' is a scalar and doesn't have .x component. Only Vec2 properties (pos, direction, vector) support .x/.y shortcuts.")
+            return self._computed_value.x
+
+        @property
+        def y(self):
+            """Y component of the computed value (shortcut to .value.y)"""
+            if not hasattr(self._computed_value, 'y'):
+                raise AttributeError(f"Property '{self._property_name}' is a scalar and doesn't have .y component. Only Vec2 properties (pos, direction, vector) support .x/.y shortcuts.")
+            return self._computed_value.y
+
+        # Layer mode accessors
+        @property
+        def offset(self) -> Optional['RigState.LayerState']:
+            """Get implicit layer state for .offset mode"""
+            layer_name = f"{self._property_name}.offset"
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+
+        @property
+        def override(self) -> Optional['RigState.LayerState']:
+            """Get implicit layer state for .override mode"""
+            layer_name = f"{self._property_name}.override"
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+
+        @property
+        def scale(self) -> Optional['RigState.LayerState']:
+            """Get implicit layer state for .scale mode"""
+            layer_name = f"{self._property_name}.scale"
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+
+        def __repr__(self):
+            # Show available properties/methods, not the computed value
+            prop_type = "Vec2" if hasattr(self._computed_value, 'x') else "scalar"
+
+            parts = [
+                f"SmartPropertyState('{self._property_name}')",
+                f"  .value - Current computed {self._property_name}",
+                f"  .target - Target from base animation (or None)",
+            ]
+
+            if prop_type == "Vec2":
+                parts.extend([
+                    f"  .x - Shortcut to .value.x",
+                    f"  .y - Shortcut to .value.y",
+                ])
+
+            parts.extend([
+                f"  .offset - LayerState for implicit '{self._property_name}.offset' layer (or None)",
+                f"  .override - LayerState for implicit '{self._property_name}.override' layer (or None)",
+                f"  .scale - LayerState for implicit '{self._property_name}.scale' layer (or None)",
+            ])
+
+            return "\n".join(parts)
+
+        def __str__(self):
+            return str(self._computed_value)
+
+        # Magic methods to make SmartPropertyState behave like the underlying value
+        # in mathematical operations (auto-delegates to .value)
+        def __add__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value + other_val
+
+        def __radd__(self, other):
+            return other + self._computed_value
+
+        def __sub__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value - other_val
+
+        def __rsub__(self, other):
+            return other - self._computed_value
+
+        def __mul__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value * other_val
+
+        def __rmul__(self, other):
+            return other * self._computed_value
+
+        def __truediv__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value / other_val
+
+        def __rtruediv__(self, other):
+            return other / self._computed_value
+
+        def __floordiv__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value // other_val
+
+        def __rfloordiv__(self, other):
+            return other // self._computed_value
+
+        def __mod__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value % other_val
+
+        def __rmod__(self, other):
+            return other % self._computed_value
+
+        def __pow__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value ** other_val
+
+        def __rpow__(self, other):
+            return other ** self._computed_value
+
+        def __neg__(self):
+            return -self._computed_value
+
+        def __pos__(self):
+            return +self._computed_value
+
+        def __abs__(self):
+            return abs(self._computed_value)
+
+        # Comparison operators
+        def __eq__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value == other_val
+
+        def __ne__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value != other_val
+
+        def __lt__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value < other_val
+
+        def __le__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value <= other_val
+
+        def __gt__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value > other_val
+
+        def __ge__(self, other):
+            other_val = other.value if isinstance(other, self.__class__) else other
+            return self._computed_value >= other_val
+
+        # Numeric conversion
+        def __float__(self):
+            return float(self._computed_value)
+
+        def __int__(self):
+            return int(self._computed_value)
+
+        def __bool__(self):
+            return bool(self._computed_value)
+
+    # Override property getters to return smart accessors
+    @property
+    def pos(self) -> 'RigState.SmartPropertyState':
+        """Current computed position (with .offset, .override, .scale layer access)"""
+        pos_vec = self._compute_current_state()[0]
+        return RigState.SmartPropertyState(self, "pos", pos_vec)
+
+    @property
+    def speed(self) -> 'RigState.SmartPropertyState':
+        """Current computed speed (with .offset, .override, .scale layer access)"""
+        speed_val = self._compute_current_state()[1]
+        return RigState.SmartPropertyState(self, "speed", speed_val)
+
+    @property
+    def direction(self) -> 'RigState.SmartPropertyState':
+        """Current computed direction (with .offset, .override, .scale layer access)"""
+        direction_vec = self._compute_current_state()[2]
+        return RigState.SmartPropertyState(self, "direction", direction_vec)
+
+    @property
+    def vector(self) -> 'RigState.SmartPropertyState':
+        """Current computed velocity vector (with .offset, .override, .scale layer access)"""
+        speed = self._compute_current_state()[1]
+        direction = self._compute_current_state()[2]
+        return RigState.SmartPropertyState(self, "vector", direction * speed)
 
     def add_stop_callback(self, callback):
         """Add a callback to fire when the frame loop stops"""

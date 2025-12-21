@@ -53,24 +53,34 @@ class ModeProxy:
         self.builder = builder
         self.mode = mode
 
+    def _set_implicit_layer(self, property_name: str) -> None:
+        """Set implicit layer name based on property + mode if using anonymous base layer"""
+        if self.builder.is_anonymous:
+            implicit_name = f"{property_name}.{self.mode}"
+            self.builder.config.layer_name = implicit_name
+
     @property
     def pos(self) -> 'PropertyBuilder':
         self.builder.config.mode = self.mode
+        self._set_implicit_layer("pos")
         return PropertyBuilder(self.builder, "pos")
 
     @property
     def speed(self) -> 'PropertyBuilder':
         self.builder.config.mode = self.mode
+        self._set_implicit_layer("speed")
         return PropertyBuilder(self.builder, "speed")
 
     @property
     def direction(self) -> 'PropertyBuilder':
         self.builder.config.mode = self.mode
+        self._set_implicit_layer("direction")
         return PropertyBuilder(self.builder, "direction")
 
     @property
     def vector(self) -> 'PropertyBuilder':
         self.builder.config.mode = self.mode
+        self._set_implicit_layer("vector")
         return PropertyBuilder(self.builder, "vector")
 
 
@@ -601,22 +611,31 @@ class PropertyBuilder:
 
         self.rig_builder.config.property = property_name
 
+    def _set_implicit_layer_if_needed(self, mode: str) -> None:
+        """Set implicit layer name based on property + mode if using anonymous base layer"""
+        if self.rig_builder.is_anonymous:
+            implicit_name = f"{self.property_name}.{mode}"
+            self.rig_builder.config.layer_name = implicit_name
+
     @property
     def offset(self) -> 'PropertyBuilder':
         self._check_duplicate_mode("offset")
         self.rig_builder.config.mode = "offset"
+        self._set_implicit_layer_if_needed("offset")
         return self
 
     @property
     def override(self) -> 'PropertyBuilder':
         self._check_duplicate_mode("override")
         self.rig_builder.config.mode = "override"
+        self._set_implicit_layer_if_needed("override")
         return self
 
     @property
     def scale(self) -> 'PropertyBuilder':
         self._check_duplicate_mode("scale")
         self.rig_builder.config.mode = "scale"
+        self._set_implicit_layer_if_needed("scale")
         return self
 
     @property
@@ -970,7 +989,9 @@ class ActiveBuilder:
                     self.base_value = Vec2(0, 0)
             else:
                 # speed.to(), direction.to() - use computed state (relative)
-                self.base_value = getattr(rig_state, config.property)
+                prop_state = getattr(rig_state, config.property)
+                # SmartPropertyState wrapper - extract the actual value
+                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
         elif config.operator in ("by", "add"):
             # For relative operations
             if config.property == "pos" and config.movement_type == "relative":
