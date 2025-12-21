@@ -94,6 +94,42 @@ class Actions:
         if callback is not None:
             builder = builder.then(callback)
 
+    def mouse_rig_pos_by_value(
+            value: int | float,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None,
+            api: str = None
+        ) -> None:
+        """Move mouse by value in current direction, optionally over time.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        dx = rig.state.direction.x * value
+        dy = rig.state.direction.y * value
+        rig.pos.by(dx, dy).api(api).over(over_ms, easing).then(callback)
+        ```
+
+        Args:
+            value: Distance to move in pixels along current direction
+            over_ms: Duration in ms (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional)
+            callback: Function to call when movement completes (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+        """
+        rig = actions.user.mouse_rig()
+        dx = rig.state.direction.x * value
+        dy = rig.state.direction.y * value
+        builder = rig.pos.by(dx, dy)
+
+        if api is not None:
+            builder = builder.api(api)
+        if over_ms is not None:
+            builder = builder.over(over_ms, easing)
+        if callback is not None:
+            builder = builder.then(callback)
+
     def mouse_rig_speed_to(
             value: float | int,
             over_ms: int = None,
@@ -308,15 +344,33 @@ class Actions:
         """
         actions.user.mouse_rig_direction_to(0, 1, over_ms, easing)
 
+    def mouse_rig_reverse(reverse_ms: int = None) -> None:
+        """Reverse the current direction, optionally over time.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.reverse(reverse_ms)
+        ```
+
+        Args:
+            over_ms: Time in ms to curve to the reversed direction (optional)
+        """
+        rig = actions.user.mouse_rig()
+        if reverse_ms is not None:
+            rig.reverse(reverse_ms)
+        else:
+            rig.reverse()
+
     def mouse_rig_go_direction(
             x: float,
             y: float,
-            initial_speed: int = 5,
-            target_speed: int = None,
+            initial_speed: int | float = 5,
+            target_speed: int | float = None,
             over_ms: int = None,
             easing: str = None
         ) -> None:
-        """Set direction and speed to move in specified direction.
+        """Move direction, and starting speed if stopped.
 
         Equivalent to:
         ```
@@ -345,8 +399,8 @@ class Actions:
         if target_speed is not None and over_ms is not None and rig.state.speed != target_speed:
             rig.speed.to(target_speed).over(over_ms, easing)
 
-    def mouse_rig_go_left(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
-        """Set direction and speed to move left.
+    def mouse_rig_go_left(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+        """Move left, setting direction and starting speed if stopped.
 
         Equivalent to:
         ```
@@ -366,8 +420,8 @@ class Actions:
         """
         actions.user.mouse_rig_go_direction(-1, 0, initial_speed, target_speed, over_ms, easing)
 
-    def mouse_rig_go_right(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
-        """Set direction and speed to move right.
+    def mouse_rig_go_right(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+        """Move right, setting direction and starting speed if stopped.
 
         Equivalent to:
         ```
@@ -387,8 +441,8 @@ class Actions:
         """
         actions.user.mouse_rig_go_direction(1, 0, initial_speed, target_speed, over_ms, easing)
 
-    def mouse_rig_go_up(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
-        """Set direction and speed to move up.
+    def mouse_rig_go_up(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+        """Move up, setting direction and starting speed if stopped.
 
         Equivalent to:
         ```
@@ -407,8 +461,8 @@ class Actions:
             easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
         """
         actions.user.mouse_rig_go_direction(0, -1, initial_speed, target_speed, over_ms, easing)
-    def mouse_rig_go_down(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
-        """Set direction and speed to move down.
+    def mouse_rig_go_down(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+        """Move down, setting direction and starting speed if stopped.
 
         Equivalent to:
         ```
@@ -629,6 +683,16 @@ class Actions:
         """Get current direction (x, y) from rig state"""
         rig = actions.user.mouse_rig()
         return (rig.state.direction.x, rig.state.direction.y)
+
+    def mouse_rig_state_direction_x() -> float:
+        """Get current direction x component from rig state"""
+        rig = actions.user.mouse_rig()
+        return rig.state.direction.x
+
+    def mouse_rig_state_direction_y() -> float:
+        """Get current direction y component from rig state"""
+        rig = actions.user.mouse_rig()
+        return rig.state.direction.y
 
     def mouse_rig_state_pos() -> tuple:
         """Get current position (x, y) from rig state"""
