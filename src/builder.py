@@ -950,9 +950,9 @@ class PropertyBuilder:
 
 class ActiveBuilder:
     """An active builder being executed in the state manager
-
-    Every builder has a children list that starts with [self].
-    This provides uniform handling for single builders and groups.
+    
+    Builders are now managed by LayerGroups - they are siblings within a group,
+    not parent/child relationships.
     """
 
     def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_base_layer: bool, queue=None):
@@ -964,6 +964,9 @@ class ActiveBuilder:
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
         self.queue = queue  # Optional queue for accessing accumulated state
+        
+        # Back-reference to containing group (set by LayerGroup.add_builder)
+        self.group: Optional['LayerGroup'] = None
 
         # For base layers, set mode based on operator semantics
         if config.mode is None and is_base_layer:
@@ -973,8 +976,6 @@ class ActiveBuilder:
                 config.mode = "scale"  # Multiplicative
             else:
                 config.mode = "offset"
-
-        self.children: list['ActiveBuilder'] = []
 
         self.group_lifecycle: Optional[Lifecycle] = None
         self.group_base_value: Optional[Any] = None
@@ -1150,90 +1151,45 @@ class ActiveBuilder:
 
         # Add other property types here as needed (speed, direction, etc.)
 
-    def add_child(self, child: 'ActiveBuilder'):
-        """Add a child builder to this parent
-
-        The child is appended to the children list for aggregation.
-        Different behavior modes are handled by the caller (state.py).
-        """
-        self.children.append(child)
-
     def _trigger_queue_completion(self):
-        """Notify queue manager that this builder has completed"""
-        if self.config.behavior == "queue":
-            queue_key = self.rig_state._get_queue_key(self.layer, self)
-            final_value = self.get_interpolated_value()
-            self.rig_state._queue_manager.on_builder_complete(
-                queue_key, self.config.property, final_value
-            )
+        """Notify group that this builder has completed"""
+        if self.config.behavior == "queue" and self.group:
+            # Let the group handle queue progression
+            pass  # Group will handle this in on_builder_complete
 
-    def _advance_children(self, current_time: float) -> list:
-        """Advance all children and return phase transitions
-
-        Returns:
-            List of (child, completed_phase) tuples for phase transition callbacks
-        """
-        phase_transitions = []
-
-        for child in self.children:
-            child_was_incomplete = not child.lifecycle.is_complete()
-            old_phase = child.lifecycle.phase
-
-            child.lifecycle.advance(current_time)
-            new_phase = child.lifecycle.phase
-
-            # Track phase transitions for callbacks
-            if old_phase != new_phase and old_phase is not None:
-                phase_transitions.append((child, old_phase))
-
-            # If child just completed and has queue behavior, trigger next
-            if child_was_incomplete and child.lifecycle.is_complete():
-                child._trigger_queue_completion()
-
-        return phase_transitions
-
-    def advance(self, current_time: float) -> tuple[bool, list]:
-        """Advance this builder and all children forward in time.
+    def advance(self, current_time: float) -> tuple[str, list]:
+        """Advance this builder forward in time.
 
         Args:
             current_time: Current timestamp from perf_counter() (captured once per frame)
 
         Returns:
-            (is_active, phase_transitions) where:
-            - is_active: True if still active, False if should be removed
-            - phase_transitions: List of (child, completed_phase) tuples
+            (completed_phase, phase_transitions) where:
+            - completed_phase: Phase that just completed (or None)
+            - phase_transitions: List of (builder, completed_phase) for callbacks
         """
-        child_phase_transitions = []
-        group_reverted = False
+        phase_transitions = []
+        
         if self.group_lifecycle:
             self.group_lifecycle.advance(current_time)
             if self.group_lifecycle.is_complete():
                 if self.group_lifecycle.has_reverted():
-                    group_reverted = True
+                    self._marked_for_removal = True
                 self.group_lifecycle = None
-                self._marked_for_removal = True
-                return (False, [])
+                return (None, [])
 
-        # Track if lifecycle was incomplete before this advance
-        was_incomplete = not self.lifecycle.is_complete()
+        # Track phase before advance
+        old_phase = self.lifecycle.phase
 
-        # Update own lifecycle (only if no group lifecycle is active)
+        # Update lifecycle
         self.lifecycle.advance(current_time)
+        
+        # Track phase transition
+        new_phase = self.lifecycle.phase
+        if old_phase != new_phase and old_phase is not None:
+            phase_transitions.append((self, old_phase))
 
-        # If lifecycle just completed and this builder has queue behavior, trigger next
-        if was_incomplete and self.lifecycle.is_complete():
-            self._trigger_queue_completion()
-
-        # Advance all children and collect phase transitions
-        child_phase_transitions.extend(self._advance_children(current_time))
-        self.children = [c for c in self.children if not c.lifecycle.should_be_garbage_collected()]
-
-        should_gc = self.lifecycle.should_be_garbage_collected()
-        own_active = not should_gc
-        has_children = len(self.children) > 0
-
-        is_active = own_active or has_children
-        return (is_active, child_phase_transitions)
+        return (old_phase if old_phase != new_phase else None, phase_transitions)
 
     def _get_own_value(self) -> Any:
         """Get just this builder's own value (not including children)
@@ -1392,132 +1348,27 @@ class ActiveBuilder:
         return self.target_value
 
     def get_interpolated_value(self) -> Any:
-        """Get aggregated interpolated value from all children
-
-        If group lifecycle is active (coordinated revert), use that.
-        Otherwise aggregate all children's individual values.
+        """Get current interpolated value for this builder
+        
+        No children - just return own value. Group handles aggregation.
         """
-        current_time = time.perf_counter()
-        # Use group lifecycle if active (coordinated revert)
+        # Handle group lifecycle if active
         if self.group_lifecycle and not self.group_lifecycle.is_complete():
+            current_time = time.perf_counter()
             phase, progress = self.group_lifecycle.advance(current_time)
 
-            # Use builder's own property type (not children, which are cleared during revert)
             property_type = self.config.property
+            interpolation = self.config.revert_interpolation
 
-            # Animate from target back to base during revert
-            if property_type == "speed":
-                return PropertyAnimator.animate_scalar(
-                    self.group_base_value,
-                    self.group_target_value,
-                    phase,
-                    progress,
-                    self.group_lifecycle.has_reverted()
-                )
-            elif property_type == "direction":
-                # Group revert uses revert interpolation setting
-                interpolation = self.config.revert_interpolation
-                return PropertyAnimator.animate_direction(
-                    self.group_base_value,
-                    self.group_target_value,
-                    phase,
-                    progress,
-                    self.group_lifecycle.has_reverted(),
-                    interpolation
-                )
-            elif property_type == "pos":
-                return PropertyAnimator.animate_position(
-                    self.group_base_value,
-                    self.group_target_value,
-                    phase,
-                    progress,
-                    self.group_lifecycle.has_reverted()
-                )
-            elif property_type == "vector":
-                interpolation = self.config.revert_interpolation
-                return PropertyAnimator.animate_vector(
-                    self.group_base_value,
-                    self.group_target_value,
-                    phase,
-                    progress,
-                    self.group_lifecycle.has_reverted(),
-                    interpolation
-                )
-
-        # Aggregate own value plus all children values
-        property_type = self.config.property
-
-        if property_type == "speed":
-            # Start with own value, then add children
-            total = self._get_own_value()
-            for child in self.children:
-                if child.config.property == property_type:
-                    total += child._get_own_value()
-            return total
-
-        elif property_type == "direction":
-            # Compose rotations: apply own rotation, then each child's rotation
-            current = self._get_own_value()
-
-            # Each child rotation is relative to the result so far
-            for child in self.children:
-                if child.config.property == "direction":
-                    # Get child's CURRENT animated rotation (not target)
-                    child_current = child._get_own_value()
-
-                    # For 'add/by' operations, we need to compose the rotations
-                    # Extract the rotation from base to current animated position
-                    if child.config.operator in ("add", "by"):
-                        # Calculate the rotation angle from child's base to current animated value
-                        import math
-                        child_base = child.base_value
-
-                        # Get angle between base and current animated rotation
-                        dot = child_base.x * child_current.x + child_base.y * child_current.y
-                        cross = child_base.x * child_current.y - child_base.y * child_current.x
-                        angle = math.atan2(cross, dot)
-
-                        # Apply this rotation to current direction
-                        cos_a = math.cos(angle)
-                        sin_a = math.sin(angle)
-                        new_x = current.x * cos_a - current.y * sin_a
-                        new_y = current.x * sin_a + current.y * cos_a
-                        current = Vec2(new_x, new_y).normalized()
-                    else:
-                        # For 'to' operations, just use the current value directly
-                        current = child_current
-
-            return current
-
-        elif property_type == "pos":
-            # Start with own offset, then add children
-            total_offset = self._get_own_value()
-            for child in self.children:
-                if child.config.property == "pos":
-                    total_offset = total_offset + child._get_own_value()
-            return total_offset
-
-        elif property_type == "vector":
-            # For vector, aggregate velocity contributions
-            # In scale mode, multiply scalars. In offset/override, add vectors
-            mode = self.config.mode
-
-            if mode == "scale":
-                # Scale mode: multiply all scale factors
-                total_scale = self._get_own_value()
-                for child in self.children:
-                    if child.config.property == "vector":
-                        total_scale *= child._get_own_value()
-                return total_scale
-            else:
-                # Offset/override mode: add velocity vectors
-                total_vector = self._get_own_value()
-                for child in self.children:
-                    if child.config.property == "vector":
-                        child_vec = child._get_own_value()
-                        if isinstance(child_vec, Vec2):
-                            total_vector = total_vector + child_vec
-                return total_vector
-
-        # Fallback
+            return PropertyAnimator.interpolate(
+                property_type,
+                self.group_base_value,
+                self.group_target_value,
+                phase,
+                progress,
+                self.group_lifecycle.has_reverted(),
+                interpolation
+            )
+        
+        # Return own value
         return self._get_own_value()
