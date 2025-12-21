@@ -73,6 +73,39 @@ def test_speed_to_over(on_success, on_failure):
     cron.after("600ms", check_state)
 
 
+def test_speed_to_hold(on_success, on_failure):
+    """Test: rig.speed.to(value).hold(ms) - pulse pattern with standalone hold"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    base_speed = 5
+    pulse_speed = 15
+
+    rig.direction.to(1, 0)
+    rig.speed.to(base_speed)
+
+    def check_after_pulse():
+        rig_check = actions.user.mouse_rig()
+
+        # Should have reverted back to base speed
+        if abs(rig_check.state.speed - base_speed) > 0.1:
+            on_failure(f"Speed after pulse wrong: expected {base_speed}, got {rig_check.state.speed}")
+            return
+
+        # Layer should be gone
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after pulse, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    # Pulse to 15 for 500ms, then auto-revert instantly
+    rig.speed.to(pulse_speed).hold(500)
+    cron.after("600ms", check_after_pulse)
+
+
 def test_speed_add(on_success, on_failure):
     """Test: rig.speed.add(delta) - add to current speed"""
     rig = actions.user.mouse_rig()
@@ -442,6 +475,7 @@ def test_layer_speed_offset_from_stopped(on_success, on_failure):
 SPEED_TESTS = [
     ("speed.to()", test_speed_to),
     ("speed.to().over()", test_speed_to_over),
+    ("speed.to().hold()", test_speed_to_hold),
     ("speed.add()", test_speed_add),
     ("speed.mul()", test_speed_mul),
     ("speed.to() negative", test_speed_to_negative),

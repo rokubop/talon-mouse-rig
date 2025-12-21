@@ -213,6 +213,8 @@ class RigBuilder:
         validate_has_operation(self.config, 'hold', self._mark_invalid)
 
         self.config.hold_ms = validate_timing(ms, 'ms', method='hold', mark_invalid=self._mark_invalid)
+        if self.config.revert_ms is None:
+            self.config.revert_ms = 0
         self._lifecycle_stage = LifecyclePhase.HOLD
         return self
 
@@ -394,7 +396,6 @@ class RigBuilder:
         # self._detect_and_apply_special_cases()
 
         self.config.validate_mode(self._mark_invalid)
-        self.config.validate_hold(self._mark_invalid)
 
         self._calculate_rate_durations()
 

@@ -580,27 +580,6 @@ class BuilderConfig:
                 f"Valid modes: {valid_str}"
             )
 
-    def validate_hold(self, mark_invalid: Optional[Callable[[], None]] = None) -> None:
-        """Validate that .hold() is followed by .revert() or .then()
-
-        Args:
-            mark_invalid: Optional callback to mark builder as invalid before raising
-
-        Raises:
-            ConfigError: If .hold() is used without .revert() or .then()
-        """
-        if self.hold_ms is not None and self.revert_ms is None:
-            # Check if there's a .then() callback specifically after the HOLD phase
-            has_hold_callback = any(stage == LifecyclePhase.HOLD for stage, _ in self.then_callbacks)
-            if not has_hold_callback:
-                if mark_invalid:
-                    mark_invalid()
-                raise ConfigError(
-                    ".hold() must be followed by .revert() or .then()\n\n"
-                    ".hold() is only useful when you need to wait before reverting or calling a callback.\n"
-                    "If you want to keep the value, simply don't use .hold() at all, and you can .revert() later.\n\n"
-                )
-
 def validate_timing(value: Any, param_name: str, method: str = None, mark_invalid: Optional[Callable[[], None]] = None) -> Optional[float]:
     """Validate timing parameters (ms, rate, etc.)
 
@@ -681,6 +660,6 @@ def validate_api_has_operation(config: 'BuilderConfig', mark_invalid: Optional[C
             "To change the default mouse API globally, use Talon settings:\n\n"
             "  # In your .talon or .py file:\n"
             "  settings():\n"
-            "    user.mouse_rig_api_absolute = \"talon\"\n"
-            "    user.mouse_rig_api_relative = \"platform\""
+            "    user.mouse_rig_api = \"platform\"  # For relative movement\n"
+            "  # Note: Absolute positioning (pos.to) always uses Talon"
         )

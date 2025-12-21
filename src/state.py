@@ -135,16 +135,6 @@ class RigState:
             existing.advance(current_time)  # Ensure up-to-date
             old_value = existing.get_interpolated_value()
 
-            print(f"[REPLACE DEBUG] Layer: {layer}")
-            print(f"[REPLACE DEBUG] Property: {existing.config.property}")
-            print(f"[REPLACE DEBUG] Old builder base_value: {existing.base_value}")
-            print(f"[REPLACE DEBUG] Old builder target_value: {existing.target_value}")
-            print(f"[REPLACE DEBUG] Old interpolated value: {old_value}")
-            print(f"[REPLACE DEBUG] Old _total_emitted_int: {getattr(existing, '_total_emitted_int', 'N/A')}")
-            print(f"[REPLACE DEBUG] New builder initial base_value: {builder.base_value}")
-            print(f"[REPLACE DEBUG] New builder target_value: {builder.target_value}")
-            print(f"[REPLACE DEBUG] Builder has revert: {builder.config.revert_ms is not None}")
-
             # REPLACE semantics for pos.offset:
             # The old builder has already emitted some pixels (tracked in _total_emitted_int)
             # The new builder needs to continue from there to reach its target, then revert ALL the way to zero
@@ -159,13 +149,11 @@ class RigState:
 
                 # Keep target as-is (the new absolute target)
                 # The frame loop will emit: target - already_emitted
-                print(f"[REPLACE DEBUG] pos.offset: transferred _total_emitted_int={old_emitted}, target={builder.target_value}")
             elif builder.config.mode == "override":
                 # Override mode (absolute values): Keep target as-is
                 # Just update base_value to current value so animation goes from current -> target
                 # This applies to pos.override.to(), speed.override.to(), direction.override.to()
                 builder.base_value = old_value
-                print(f"[REPLACE DEBUG] Override mode: base={builder.base_value}, target={builder.target_value}")
             else:
                 # Standard replace for offset mode: emit only the remaining delta
                 remaining_delta = builder.target_value - old_value
@@ -175,10 +163,6 @@ class RigState:
                 else:
                     builder.base_value = 0.0
                 builder.target_value = remaining_delta
-                print(f"[REPLACE DEBUG] Standard replace: delta={remaining_delta}")
-
-            print(f"[REPLACE DEBUG] Final base_value: {builder.base_value}")
-            print(f"[REPLACE DEBUG] Final target_value: {builder.target_value}")
 
             # ATOMIC REPLACE: Add new builder first, then remove old
             # This prevents a gap where the layer is empty (which could emit zero)
@@ -330,11 +314,8 @@ class RigState:
 
         # Start frame loop if builder has lifecycle
         if not builder.lifecycle.is_complete():
-            print(f"[ADD_BUILDER] Builder {layer} has lifecycle, ensuring frame loop")
             self._ensure_frame_loop_running()
             return
-        else:
-            print(f"[ADD_BUILDER] Builder {layer} lifecycle is complete!")
 
         # Handle instant completion
         self._handle_instant_completion(builder, layer)
@@ -719,18 +700,18 @@ class RigState:
 
     def _get_override_functions(self):
         """Get override functions if any builder has overrides, otherwise None
-        
+
         Returns (move_absolute, move_relative) or (None, None)
         """
         if not self._has_api_overrides():
             return None, None
-        
+
         # Find override (last one wins if multiple)
         api_override = None
         for builder in self._active_builders.values():
             if builder.config.api_override is not None:
                 api_override = builder.config.api_override
-        
+
         from .mouse_api import get_mouse_move_functions
         return get_mouse_move_functions(api_override, api_override)
 
@@ -744,7 +725,7 @@ class RigState:
         """
         # Get override functions if any builder has them
         move_absolute_override, move_relative_override = self._get_override_functions()
-        
+
         if has_absolute_position:
             final_pos = absolute_target + frame_delta
             self._absolute_current_pos = final_pos
@@ -965,7 +946,6 @@ class RigState:
 
             # Check if this is a named layer queue that needs a placeholder
             if builder and hasattr(builder, '_create_queue_placeholder'):
-                print(f"[STATE] Creating placeholder for queued layer {layer}")
                 # Capture the final accumulated value
                 final_value = builder.get_interpolated_value()
 

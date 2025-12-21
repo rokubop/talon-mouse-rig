@@ -74,23 +74,6 @@ def test_revert_without_operation(on_success, on_failure):
             on_failure(f"Error occurred but message unclear: {e}")
 
 
-def test_hold_without_revert(on_success, on_failure):
-    """Test: calling .hold() without .revert() should error"""
-    try:
-        rig = actions.user.mouse_rig()
-        rig.speed(3)
-        builder = rig.direction.to(1, 0).hold(500)
-        builder._execute()  # Force execution to catch validation error
-        on_failure("Expected error for hold() without revert() but operation succeeded")
-    except Exception as e:
-        print(f"  Error message: {e}")
-        error_msg = str(e).lower()
-        if "hold" in error_msg or "revert" in error_msg or "requires" in error_msg or "must" in error_msg:
-            on_success()
-        else:
-            on_failure(f"Error occurred but message unclear: {e}")
-
-
 def test_layer_operation_without_mode(on_success, on_failure):
     """Test: layer operation without mode (.offset/.override/.scale) should error"""
     try:
@@ -472,7 +455,6 @@ VALIDATION_TESTS = [
     ("hold without operation", test_hold_without_operation),
     ("over without operation", test_over_without_operation),
     ("revert without operation", test_revert_without_operation),
-    ("hold without revert", test_hold_without_revert),
     ("layer operation without mode", test_layer_operation_without_mode),
     ("zero direction vector", test_invalid_direction_vector_zero),
     ("negative duration", test_negative_duration),

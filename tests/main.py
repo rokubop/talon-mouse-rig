@@ -31,6 +31,7 @@ def toggle_test_ui(show: bool = None):
         from .validation import VALIDATION_TESTS
         from .contracts import CONTRACTS_TESTS
         from .behaviors import BEHAVIOR_TESTS
+        from .actions import ACTIONS_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
@@ -39,7 +40,8 @@ def toggle_test_ui(show: bool = None):
             ("Vector", VECTOR_TESTS),
             ("Validation", VALIDATION_TESTS),
             ("Contracts", CONTRACTS_TESTS),
-            ("Behaviors", BEHAVIOR_TESTS)
+            ("Behaviors", BEHAVIOR_TESTS),
+            ("Actions", ACTIONS_TESTS)
         ]
 
         show = show if show is not None else not actions.user.ui_elements_get_trees()
@@ -298,7 +300,7 @@ def stop_all_tests():
 def run_all_tests_global(test_groups):
     """Run all tests from all groups with 0 delay"""
     import os
-    
+
     if _test_runner_state["running"]:
         return
 
@@ -306,7 +308,7 @@ def run_all_tests_global(test_groups):
     test_dir = os.path.dirname(os.path.abspath(__file__))
     results_file = os.path.join(os.path.dirname(test_dir), "test_results.txt")
     _test_runner_state["test_results_file"] = results_file
-    
+
     # Write header to file
     with open(results_file, "w") as f:
         f.write(f"Test Run Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -317,7 +319,7 @@ def run_all_tests_global(test_groups):
     for group_name, tests in test_groups:
         for test_name, test_func in tests:
             all_tests.append((test_name, test_func, group_name))
-    
+
     _test_runner_state["running"] = True
     _test_runner_state["all_tests_running"] = True
     _test_runner_state["current_test_index"] = 0
@@ -325,7 +327,7 @@ def run_all_tests_global(test_groups):
     _test_runner_state["stop_requested"] = False
     _test_runner_state["passed_count"] = 0
     _test_runner_state["failed_count"] = 0
-    
+
     actions.user.ui_elements_set_state("run_all_tests_global", True)
 
     def run_next_test():
@@ -349,7 +351,7 @@ def run_all_tests_global(test_groups):
             else:
                 _test_runner_state["failed_count"] += 1
                 result_msg = f"FAILED: {group_name} - {test_name}\n"
-            
+
             # Write result to file only if running global tests
             if _test_runner_state["test_results_file"]:
                 with open(_test_runner_state["test_results_file"], "a") as f:
@@ -365,7 +367,7 @@ def run_all_tests_global(test_groups):
         failed = _test_runner_state["failed_count"]
         total = passed + failed
         all_passed = failed == 0
-        
+
         # Write summary to file
         with open(_test_runner_state["test_results_file"], "a") as f:
             f.write("\n" + "="*70 + "\n")
@@ -373,9 +375,9 @@ def run_all_tests_global(test_groups):
             if failed > 0:
                 f.write(f"Failed: {failed}\n")
             f.write("="*70 + "\n")
-        
+
         print(f"Test results written to: {_test_runner_state['test_results_file']}")
-        
+
         actions.user.ui_elements_set_state("test_summary", {
             "passed": passed,
             "failed": failed,
@@ -431,7 +433,7 @@ def test_runner_ui(test_groups):
     run_all_tests_icon = "stop" if run_all_tests_active else "play"
     run_all_tests_label = "Stop All Tests" if run_all_tests_active else "Run All Tests"
     run_all_tests_color = "#ff5555" if run_all_tests_active else "#0088ff"
-    
+
     run_all_tests_button = div(
         flex_direction="row",
         justify_content="center",

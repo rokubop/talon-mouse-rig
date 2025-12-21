@@ -11,34 +11,19 @@ mod.setting("mouse_rig_frame_interval",
 )
 
 mod.setting(
-    "mouse_rig_api_absolute",
-    type=str,
-    default="talon",
-    desc="""API for absolute positioning (pos.to).
-
-    Options:
-    - talon: Talon ctrl.mouse_move (cross-platform, default)
-    - platform: Auto-detect best platform-specific API
-    - windows_mouse_event: Windows win32api.mouse_event (legacy, requires pywin32)
-    - windows_send_input: Windows SendInput (modern, recommended for Windows)
-    - macos_warp: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
-    - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
-    """
-)
-
-mod.setting(
-    "mouse_rig_api_relative",
+    "mouse_rig_api",
     type=str,
     default="platform",
-    desc="""API for relative movement (pos.by, speed.to, speed.by, vector.to, etc.).
-
+    desc="""API for all relative movement (except pos.to which always uses Talon's ctrl.mouse_move)
     Options:
-    - platform: Auto-detect best platform-specific API (recommended)
+    - platform: Auto-detect best platform-specific API (windows_send_input, macos_warp, or linux_x11)
     - talon: Talon actions.mouse_nudge (cross-platform)
-    - windows_mouse_event: Windows win32api.mouse_event (legacy, requires pywin32)
     - windows_send_input: Windows SendInput (modern, recommended for Windows)
+    - windows_mouse_event: Windows win32api.mouse_event (legacy, requires pywin32)
     - macos_warp: macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
     - linux_x11: Linux X11 XWarpPointer (requires python-xlib)
+
+    To override this, chain .api("name") to force a specific API for an individual action.
     """
 )
 
@@ -50,15 +35,15 @@ mod.setting(
 )
 
 mod.setting(
-    "mouse_rig_relative_scale",
-    type=float,
-    default=1.0,
-    desc="Scale multiplier for all relative mouse movement (pos.by, speed, vector, direction). Adjust for gaming sensitivity or desktop precision."
-)
-
-mod.setting(
     "mouse_rig_manual_movement_timeout_ms",
     type=int,
     default=300,
     desc="Timeout in milliseconds after manual mouse movement before rig resumes control"
+)
+
+mod.setting(
+    "mouse_rig_relative_scale",
+    type=float,
+    default=1.0,
+    desc="Scale multiplier for all relative mouse movement. Adjust for gaming sensitivity or desktop precision."
 )

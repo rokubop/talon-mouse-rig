@@ -3,6 +3,7 @@
 
 # Movement commands - composed from direction + speed
 # Uses current speed or 3 if not moving
+
 rig left: user.mouse_rig_go_left()
 rig right: user.mouse_rig_go_right()
 rig up: user.mouse_rig_go_up()
@@ -13,10 +14,10 @@ test one: user.mouse_rig_test_one()
 rig stop: user.mouse_rig_stop()
 rig stop smooth: user.mouse_rig_stop(1000)
 
-rig curve left: user.mouse_rig_direction_to(-1, 0, 1500)
-rig curve right: user.mouse_rig_direction_to(1, 0, 1500)
-rig curve up: user.mouse_rig_direction_to(0, -1, 1500)
-rig curve down: user.mouse_rig_direction_to(0, 1, 1500)
+rig curve left: user.mouse_rig_direction_to(-1, 0, 1000)
+rig curve right: user.mouse_rig_direction_to(1, 0, 1000)
+rig curve up: user.mouse_rig_direction_to(0, -1, 1000)
+rig curve down: user.mouse_rig_direction_to(0, 1, 1000)
 
 rig boost: user.mouse_rig_speed_add(10, 1000, 0, 1000)
 rig speed <number>: user.mouse_rig_speed_to(number)
@@ -41,12 +42,6 @@ rig big down: user.mouse_rig_pos_by(0, 300)
 
 # Direction rotation
 rig rotate <number>: user.mouse_rig_direction_by(number)
-rig rotate left: user.mouse_rig_direction_by(-90, "1000")
-rig rotate right: user.mouse_rig_direction_by(90, "1000")
-rig rotate around: user.mouse_rig_direction_by(180, "1000")
-
-# Settings
-rig [set] scale <number>: user.mouse_rig_set_scale(number)
-rig [set] api talon: user.mouse_rig_set_api("talon")
-rig [set] api windows: user.mouse_rig_set_api("windows_send_input")
-rig [set] api windows raw: user.mouse_rig_set_api("windows_mouse_event")
+rig rotate left: user.mouse_rig_direction_by(-90, 1000)
+rig rotate right: user.mouse_rig_direction_by(90, 1000)
+rig rotate around: user.mouse_rig_direction_by(180, 1000)

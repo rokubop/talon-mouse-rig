@@ -30,13 +30,13 @@ def _initialize_mouse_move():
 
 def get_mouse_move_with_overrides(absolute_override: Optional[str] = None, relative_override: Optional[str] = None):
     """Get mouse move functions with optional API overrides
-    
+
     Used by builders that have API overrides set via rig.api().
-    
+
     Args:
         absolute_override: Override for absolute API
         relative_override: Override for relative API
-    
+
     Returns:
         Tuple of (absolute_func, relative_func)
     """
@@ -45,7 +45,7 @@ def get_mouse_move_with_overrides(absolute_override: Optional[str] = None, relat
         if _mouse_move_absolute is None:
             _initialize_mouse_move()
         return _mouse_move_absolute, _mouse_move_relative
-    
+
     # Has overrides, create new functions
     return get_mouse_move_functions(absolute_override, relative_override)
 

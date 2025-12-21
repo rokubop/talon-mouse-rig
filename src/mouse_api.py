@@ -258,25 +258,26 @@ def get_mouse_move_functions(absolute_override: Optional[str] = None, relative_o
     """Get the appropriate mouse move functions based on settings
 
     Args:
-        absolute_override: Optional override for absolute API (takes precedence over settings)
+        absolute_override: Optional override for absolute API (rarely needed)
         relative_override: Optional override for relative API (takes precedence over settings)
 
     Returns tuple of (absolute_func, relative_func) where:
-    - absolute_func: Takes (x, y) screen coordinates for cursor positioning (uses mouse_rig_api_absolute)
-    - relative_func: Takes (dx, dy) delta for relative movement (uses mouse_rig_api_relative)
+    - absolute_func: Takes (x, y) screen coordinates (always uses Talon's ctrl.mouse_move)
+    - relative_func: Takes (dx, dy) delta for relative movement (uses mouse_rig_api setting)
 
     Falls back to Talon's mouse_move if the requested API is unavailable.
     """
-    absolute_api = absolute_override if absolute_override is not None else settings.get("user.mouse_rig_api_absolute", "talon")
-    relative_api = relative_override if relative_override is not None else settings.get("user.mouse_rig_api_relative", "platform")
+    # Always use Talon for absolute positioning
+    absolute_api = absolute_override if absolute_override is not None else "talon"
 
-    # Resolve 'platform' to actual API
-    if absolute_api == "platform":
-        absolute_api = _get_platform_api()
+    # Get relative API from settings
+    relative_api = relative_override if relative_override is not None else settings.get("user.mouse_rig_api", "platform")
+
+    # Resolve 'platform' to actual API for relative movement
     if relative_api == "platform":
         relative_api = _get_platform_api()
 
-    # Get absolute function
+    # Get absolute function (always Talon)
     absolute_func = _get_api_function(absolute_api, is_absolute=True)
 
     # Get relative function
@@ -297,11 +298,6 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
     """
     # Validate API type
     if api_type not in MOUSE_APIS:
-        available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
-        mode = "absolute" if is_absolute else "relative"
-        print(f"[Mouse Rig] Invalid mouse_rig_api_{mode}: '{api_type}'")
-        print(f"[Mouse Rig] Available options: {available}")
-        print(f"[Mouse Rig] Falling back to 'talon'")
         api_type = "talon"
 
     # Select appropriate API

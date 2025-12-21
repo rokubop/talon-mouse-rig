@@ -65,14 +65,15 @@ class Actions:
             dy: float,
             over_ms: int = None,
             easing: str = None,
-            callback: callable = None
+            callback: callable = None,
+            api: str = None
         ) -> None:
         """Move mouse by relative offset, optionally over time.
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
-        rig.pos.by(dx, dy).over(over_ms, easing).then(callback)
+        rig.pos.by(dx, dy).api(api).over(over_ms, easing).then(callback)
         ```
 
         Args:
@@ -81,10 +82,13 @@ class Actions:
             over_ms: Duration in ms (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
             callback: Function to call when movement completes (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional)
         """
         rig = actions.user.mouse_rig()
         builder = rig.pos.by(dx, dy)
 
+        if api is not None:
+            builder = builder.api(api)
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
         if callback is not None:
@@ -307,7 +311,7 @@ class Actions:
     def mouse_rig_go_direction(
             x: float,
             y: float,
-            initial_speed: int = 3,
+            initial_speed: int = 5,
             target_speed: int = None,
             over_ms: int = None,
             easing: str = None
@@ -341,7 +345,7 @@ class Actions:
         if target_speed is not None and over_ms is not None and rig.state.speed != target_speed:
             rig.speed.to(target_speed).over(over_ms, easing)
 
-    def mouse_rig_go_left(initial_speed: int = 3, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_left(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
         """Set direction and speed to move left.
 
         Equivalent to:
@@ -362,7 +366,7 @@ class Actions:
         """
         actions.user.mouse_rig_go_direction(-1, 0, initial_speed, target_speed, over_ms, easing)
 
-    def mouse_rig_go_right(initial_speed: int = 3, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_right(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
         """Set direction and speed to move right.
 
         Equivalent to:
@@ -383,7 +387,7 @@ class Actions:
         """
         actions.user.mouse_rig_go_direction(1, 0, initial_speed, target_speed, over_ms, easing)
 
-    def mouse_rig_go_up(initial_speed: int = 3, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_up(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
         """Set direction and speed to move up.
 
         Equivalent to:
@@ -403,7 +407,7 @@ class Actions:
             easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
         """
         actions.user.mouse_rig_go_direction(0, -1, initial_speed, target_speed, over_ms, easing)
-    def mouse_rig_go_down(initial_speed: int = 3, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_down(initial_speed: int = 5, target_speed: int = None, over_ms: int = None, easing: str = None) -> None:
         """Set direction and speed to move down.
 
         Equivalent to:
@@ -558,14 +562,15 @@ class Actions:
             dy: float,
             over_ms: int = None,
             easing: str = None,
-            callback: callable = None
+            callback: callable = None,
+            api: str = None
         ) -> None:
         """Create a named position layer that offsets the mouse position.
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
-        rig.layer(layer_name).pos.offset.by(dx, dy).over(over_ms, easing).then(callback)
+        rig.layer(layer_name).pos.offset.by(dx, dy).api(api).over(over_ms, easing).then(callback)
         ```
 
         Examples:
@@ -577,6 +582,8 @@ class Actions:
         """
         rig = actions.user.mouse_rig()
         builder = rig.layer(layer_name).pos.offset.by(dx, dy)
+        if api is not None:
+            builder = builder.api(api)
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
         if callback is not None:
