@@ -15,6 +15,7 @@ from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative
 from .queue import QueueManager
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
 from . import mode_operations
+from .contracts import BuilderConfig
 
 if TYPE_CHECKING:
     from .builder import ActiveBuilder
@@ -47,6 +48,13 @@ class RigState:
 
         # Throttle tracking (layer -> last execution time)
         self._throttle_times: dict[str, float] = {}
+
+        # Rate-based builder cache (cache_key -> (builder, target_value))
+        # Cache key: (layer, property, operator, normalized_target)
+        self._rate_builder_cache: dict[tuple, tuple['ActiveBuilder', Any]] = {}
+
+        # Debounce pending builders (debounce_key -> (target_time, config, is_anonymous, cron_job))
+        self._debounce_pending: dict[str, tuple[float, 'BuilderConfig', bool, Optional[cron.CronJob]]] = {}
 
         # Auto-order counter for layers without explicit order
         self._next_auto_order: int = 0
@@ -90,11 +98,8 @@ class RigState:
 
         Single source of truth for queue key generation.
 
-        Named layers use their layer name as the queue key, so all queue
-        operations on that layer share the same queue and accumulated state.
-
-        Anonymous (base) layers use a unique key per property/operator to
-        allow independent queues for different operations.
+        Uses (layer, property, operator) to allow independent queues for different operations,
+        even on base layer.
 
         Args:
             layer: The layer name
@@ -103,12 +108,66 @@ class RigState:
         Returns:
             Queue key string for use with QueueManager
         """
-        if builder.config.is_anonymous():
-            # Anonymous queue - unique per property/operator combination
-            return f"__queue_{builder.config.property}_{builder.config.operator}"
+        # Use property + operator for specific queue tracking
+        # This allows: rig.pos.by().queue and rig.speed.to().queue to be independent
+        return f"{layer}_{builder.config.property}_{builder.config.operator}"
+
+    def _get_throttle_key(self, layer: str, builder_or_config: Union['ActiveBuilder', 'BuilderConfig']) -> str:
+        """Get throttle key for a builder
+
+        Uses (layer, property, operator) to allow independent throttling per operation type.
+
+        Args:
+            layer: The layer name
+            builder_or_config: The builder or config to generate a key for
+
+        Returns:
+            Throttle key string
+        """
+        config = builder_or_config if isinstance(builder_or_config, BuilderConfig) else builder_or_config.config
+        return f"{layer}_{config.property}_{config.operator}"
+
+    def _get_rate_cache_key(self, layer: str, config: 'BuilderConfig') -> Optional[tuple]:
+        """Get rate cache key for a builder using rate-based timing
+
+        Cache key is (layer, property, operator, mode, normalized_target_value).
+        Returns None if not a rate-based operation.
+
+        Args:
+            layer: The layer name
+            config: The builder config
+
+        Returns:
+            Cache key tuple or None
+        """
+        if config.over_rate is None and config.revert_rate is None:
+            return None  # Not a rate-based operation
+
+        # Normalize target value for comparison
+        target = config.value
+        if isinstance(target, tuple):
+            # For tuples (pos, direction), round to reasonable precision
+            normalized = tuple(round(v, 3) for v in target)
+        elif isinstance(target, (int, float)):
+            normalized = round(target, 3)
         else:
-            # Named layer queue - use layer name
-            return layer
+            normalized = target
+
+        return (layer, config.property, config.operator, config.mode, normalized)
+
+    def _get_debounce_key(self, layer: str, config: 'BuilderConfig') -> str:
+        """Get debounce key for a builder
+
+        Uses (layer, property, operator) for targeted debounce tracking.
+
+        Args:
+            layer: The layer name
+            config: The builder config
+
+        Returns:
+            Debounce key string
+        """
+        return f"{layer}_{config.property}_{config.operator}"
 
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
@@ -183,12 +242,13 @@ class RigState:
                 return True  # Ignored, early return
 
             # With args = ignore if builder was active within last X ms
+            throttle_key = self._get_throttle_key(layer, builder)
             throttle_ms = builder.config.behavior_args[0]
-            if layer in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
+            if throttle_key in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
                 if elapsed < throttle_ms:
                     return True  # Throttled, early return
-            self._throttle_times[layer] = time.perf_counter()
+            self._throttle_times[throttle_key] = time.perf_counter()
             existing.add_child(builder)
             return True  # Handled, early return
         elif behavior == "stack":
@@ -233,12 +293,13 @@ class RigState:
                 for l in layers_to_remove:
                     self.remove_builder(l)
         elif behavior == "throttle":
+            throttle_key = self._get_throttle_key(layer, builder)
             throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-            if layer in self._throttle_times:
-                elapsed = (time.perf_counter() - self._throttle_times[layer]) * 1000
+            if throttle_key in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
                 if elapsed < throttle_ms:
                     return  # Early return handled by caller
-            self._throttle_times[layer] = time.perf_counter()
+            self._throttle_times[throttle_key] = time.perf_counter()
 
     def _handle_instant_completion(self, builder: 'ActiveBuilder', layer: str):
         """Handle builders that complete instantly (no lifecycle)"""
@@ -248,8 +309,9 @@ class RigState:
             # Synchronous execution already updated state, just cleanup
             if builder.config.is_anonymous():
                 del self._active_builders[layer]
-                if layer in self._throttle_times:
-                    del self._throttle_times[layer]
+                throttle_key = self._get_throttle_key(layer, builder)
+                if throttle_key in self._throttle_times:
+                    del self._throttle_times[throttle_key]
             return
 
         # Non-synchronous instant completion (bake the value)
@@ -257,8 +319,9 @@ class RigState:
             if builder.config.get_effective_bake():
                 self._bake_builder(builder, removing_layer=layer)
             del self._active_builders[layer]
-            if layer in self._throttle_times:
-                del self._throttle_times[layer]
+            throttle_key = self._get_throttle_key(layer, builder)
+            if throttle_key in self._throttle_times:
+                del self._throttle_times[throttle_key]
 
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add an active builder to state
@@ -275,6 +338,80 @@ class RigState:
         if builder.config.operator == "bake":
             self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() else None)
             return
+
+        # Handle debounce behavior - store as pending builder
+        if builder.config.behavior == "debounce":
+            if not builder.config.behavior_args:
+                from .contracts import ConfigError
+                raise ConfigError("debounce() requires a delay in milliseconds")
+            
+            delay_ms = builder.config.behavior_args[0]
+            debounce_key = self._get_debounce_key(layer, builder.config)
+            
+            # Cancel any existing pending debounce for this key
+            if debounce_key in self._debounce_pending:
+                _, _, _, old_cron_job = self._debounce_pending[debounce_key]
+                if old_cron_job is not None:
+                    cron.cancel(old_cron_job)
+            
+            # Store pending builder
+            target_time = time.perf_counter() + (delay_ms / 1000.0)
+            
+            # Schedule execution with cron fallback if no frame loop
+            cron_job = None
+            if self._frame_loop_job is None:
+                # No active frame loop, use cron
+                def execute_debounced():
+                    if debounce_key in self._debounce_pending:
+                        _, config, is_anon, _ = self._debounce_pending[debounce_key]
+                        del self._debounce_pending[debounce_key]
+                        # Clear debounce behavior so builder executes normally
+                        config.behavior = None
+                        config.behavior_args = ()
+                        # Create and add the actual builder
+                        from .builder import ActiveBuilder
+                        actual_builder = ActiveBuilder(config, self, is_anon)
+                        self.add_builder(actual_builder)
+                
+                cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
+            
+            # Store pending builder (will be checked by frame loop if active)
+            self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_anonymous(), cron_job)
+            return
+
+        # Handle rate-based builder caching
+        rate_cache_key = self._get_rate_cache_key(layer, builder.config)
+        if rate_cache_key is not None:
+            # This is a rate-based operation
+            if rate_cache_key in self._rate_builder_cache:
+                cached_builder, cached_target = self._rate_builder_cache[rate_cache_key]
+                
+                # Check if target matches (with epsilon comparison for floats)
+                targets_match = False
+                new_target = builder.target_value
+                
+                if isinstance(new_target, (int, float)) and isinstance(cached_target, (int, float)):
+                    from .core import EPSILON
+                    targets_match = abs(new_target - cached_target) < EPSILON
+                elif isinstance(new_target, tuple) and isinstance(cached_target, tuple):
+                    from .core import EPSILON
+                    targets_match = all(abs(a - b) < EPSILON for a, b in zip(new_target, cached_target))
+                elif isinstance(new_target, Vec2) and isinstance(cached_target, Vec2):
+                    from .core import EPSILON
+                    targets_match = abs(new_target.x - cached_target.x) < EPSILON and abs(new_target.y - cached_target.y) < EPSILON
+                else:
+                    targets_match = new_target == cached_target
+                
+                if targets_match and layer in self._active_builders:
+                    # Same target, builder already in progress - ignore new call
+                    return
+                else:
+                    # Different target - replace old builder with new one
+                    if layer in self._active_builders:
+                        self.remove_builder(layer)
+            
+            # Cache this builder
+            self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
 
         # Validate mode consistency for user layers
         if not builder.config.is_anonymous() and layer in self._active_builders:
@@ -334,6 +471,11 @@ class RigState:
             if builder.config.get_effective_bake() or bake:
                 self._bake_builder(builder, removing_layer=layer)
 
+            # Clean up rate builder cache
+            rate_cache_key = self._get_rate_cache_key(layer, builder.config)
+            if rate_cache_key is not None and rate_cache_key in self._rate_builder_cache:
+                del self._rate_builder_cache[rate_cache_key]
+
             del self._active_builders[layer]
 
             # Remove order tracking
@@ -341,8 +483,9 @@ class RigState:
                 del self._layer_orders[layer]
 
             # Clean up throttle tracking
-            if layer in self._throttle_times:
-                del self._throttle_times[layer]
+            throttle_key = self._get_throttle_key(layer, builder)
+            if throttle_key in self._throttle_times:
+                del self._throttle_times[throttle_key]
 
             # Notify queue system to start next item
             if builder.config.behavior == "queue":
@@ -759,6 +902,36 @@ class RigState:
                 builder._last_emitted_relative_pos = new_value
                 builder._total_emitted_int = new_int_value
 
+    def _check_debounce_pending(self, current_time: float):
+        """Check and execute any debounce builders that are ready
+
+        Args:
+            current_time: Current timestamp from perf_counter()
+        """
+        ready_keys = []
+        
+        for debounce_key, (target_time, config, is_anon, cron_job) in list(self._debounce_pending.items()):
+            if current_time >= target_time:
+                ready_keys.append(debounce_key)
+        
+        # Execute ready builders
+        for debounce_key in ready_keys:
+            target_time, config, is_anon, cron_job = self._debounce_pending[debounce_key]
+            del self._debounce_pending[debounce_key]
+            
+            # Cancel cron if it exists (shouldn't fire since we're executing now)
+            if cron_job is not None:
+                cron.cancel(cron_job)
+            
+            # Clear debounce behavior so builder executes normally
+            config.behavior = None
+            config.behavior_args = ()
+            
+            # Create and add the actual builder
+            from .builder import ActiveBuilder
+            actual_builder = ActiveBuilder(config, self, is_anon)
+            self.add_builder(actual_builder)
+
     def _sync_to_manual_mouse_movement(self) -> bool:
         """Detect and sync to manual mouse movements by the user
 
@@ -821,6 +994,9 @@ class RigState:
         current_time, dt = self._calculate_delta_time()
         if dt is None:
             return
+
+        # Process pending debounce builders
+        self._check_debounce_pending(current_time)
 
         # Check for manual movement (only works in absolute mode)
         manual_movement_detected = self._sync_to_manual_mouse_movement()
@@ -1351,6 +1527,8 @@ class RigState:
         self._active_builders.clear()
         self._layer_orders.clear()
         self._throttle_times.clear()
+        self._rate_builder_cache.clear()
+        self._debounce_pending.clear()
         self._queue_manager.clear_all()
 
         # 3. Decelerate speed to 0

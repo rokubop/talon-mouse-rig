@@ -32,7 +32,7 @@ VALID_EASINGS = [
     'ease_in4', 'ease_out4', 'ease_in_out4',
 ]
 VALID_INTERPOLATIONS = ['lerp', 'slerp', 'linear']
-VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'throttle']
+VALID_BEHAVIORS = ['stack', 'replace', 'queue', 'throttle', 'debounce']
 
 METHOD_SIGNATURES = {
     'over': {
@@ -77,7 +77,7 @@ METHOD_SIGNATURES = {
 
 # Add behavior methods
 for behavior in VALID_BEHAVIORS:
-    if behavior == 'throttle':
+    if behavior in ('throttle', 'debounce'):
         METHOD_SIGNATURES[behavior] = {
             'params': ['ms'],
             'signature': f'{behavior}(ms=None)',
@@ -114,12 +114,12 @@ VALID_RIG_METHODS = [
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction', 'vector',
     'state', 'base',
-    'stack', 'replace', 'queue', 'throttle',
+    'stack', 'replace', 'queue', 'throttle', 'debounce',
 ]
 
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake', 'api',
-    'stack', 'replace', 'queue', 'throttle',
+    'stack', 'replace', 'queue', 'throttle', 'debounce',
 ]
 
 # Valid LayerState attributes (properties and methods)

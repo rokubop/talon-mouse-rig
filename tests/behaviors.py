@@ -349,6 +349,303 @@ def test_behavior_throttle_call_syntax_with_ms(on_success, on_failure):
     cron.after("1200ms", check_throttle)
 
 
+def test_behavior_throttle_base_per_operation(on_success, on_failure):
+    """Test: base throttle with different property+operation combinations"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx = 50
+
+    pos_count = {"value": 0}
+    speed_count = {"value": 0}
+
+    def increment_pos():
+        pos_count["value"] += 1
+
+    def increment_speed():
+        speed_count["value"] += 1
+
+    def check_throttle():
+        # pos.by should be throttled (called twice within 500ms)
+        # speed.to should execute both (different operation)
+        if pos_count["value"] > 1:
+            on_failure(f"Base throttle pos.by failed: executed {pos_count['value']} times, expected 1")
+            return
+        if speed_count["value"] < 2:
+            on_failure(f"Base throttle speed.to failed: executed {speed_count['value']} times, expected 2")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # First pos.by - should execute
+    rig.pos.by(dx, 0).throttle(500).api("talon").over(100).then(increment_pos)
+    # Second pos.by after 200ms - should be throttled
+    cron.after("200ms", lambda: rig.pos.by(dx, 0).throttle(500).api("talon").over(100).then(increment_pos))
+    # First speed.to after 100ms - should execute (different operation)
+    cron.after("100ms", lambda: rig.speed.to(5).throttle(500).over(100).then(increment_speed))
+    # Second speed.to after 300ms - should be throttled
+    cron.after("300ms", lambda: rig.speed.to(10).throttle(500).over(100).then(increment_speed))
+    # Third speed.to after 700ms - should execute (past throttle window)
+    cron.after("700ms", lambda: rig.speed.to(0).throttle(500).over(100).then(increment_speed))
+
+    cron.after("1000ms", check_throttle)
+
+
+# ============================================================================
+# DEBOUNCE BEHAVIOR TESTS
+# ============================================================================
+
+def test_behavior_debounce_basic(on_success, on_failure):
+    """Test: basic debounce delays execution"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx = 100
+
+    executed = {"value": False}
+
+    def mark_executed():
+        executed["value"] = True
+
+    def check_not_executed_yet():
+        if executed["value"]:
+            on_failure("Debounce: executed too early (should wait 200ms)")
+            return
+
+    def check_executed():
+        if not executed["value"]:
+            on_failure("Debounce: didn't execute after delay")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.pos.by(dx, 0).debounce(200).api("talon").over(100).then(mark_executed)
+
+    # Check it hasn't executed yet at 100ms
+    cron.after("100ms", check_not_executed_yet)
+    # Check it has executed at 400ms (200ms debounce + 100ms over)
+    cron.after("400ms", check_executed)
+
+
+def test_behavior_debounce_cancels_previous(on_success, on_failure):
+    """Test: calling debounce again cancels previous pending"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx1 = 100
+    dx2 = 50
+
+    first_executed = {"value": False}
+    second_executed = {"value": False}
+
+    def mark_first():
+        first_executed["value"] = True
+
+    def mark_second():
+        second_executed["value"] = True
+
+    def check_results():
+        if first_executed["value"]:
+            on_failure("Debounce cancel: first should have been cancelled")
+            return
+        if not second_executed["value"]:
+            on_failure("Debounce cancel: second should have executed")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # First call with 200ms debounce
+    rig.pos.by(dx1, 0).debounce(200).api("talon").over(100).then(mark_first)
+    # Second call after 100ms should cancel first and restart debounce
+    cron.after("100ms", lambda: rig.pos.by(dx2, 0).debounce(200).api("talon").over(100).then(mark_second))
+
+    # Check results at 500ms (first would be done, second should be executing)
+    cron.after("500ms", check_results)
+
+
+def test_behavior_debounce_layer(on_success, on_failure):
+    """Test: debounce works with layers"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    executed = {"value": False}
+
+    def mark_executed():
+        executed["value"] = True
+
+    def check_executed():
+        if not executed["value"]:
+            on_failure("Layer debounce: didn't execute")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.layer("test").speed.offset.by(10).debounce(150).over(100).then(mark_executed)
+
+    cron.after("400ms", check_executed)
+
+
+# ============================================================================
+# RATE-BASED BUILDER REUSE TESTS
+# ============================================================================
+
+def test_rate_reuse_same_target_ignored(on_success, on_failure):
+    """Test: rate-based calls to same target are ignored if in progress"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    call_count = {"value": 0}
+
+    def increment():
+        call_count["value"] += 1
+
+    def check_single_execution():
+        # Only first call should execute
+        if call_count["value"] != 1:
+            on_failure(f"Rate reuse: expected 1 execution, got {call_count['value']}")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.speed.to(10).over(rate=10).then(increment)
+    # Call again immediately - should be ignored (same target in progress)
+    cron.after("50ms", lambda: rig.speed.to(10).over(rate=10).then(increment))
+    cron.after("100ms", lambda: rig.speed.to(10).over(rate=10).then(increment))
+
+    cron.after("1500ms", check_single_execution)
+
+
+def test_rate_reuse_different_target_replaces(on_success, on_failure):
+    """Test: rate-based calls to different target replace existing"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    first_completed = {"value": False}
+    second_completed = {"value": False}
+
+    def mark_first():
+        first_completed["value"] = True
+
+    def mark_second():
+        second_completed["value"] = True
+
+    def check_replacement():
+        # First should be cancelled (not completed)
+        if first_completed["value"]:
+            on_failure("Rate replace: first should have been cancelled")
+            return
+        # Second should complete
+        if not second_completed["value"]:
+            on_failure("Rate replace: second should have completed")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # Start going to speed 10 (takes ~1 second at rate=10)
+    rig.speed.to(10).over(rate=10).then(mark_first)
+    # After 200ms, change target to 0 - should replace
+    cron.after("200ms", lambda: rig.speed.to(0).over(rate=10).then(mark_second))
+
+    # Check at 600ms - first cancelled, second should be done
+    cron.after("600ms", check_replacement)
+
+
+def test_rate_reuse_different_property_independent(on_success, on_failure):
+    """Test: rate-based caching is per property+operation"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    speed_count = {"value": 0}
+    direction_count = {"value": 0}
+
+    def increment_speed():
+        speed_count["value"] += 1
+
+    def increment_direction():
+        direction_count["value"] += 1
+
+    def check_independent():
+        # Both should execute (different properties)
+        if speed_count["value"] != 1:
+            on_failure(f"Rate independent: speed executed {speed_count['value']} times, expected 1")
+            return
+        if direction_count["value"] != 1:
+            on_failure(f"Rate independent: direction executed {direction_count['value']} times, expected 1")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # Set direction first
+    rig.direction.to(1, 0)
+    # Both should execute independently
+    rig.speed.to(10).over(rate=10).then(increment_speed)
+    rig.direction.by(90).over(rate=45).then(increment_direction)
+
+    cron.after("300ms", check_independent)
+
+
+# ============================================================================
+# QUEUE BASE OPERATION TESTS
+# ============================================================================
+
+def test_queue_base_operations(on_success, on_failure):
+    """Test: queue works with base operations (no layer)"""
+    start_x, start_y = ctrl.mouse_pos()
+    dx = 50
+
+    first_done = {"value": False}
+    second_done = {"value": False}
+
+    def mark_first():
+        first_done["value"] = True
+
+    def mark_second():
+        second_done["value"] = True
+
+    def check_queue():
+        x, y = ctrl.mouse_pos()
+        # Both should have executed sequentially
+        if not first_done["value"] or not second_done["value"]:
+            on_failure(f"Base queue: first={first_done['value']}, second={second_done['value']}, expected both true")
+            return
+        # Total movement should be dx * 2
+        expected_x = start_x + (dx * 2)
+        if abs(x - expected_x) > 5:
+            on_failure(f"Base queue position: expected x={expected_x}, got {x}")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    rig.pos.by(dx, 0).queue().api("talon").over(200).then(mark_first)
+    rig.pos.by(dx, 0).queue().api("talon").over(200).then(mark_second)
+
+    cron.after("600ms", check_queue)
+
+
+def test_queue_base_independent_properties(on_success, on_failure):
+    """Test: queue on base is independent per property+operation"""
+    start_x, start_y = ctrl.mouse_pos()
+
+    pos_count = {"value": 0}
+    speed_count = {"value": 0}
+
+    def increment_pos():
+        pos_count["value"] += 1
+
+    def increment_speed():
+        speed_count["value"] += 1
+
+    def check_independent():
+        # Both queues should have executed both items
+        if pos_count["value"] != 2:
+            on_failure(f"Base queue independent: pos executed {pos_count['value']}, expected 2")
+            return
+        if speed_count["value"] != 2:
+            on_failure(f"Base queue independent: speed executed {speed_count['value']}, expected 2")
+            return
+        on_success()
+
+    rig = actions.user.mouse_rig()
+    # Queue two pos.by operations
+    rig.pos.by(30, 0).queue().api("talon").over(100).then(increment_pos)
+    rig.pos.by(30, 0).queue().api("talon").over(100).then(increment_pos)
+    # Queue two speed.to operations (different property - independent queue)
+    rig.speed.to(5).queue().over(100).then(increment_speed)
+    rig.speed.to(0).queue().over(100).then(increment_speed)
+
+    cron.after("600ms", check_independent)
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -368,4 +665,13 @@ BEHAVIOR_TESTS = [
     ("layer().queue(max).pos.offset.by()", test_behavior_queue_call_syntax_with_max),
     ("layer().throttle.pos.offset.by()", test_behavior_throttle_property_syntax),
     ("layer().throttle(ms).pos.offset.by()", test_behavior_throttle_call_syntax_with_ms),
+    ("base throttle per property+operation", test_behavior_throttle_base_per_operation),
+    ("debounce basic delay", test_behavior_debounce_basic),
+    ("debounce cancels previous", test_behavior_debounce_cancels_previous),
+    ("layer debounce", test_behavior_debounce_layer),
+    ("rate reuse same target ignored", test_rate_reuse_same_target_ignored),
+    ("rate reuse different target replaces", test_rate_reuse_different_target_replaces),
+    ("rate reuse different property independent", test_rate_reuse_different_property_independent),
+    ("queue base operations", test_queue_base_operations),
+    ("queue base independent properties", test_queue_base_independent_properties),
 ]

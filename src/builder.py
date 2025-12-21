@@ -289,7 +289,7 @@ class RigBuilder:
 
     @property
     def throttle(self) -> BehaviorProxy:
-        return BehaviorProxy(self, 'throttle', has_args=False)
+        return BehaviorProxy(self, 'throttle', has_args=True)
 
     def _set_throttle(self, ms: Optional[float] = None) -> 'RigBuilder':
         """Internal: Set throttle behavior
@@ -300,6 +300,19 @@ class RigBuilder:
         self.config.behavior = "throttle"
         if ms is not None:
             self.config.behavior_args = (ms,)
+        return self
+
+    @property
+    def debounce(self) -> BehaviorProxy:
+        return BehaviorProxy(self, 'debounce', has_args=True)
+
+    def _set_debounce(self, ms: float) -> 'RigBuilder':
+        """Internal: Set debounce behavior
+
+        Delays execution by ms. If called again during delay, cancels previous and starts new delay.
+        """
+        self.config.behavior = "debounce"
+        self.config.behavior_args = (ms,)
         return self
 
     # ========================================================================

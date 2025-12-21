@@ -19,7 +19,7 @@ mod.setting(
     desc="""API for all mouse rig movement, except `pos.to` which uses ctrl.mouse_move)
     Options:
     - "platform": Auto-detect best platform-specific API (windows_send_input, macos_warp, or linux_x11)
-    - "talon": Talon actions.mouse_nudge (cross-platform)
+    - "talon": Talon actions.mouse_nudge for relative movement and ctrl.mouse_move for absolute movement
     - "windows_send_input": Windows SendInput (modern, recommended for Windows)
     - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
     - "macos_warp": macOS CGWarpMouseCursorPosition (requires pyobjc-framework-Quartz)
