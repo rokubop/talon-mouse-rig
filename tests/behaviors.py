@@ -546,8 +546,6 @@ def test_rate_reuse_different_target_replaces(on_success, on_failure):
 
 def test_rate_reuse_different_property_independent(on_success, on_failure):
     """Test: rate-based caching is per property+operation"""
-    start_x, start_y = ctrl.mouse_pos()
-
     speed_count = {"value": 0}
     direction_count = {"value": 0}
 
@@ -574,7 +572,7 @@ def test_rate_reuse_different_property_independent(on_success, on_failure):
     rig.speed.to(10).over(rate=10).then(increment_speed)
     rig.direction.by(90).over(rate=45).then(increment_direction)
 
-    cron.after("300ms", check_independent)
+    cron.after("1500ms", check_independent)
 
 
 # ============================================================================

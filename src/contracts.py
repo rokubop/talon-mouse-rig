@@ -20,9 +20,71 @@ VALID_OPERATORS = {
 
 VALID_MODES = ['offset', 'override', 'scale']
 
-LAYER_TYPES = {
-    '__base__': {'order': float('-inf')},
-}
+# ============================================================================
+# LAYER CLASSIFICATION
+# ============================================================================
+#
+# There are two fundamental layer types:
+#
+# 1. BASE LAYERS: "base.{property}" (e.g., "base.speed", "base.direction")
+#    - Direct property operations without modes (e.g., rig.speed.to(10))
+#    - Always auto-generated, never user-named
+#    - Transient: auto-bakes when animation completes
+#
+# 2. MODIFIER LAYERS: Use modes (.offset/.override/.scale)
+#    - Can be auto-named or user-named:
+#      a) Auto-named: "{property}.{mode}" (e.g., "speed.offset", "pos.override")
+#         - Generated when mode used without explicit name
+#         - Persistent: does NOT auto-bake
+#      b) User-named: Custom name (e.g., "boost", "cap")
+#         - User provides explicit name with mode
+#         - User has full lifecycle control
+#
+RESERVED_LAYERS = {}
+
+def is_base_layer(layer_name: str) -> bool:
+    """Check if layer is a base layer (transient, auto-bakes)
+
+    Base layers are auto-generated for operations without modes.
+    Pattern: 'base.{property}' (e.g., 'base.speed', 'base.direction')
+    """
+    return layer_name is not None and layer_name.startswith("base.")
+
+def is_modifier_layer(layer_name: str) -> bool:
+    """Check if layer is a modifier layer (uses mode, persistent)
+
+    Modifier layers use modes (.offset/.override/.scale) and can be
+    either auto-named or user-named.
+    """
+    if layer_name is None:
+        return False
+    # Auto-named modifier: property.mode pattern
+    parts = layer_name.split(".")
+    if len(parts) == 2:
+        prop, mode = parts
+        if prop in ["pos", "speed", "direction", "vector"] and mode in ["offset", "override", "scale"]:
+            return True
+    # User-named modifiers are detected by having a mode in config
+    # (checked elsewhere via BuilderConfig.mode)
+    return False
+
+def is_auto_named_modifier(layer_name: str) -> bool:
+    """Check if layer is an auto-named modifier (e.g., 'speed.offset')
+
+    Auto-named modifiers are generated when using modes without explicit names.
+    They persist until explicitly removed.
+    """
+    if layer_name is None:
+        return False
+    parts = layer_name.split(".")
+    if len(parts) == 2:
+        prop, mode = parts
+        return prop in ["pos", "speed", "direction", "vector"] and mode in ["offset", "override", "scale"]
+    return False
+
+def is_implicit_layer(layer_name: str) -> bool:
+    """Alias for is_auto_named_modifier() for backwards compatibility"""
+    return is_auto_named_modifier(layer_name)
 
 VALID_EASINGS = [
     'linear',
@@ -334,6 +396,13 @@ class LifecyclePhase:
     REVERT = "revert"
 
 
+class LayerType:
+    """Layer type classification"""
+    BASE = "base"                           # base.{property} - transient, auto-bakes
+    AUTO_NAMED_MODIFIER = "auto_modifier"   # {property}.{mode} - persistent, auto-named
+    USER_NAMED_MODIFIER = "user_modifier"   # custom name + mode - persistent, user-named
+
+
 class BuilderConfig:
     """Configuration collected by RigBuilder during fluent API calls"""
     def __init__(self):
@@ -349,7 +418,9 @@ class BuilderConfig:
         self._movement_type_explicit: bool = False  # True if user explicitly set via .absolute or .relative
 
         # Identity
-        self.layer_name: Optional[str] = None  # Layer name (__base__ or user name)
+        self.layer_name: Optional[str] = None  # Layer name (base.{property}, {property}.{mode}, or user name)
+        self.layer_type: str = LayerType.BASE  # Default to base, will be overwritten for modifiers
+        self.is_user_named: bool = False  # True if user explicitly provided layer name via rig.layer()
 
         # Behavior
         self.behavior: Optional[str] = None  # stack, replace, queue, throttle
@@ -380,17 +451,21 @@ class BuilderConfig:
         # Execution mode
         self.is_synchronous: bool = False  # True for instant/sync execution, False for frame loop
 
-    def is_anonymous(self) -> bool:
-        """Check if this builder is anonymous (auto-generated base layer)"""
-        return self.layer_name is not None and self.layer_name.startswith("__base_")
+    # ========================================================================
+    # LAYER CLASSIFICATION (First-class properties)
+    # ========================================================================
 
     def is_base_layer(self) -> bool:
-        """Check if this is a base layer (anonymous)"""
-        return self.is_anonymous()
+        return self.layer_type == LayerType.BASE
 
-    def is_user_layer(self) -> bool:
-        """Check if this is a user layer (named layer, not base)"""
-        return not self.is_base_layer()
+    def is_modifier_layer(self) -> bool:
+        return self.layer_type in (LayerType.AUTO_NAMED_MODIFIER, LayerType.USER_NAMED_MODIFIER)
+
+    def is_auto_named_modifier(self) -> bool:
+        return self.layer_type == LayerType.AUTO_NAMED_MODIFIER
+
+    def is_user_named_modifier(self) -> bool:
+        return self.layer_type == LayerType.USER_NAMED_MODIFIER
 
     def get_effective_behavior(self) -> str:
         """Get behavior with defaults applied"""
@@ -407,9 +482,9 @@ class BuilderConfig:
         """Get bake setting with defaults applied"""
         if self.bake_value is not None:
             return self.bake_value
-        # Default: anonymous bakes, is_named_layer doesn't
-        # is_named_layer builders must be explicitly reverted or baked
-        return self.is_anonymous()
+        # Default: base layers auto-bake, modifier layers don't
+        # Modifier layers must be explicitly reverted or baked
+        return self.is_base_layer()
 
     def validate_method_kwargs(self, method: str, mark_invalid: Optional[Callable[[], None]] = None, **kwargs) -> None:
         """Validate kwargs for a method call
@@ -551,8 +626,8 @@ class BuilderConfig:
         Raises:
             ConfigError: If mode is missing or invalid
         """
-        # Mode is only required for layer operations (not base)
-        if not self.is_user_layer():
+        # Mode is only required for modifier layers (not base)
+        if not self.is_modifier_layer():
             return
 
         if self.mode is None:

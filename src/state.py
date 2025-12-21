@@ -53,7 +53,7 @@ class RigState:
         # Cache key: (layer, property, operator, normalized_target)
         self._rate_builder_cache: dict[tuple, tuple['ActiveBuilder', Any]] = {}
 
-        # Debounce pending builders (debounce_key -> (target_time, config, is_anonymous, cron_job))
+        # Debounce pending builders (debounce_key -> (target_time, config, is_base_layer, cron_job))
         self._debounce_pending: dict[str, tuple[float, 'BuilderConfig', bool, Optional[cron.CronJob]]] = {}
 
         # Auto-order counter for layers without explicit order
@@ -89,9 +89,6 @@ class RigState:
 
     def __str__(self) -> str:
         return self.__repr__()
-
-    def _generate_base_layer_name(self) -> str:
-        return "__base__"
 
     def _get_queue_key(self, layer: str, builder: 'ActiveBuilder') -> str:
         """Get the queue key for a builder
@@ -230,7 +227,7 @@ class RigState:
             # Track layer order (same logic as in add_builder)
             if builder.config.order is not None:
                 self._layer_orders[layer] = builder.config.order
-            elif layer != "__base__":
+            elif not builder.config.is_base_layer():
                 if layer not in self._layer_orders:
                     self._layer_orders[layer] = self._next_auto_order
                     self._next_auto_order += 1
@@ -283,15 +280,11 @@ class RigState:
         """Handle behavior for base layer operations"""
         layer = builder.config.layer_name
 
-        if behavior == "replace" and layer == "__base__":
-            # For .to() operator, cancel all base builders with same property
-            if builder.config.property:
-                layers_to_remove = [
-                    l for l, b in self._active_builders.items()
-                    if l == layer and b.config.property == builder.config.property
-                ]
-                for l in layers_to_remove:
-                    self.remove_builder(l)
+        if behavior == "replace" and builder.config.is_base_layer():
+            # For base layers, each property has its own layer (base.speed, base.direction, etc.)
+            # If a base layer already exists for this property, remove it
+            if layer in self._active_builders:
+                self.remove_builder(layer)
         elif behavior == "throttle":
             throttle_key = self._get_throttle_key(layer, builder)
             throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
@@ -307,7 +300,7 @@ class RigState:
         if builder.config.is_synchronous and self._frame_loop_job is None:
             builder.execute_synchronous()
             # Synchronous execution already updated state, just cleanup
-            if builder.config.is_anonymous():
+            if builder.config.is_base_layer():
                 del self._active_builders[layer]
                 throttle_key = self._get_throttle_key(layer, builder)
                 if throttle_key in self._throttle_times:
@@ -315,7 +308,7 @@ class RigState:
             return
 
         # Non-synchronous instant completion (bake the value)
-        if builder.config.is_anonymous():
+        if builder.config.is_base_layer():
             if builder.config.get_effective_bake():
                 self._bake_builder(builder, removing_layer=layer)
             del self._active_builders[layer]
@@ -336,7 +329,7 @@ class RigState:
 
         # Handle bake operation immediately
         if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, layer if not builder.config.is_anonymous() else None)
+            self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
             return
 
         # Handle debounce behavior - store as pending builder
@@ -363,20 +356,20 @@ class RigState:
                 # No active frame loop, use cron
                 def execute_debounced():
                     if debounce_key in self._debounce_pending:
-                        _, config, is_anon, _ = self._debounce_pending[debounce_key]
+                        _, config, is_base, _ = self._debounce_pending[debounce_key]
                         del self._debounce_pending[debounce_key]
                         # Clear debounce behavior so builder executes normally
                         config.behavior = None
                         config.behavior_args = ()
                         # Create and add the actual builder
                         from .builder import ActiveBuilder
-                        actual_builder = ActiveBuilder(config, self, is_anon)
+                        actual_builder = ActiveBuilder(config, self, is_base)
                         self.add_builder(actual_builder)
 
                 cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
 
             # Store pending builder (will be checked by frame loop if active)
-            self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_anonymous(), cron_job)
+            self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_base_layer(), cron_job)
             return
 
         # Handle rate-based builder caching
@@ -460,8 +453,8 @@ class RigState:
             # Cache this builder
             self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
 
-        # Validate mode consistency for user layers
-        if not builder.config.is_anonymous() and layer in self._active_builders:
+        # Validate mode consistency for modifier layers
+        if builder.config.is_modifier_layer() and layer in self._active_builders:
             existing_builder = self._active_builders[layer]
             existing_mode = existing_builder.config.mode
             new_mode = builder.config.mode
@@ -480,7 +473,7 @@ class RigState:
 
         behavior = builder.config.get_effective_behavior()
 
-        if not builder.config.is_anonymous() and layer in self._active_builders:
+        if builder.config.is_modifier_layer() and layer in self._active_builders:
             if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
                 return
 
@@ -491,7 +484,7 @@ class RigState:
         # Track layer order
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
-        elif layer != "__base__":
+        elif not builder.config.is_base_layer():
             if layer not in self._layer_orders:
                 self._layer_orders[layer] = self._next_auto_order
                 self._next_auto_order += 1
@@ -664,10 +657,10 @@ class RigState:
             elif property_name == "pos":
                 self._absolute_base_pos = current_value
 
-            # Remove all anonymous layer builders affecting this property
+            # Remove all base layer builders affecting this property
             layers_to_remove = [
                 l for l, b in self._active_builders.items()
-                if b.config.is_anonymous() and b.config.property == property_name
+                if b.config.is_base_layer() and b.config.property == property_name
             ]
             for l in layers_to_remove:
                 if l in self._active_builders:
@@ -696,7 +689,7 @@ class RigState:
         user_builders = []   # User layers
 
         for layer_name, builder in self._active_builders.items():
-            if layer_name == "__base__":
+            if builder.config.is_base_layer():
                 base_builders.append(builder)
             else:
                 user_builders.append(builder)
@@ -776,7 +769,7 @@ class RigState:
 
         for layer_name, builder in self._active_builders.items():
             if builder.config.property in ("speed", "direction", "vector"):
-                if layer_name == "__base__":
+                if builder.config.is_base_layer():
                     base_builders.append(builder)
                 else:
                     user_builders.append(builder)
@@ -963,7 +956,7 @@ class RigState:
 
         # Execute ready builders
         for debounce_key in ready_keys:
-            target_time, config, is_anon, cron_job = self._debounce_pending[debounce_key]
+            target_time, config, is_base, cron_job = self._debounce_pending[debounce_key]
             del self._debounce_pending[debounce_key]
 
             # Cancel cron if it exists (shouldn't fire since we're executing now)
@@ -976,7 +969,7 @@ class RigState:
 
             # Create and add the actual builder
             from .builder import ActiveBuilder
-            actual_builder = ActiveBuilder(config, self, is_anon)
+            actual_builder = ActiveBuilder(config, self, is_base)
             self.add_builder(actual_builder)
 
     def _sync_to_manual_mouse_movement(self) -> bool:
@@ -1189,7 +1182,7 @@ class RigState:
                 # No lifecycle - instant application
 
                 from .builder import ActiveBuilder
-                placeholder = ActiveBuilder(placeholder_config, self, is_anonymous=False)
+                placeholder = ActiveBuilder(placeholder_config, self, is_base_layer=False)
                 self._active_builders[layer] = placeholder
             else:
                 self.remove_builder(layer)
@@ -1284,7 +1277,7 @@ class RigState:
             return True
 
         # Check if any builder or its children have an incomplete lifecycle
-        for builder in self._active_builders.values():
+        for layer, builder in self._active_builders.items():
             if not builder.lifecycle.is_complete():
                 return True
             # Check children (only layers have children, but all builders have the array)
@@ -1354,7 +1347,7 @@ class RigState:
             rig.state.layers  # ["sprint", "drift"]
         """
         return [layer for layer, builder in self._active_builders.items()
-                if not builder.config.is_anonymous()]
+                if builder.config.is_modifier_layer()]
 
     # Layer state access
     class LayerState:
@@ -1538,9 +1531,9 @@ class RigState:
         @property
         def target(self):
             """Target value from base layer animation (None if no base animation)"""
-            # Find base (anonymous) layers for this property
+            # Find base layers for this property
             for layer_name, builder in self._rig_state._active_builders.items():
-                if (builder.config.is_anonymous() and
+                if (builder.config.is_base_layer() and
                     builder.config.property == self._property_name and
                     not builder.lifecycle.is_complete()):
                     return builder.target_value
@@ -1775,14 +1768,14 @@ class RigState:
             from .contracts import BuilderConfig
 
             config = BuilderConfig()
-            config.layer_name = self._generate_base_layer_name()
             config.property = "speed"
+            config.layer_name = f"base.{config.property}"
             config.operator = "to"
             config.value = 0
             config.over_ms = transition_ms
             config.over_easing = easing
 
-            builder = ActiveBuilder(config, self, is_anonymous=True)
+            builder = ActiveBuilder(config, self, is_base_layer=True)
             self._active_builders[config.layer_name] = builder
             self._ensure_frame_loop_running()
 
@@ -1870,7 +1863,7 @@ class RigState:
                 base_value = 0
 
             # Create group lifecycle for coordinated revert
-            builder.group_lifecycle = Lifecycle(is_user_layer=not builder.is_anonymous)
+            builder.group_lifecycle = Lifecycle(is_modifier_layer=not builder.is_base_layer)
             builder.group_lifecycle.over_ms = 0  # Skip over phase
             builder.group_lifecycle.hold_ms = 0  # Skip hold phase
             builder.group_lifecycle.revert_ms = revert_ms if revert_ms is not None else 0

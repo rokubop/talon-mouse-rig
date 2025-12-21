@@ -11,6 +11,7 @@ from .core import Vec2, EPSILON, mouse_move, mouse_move_relative
 from .contracts import (
     BuilderConfig,
     LifecyclePhase,
+    LayerType,
     validate_timing,
     validate_has_operation,
     validate_api_has_operation,
@@ -54,10 +55,11 @@ class ModeProxy:
         self.mode = mode
 
     def _set_implicit_layer(self, property_name: str) -> None:
-        """Set implicit layer name based on property + mode if using anonymous base layer"""
-        if self.builder.is_anonymous:
+        """Convert from base layer to auto-named modifier if no explicit layer name was given"""
+        if not self.builder.config.is_user_named:
             implicit_name = f"{property_name}.{self.mode}"
             self.builder.config.layer_name = implicit_name
+            self.builder.config.layer_type = LayerType.AUTO_NAMED_MODIFIER
 
     @property
     def pos(self) -> 'PropertyBuilder':
@@ -99,12 +101,17 @@ class RigBuilder:
         self._lifecycle_stage = None
 
         if layer is None:
-            self.config.layer_name = rig_state._generate_base_layer_name()
+            self.config.layer_name = "__base_pending__"
+            self.config.layer_type = LayerType.BASE
+            self.config.is_user_named = False
         else:
             if not layer or not layer.strip():
                 self._mark_invalid()
                 raise ValueError("Empty layer name not allowed. Layer names must be non-empty strings.")
+            # User-provided layer name - type will be set when mode is determined
             self.config.layer_name = layer
+            self.config.layer_type = None  # Set later when mode is known
+            self.config.is_user_named = True
 
         if order is not None:
             self.config.order = order
@@ -114,9 +121,9 @@ class RigBuilder:
         self._is_valid = False
 
     @property
-    def is_anonymous(self) -> bool:
-        """Check if this is an anonymous builder (base layer without user-defined name)"""
-        return self.config.layer_name == "__base__"
+    def is_base_layer(self) -> bool:
+        """Check if this is a base layer builder (transient, auto-bakes)"""
+        return self.config.is_base_layer()
 
     # ========================================================================
     # MODE ACCESSORS
@@ -375,14 +382,14 @@ class RigBuilder:
 
     def __repr__(self) -> str:
         """Provide informative representation of the builder"""
-        if not self.is_anonymous:
+        if not self.is_base_layer:
             return f"RigBuilder(layer='{self.config.layer_name}')"
         return f"RigBuilder()"
 
     def __str__(self) -> str:
         """Provide user-friendly string representation"""
         msg = "<RigBuilder - use for chaining operations"
-        if not self.is_anonymous:
+        if not self.is_base_layer:
             msg += f" on layer '{self.config.layer_name}'"
         msg += ">\n\n"
         msg += "Available operations:\n"
@@ -431,17 +438,17 @@ class RigBuilder:
     def _execute_queue_behavior(self):
         """Execute builder with queue behavior - enqueue or start immediately"""
         # Create temporary ActiveBuilder to get queue key
-        temp_active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
+        temp_active = ActiveBuilder(self.config, self.rig_state, self.is_base_layer)
         queue_key = self.rig_state._get_queue_key(self.config.layer_name, temp_active)
         queue = self.rig_state._queue_manager.get_queue(queue_key)
 
         # Capture config for execution callback
         config = self.config
-        is_anon = self.is_anonymous
+        is_base = self.is_base_layer
 
         def execute_callback():
             """Callback to execute this builder"""
-            new_builder = ActiveBuilder(config, self.rig_state, is_anon, queue=queue)
+            new_builder = ActiveBuilder(config, self.rig_state, is_base, queue=queue)
             self.rig_state.add_builder(new_builder)
 
         # Check if queue is actively executing OR has items waiting
@@ -455,7 +462,7 @@ class RigBuilder:
 
     def _execute_direct(self):
         """Execute builder directly without queue behavior"""
-        active = ActiveBuilder(self.config, self.rig_state, self.is_anonymous)
+        active = ActiveBuilder(self.config, self.rig_state, self.is_base_layer)
         self.rig_state.add_builder(active)
 
     def _calculate_rate_durations(self):
@@ -611,11 +618,20 @@ class PropertyBuilder:
 
         self.rig_builder.config.property = property_name
 
+        # Set base layer name if this is a base operation (layer is still pending)
+        if self.rig_builder.config.layer_name == "__base_pending__":
+            self.rig_builder.config.layer_name = f"base.{property_name}"
+            self.rig_builder.config.layer_type = LayerType.BASE
+
     def _set_implicit_layer_if_needed(self, mode: str) -> None:
-        """Set implicit layer name based on property + mode if using anonymous base layer"""
-        if self.rig_builder.is_anonymous:
+        """Convert from base layer to auto-named modifier if mode is added without explicit layer name"""
+        if not self.rig_builder.config.is_user_named:
             implicit_name = f"{self.property_name}.{mode}"
             self.rig_builder.config.layer_name = implicit_name
+            self.rig_builder.config.layer_type = LayerType.AUTO_NAMED_MODIFIER
+        else:
+            # User provided layer name, now we know it's a modifier
+            self.rig_builder.config.layer_type = LayerType.USER_NAMED_MODIFIER
 
     @property
     def offset(self) -> 'PropertyBuilder':
@@ -939,18 +955,18 @@ class ActiveBuilder:
     This provides uniform handling for single builders and groups.
     """
 
-    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_anonymous: bool, queue=None):
+    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_base_layer: bool, queue=None):
         import time
 
         self.config = config
         self.rig_state = rig_state
-        self.is_anonymous = is_anonymous
+        self.is_base_layer = is_base_layer
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
         self.queue = queue  # Optional queue for accessing accumulated state
 
-        # For anonymous layers, set mode based on operator semantics
-        if config.mode is None and is_anonymous:
+        # For base layers, set mode based on operator semantics
+        if config.mode is None and is_base_layer:
             if config.operator == "to":
                 config.mode = "override"  # Absolute value
             elif config.operator in ("mul", "div"):
@@ -966,7 +982,7 @@ class ActiveBuilder:
 
         self._marked_for_removal: bool = False
 
-        self.lifecycle = Lifecycle(is_user_layer=not is_anonymous)
+        self.lifecycle = Lifecycle(is_modifier_layer=not is_base_layer)
         self.lifecycle.over_ms = config.over_ms
         self.lifecycle.over_easing = config.over_easing
         self.lifecycle.hold_ms = config.hold_ms

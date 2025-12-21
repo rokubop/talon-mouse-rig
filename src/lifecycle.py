@@ -16,25 +16,21 @@ import math
 class Lifecycle:
     """Manages the over/hold/revert lifecycle for a builder"""
 
-    def __init__(self, is_user_layer: bool = False):
-        # Configuration
+    def __init__(self, is_modifier_layer: bool = False):
         self.over_ms: Optional[float] = None
         self.over_easing: str = "linear"
         self.hold_ms: Optional[float] = None
         self.revert_ms: Optional[float] = None
         self.revert_easing: str = "linear"
 
-        # Whether this is for a is_named_layer builder (affects completion logic)
-        self.is_user_layer = is_user_layer
+        self.is_modifier_layer = is_modifier_layer
 
-        # Callbacks per phase (phase -> list of callbacks)
         self.callbacks: dict[str, list[Callable]] = {
             LifecyclePhase.OVER: [],
             LifecyclePhase.HOLD: [],
             LifecyclePhase.REVERT: [],
         }
 
-        # Runtime state
         self.phase: Optional[str] = None
         self.phase_start_time: Optional[float] = None
         self.started = False
@@ -228,11 +224,11 @@ class Lifecycle:
         if self.has_reverted():
             return True
 
-        # Anonymous and complete (no revert) - remove it
-        if not self.is_user_layer:
+        # Base layer and complete (no revert) - remove it
+        if not self.is_modifier_layer:
             return True
 
-        # Named, complete, not reverted - keep it active
+        # Modifier layer, complete, not reverted - keep it active
         return False
 
 
