@@ -2,8 +2,8 @@
 
 Unified state manager with:
 - Base state (baked values)
-- Active builders (temporary modifications)
-- Queue system
+- Layer groups (containers for builders)
+- Queue system (integrated into groups)
 - Frame loop
 """
 
@@ -12,7 +12,7 @@ import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
 from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative
-from .queue import QueueManager
+from .layer_group import LayerGroup
 from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
 from . import mode_operations, rate_utils
 from .contracts import BuilderConfig
@@ -30,14 +30,12 @@ class RigState:
         self._base_speed: float = 0.0
         self._base_direction: Vec2 = Vec2(1, 0)
 
-        # Active builders (layer_name -> ActiveBuilder)
-        self._active_builders: dict[str, 'ActiveBuilder'] = {}
+        # Layer groups (layer_name -> LayerGroup)
+        # Each group contains multiple builders and manages their lifecycle
+        self._layer_groups: dict[str, LayerGroup] = {}
 
         # Layer order tracking (layer_name -> order)
         self._layer_orders: dict[str, int] = {}
-
-        # Queue system
-        self._queue_manager = QueueManager()
 
         # Frame loop
         self._frame_loop_job: Optional[cron.CronJob] = None
@@ -46,8 +44,11 @@ class RigState:
         # Track current screen position with subpixel precision (lazy init - only for pos.to)
         self._absolute_current_pos: Optional[Vec2] = None
 
-        # Throttle tracking (layer -> last execution time)
+        # Throttle tracking (global - spans group recreation)
         self._throttle_times: dict[str, float] = {}
+
+        # Auto-order counter for layers without explicit order
+        self._next_auto_order: int = 0
 
         # Rate-based builder cache (cache_key -> (builder, target_value))
         # Cache key: (layer, property, operator, normalized_target)
