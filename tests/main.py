@@ -239,7 +239,8 @@ def run_all_tests(tests, group_name):
             else:
                 _test_runner_state["failed_count"] += 1
 
-            if not success:
+            stop_on_fail = actions.user.ui_elements_get_state("stop_on_fail", True)
+            if not success and stop_on_fail:
                 print("Stopping test run due to failure")
                 show_summary()
             elif _test_runner_state["running"]:
@@ -364,7 +365,11 @@ def run_all_tests_global(test_groups):
                 with open(_test_runner_state["test_results_file"], "a") as f:
                     f.write(result_msg)
 
-            if _test_runner_state["running"]:
+            stop_on_fail = actions.user.ui_elements_get_state("stop_on_fail", True)
+            if not success and stop_on_fail:
+                print("Stopping test run due to failure")
+                finalize_results()
+            elif _test_runner_state["running"]:
                 run_next_test()
 
         fast_mode = actions.user.ui_elements_get_state("fast_mode", True)
@@ -438,6 +443,7 @@ def test_runner_ui(test_groups):
 
     # Fast mode checkbox (applies to all test runs)
     fast_mode, set_fast_mode = state.use("fast_mode", True)
+    stop_on_fail, set_stop_on_fail = state.use("stop_on_fail", True)
 
     # Run All Tests button at top
     run_all_tests_active = state.get("run_all_tests_global", False)
@@ -453,11 +459,11 @@ def test_runner_ui(test_groups):
     }
 
     run_all_tests_button = div(
-        flex_direction="row",
+        flex_direction="column",
         justify_content="center",
         align_items="center",
-        gap=16,
-        margin_bottom=24
+        gap=20,
+        margin_bottom=32
     )[
         button(
             padding=10,
@@ -473,9 +479,15 @@ def test_runner_ui(test_groups):
             icon(run_all_tests_icon, size=14, color="white"),
             text(run_all_tests_label, color="white", font_weight="bold", font_size=13)
         ],
-        div(flex_direction="row", gap=8, align_items="center", margin_left=32)[
-            checkbox(checkbox_props, background_color="#454545", id="fast_mode", checked=fast_mode, on_change=lambda e: set_fast_mode(e.checked)),
-            text("Fast", for_id="fast_mode", color="#cccccc", font_size=14, font_weight="bold"),
+        div(flex_direction="row", gap=24, align_items="center")[
+            div(flex_direction="row", gap=8, align_items="center")[
+                checkbox(checkbox_props, background_color="#454545", id="fast_mode", checked=fast_mode, on_change=lambda e: set_fast_mode(e.checked)),
+                text("Fast", for_id="fast_mode", color="#cccccc", font_size=14, font_weight="bold"),
+            ],
+            div(flex_direction="row", gap=8, align_items="center")[
+                checkbox(checkbox_props, background_color="#454545", id="stop_on_fail", checked=stop_on_fail, on_change=lambda e: set_stop_on_fail(e.checked)),
+                text("Stop on fail", for_id="stop_on_fail", color="#cccccc", font_size=14, font_weight="bold"),
+            ]
         ]
     ]
 
