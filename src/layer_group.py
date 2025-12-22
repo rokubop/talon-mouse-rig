@@ -32,13 +32,16 @@ class LayerGroup:
         layer_name: str,
         property: str,
         mode: Optional[str],
-        is_base: bool,
+        layer_type: str,
         order: Optional[int] = None
     ):
+        from .contracts import LayerType
+
         self.layer_name = layer_name
         self.property = property
         self.mode = mode
-        self.is_base = is_base
+        self.layer_type = layer_type
+        self.is_base = (layer_type == LayerType.BASE)
         self.order = order
         self.creation_time = time.perf_counter()
 
@@ -51,6 +54,9 @@ class LayerGroup:
             self.accumulated_value: Any = None
         else:
             self.accumulated_value: Any = self._zero_value()
+
+        # Cached final target value (what accumulated_value will be after all builders complete)
+        self.final_target: Optional[Any] = None
 
         # Queue system (sequential execution within this layer)
         self.pending_queue: deque[Callable] = deque()
@@ -76,15 +82,18 @@ class LayerGroup:
         """Add a builder to this group"""
         self.builders.append(builder)
         builder.group = self  # Back-reference for builder to find its group
+        self._recalculate_final_target()
 
     def remove_builder(self, builder: 'ActiveBuilder'):
         """Remove a builder from this group"""
         if builder in self.builders:
             self.builders.remove(builder)
+            self._recalculate_final_target()
 
     def clear_builders(self):
         """Remove all active builders (used by replace behavior)"""
         self.builders.clear()
+        self._recalculate_final_target()
 
     def bake_builder(self, builder: 'ActiveBuilder') -> str:
         """Builder completed - bake its value
@@ -100,7 +109,11 @@ class LayerGroup:
                 return "bake_to_base"
             else:
                 # Modifier layers that revert clear their accumulated value
-                self.accumulated_value = self._zero_value()
+                # Set to zero based on current type, not property default
+                if isinstance(self.accumulated_value, Vec2):
+                    self.accumulated_value = Vec2(0, 0)
+                else:
+                    self.accumulated_value = 0.0
                 return "reverted"
 
         value = builder.get_interpolated_value()
@@ -118,18 +131,27 @@ class LayerGroup:
                 self.accumulated_value = Vec2(0, 0)
             else:
                 self.accumulated_value = value
-        
+
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
         return "baked_to_group"
 
     def _apply_mode(self, current: Any, incoming: Any, mode: Optional[str]) -> Any:
         """Apply mode operation to combine values within this layer group"""
         if mode == "offset" or mode == "add":
+            # Handle None (uninitialized direction.offset) - treat as zero of incoming type
+            if current is None:
+                return incoming
             # Accumulate values (angles add, vectors add)
             if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
                 return current + incoming
             if isinstance(current, Vec2) and isinstance(incoming, Vec2):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
+            # Type mismatch: if current is scalar but incoming is Vec2, treat current as zero
+            if isinstance(current, (int, float)) and isinstance(incoming, Vec2):
+                return incoming
+            if isinstance(current, Vec2) and isinstance(incoming, (int, float)):
+                # This shouldn't happen but handle it gracefully
+                return current
             return current + incoming
         elif mode == "override":
             # Override replaces
@@ -146,12 +168,12 @@ class LayerGroup:
 
     def get_current_value(self) -> Any:
         """Get aggregated value: accumulated + all active builders
-        
+
         For base layers: Just return the builder's value directly (modes don't apply)
         For modifier layers: Apply modes (offset/override/scale) to accumulated value
         """
         print(f"[DEBUG LayerGroup.get_current_value] Layer '{self.layer_name}': is_base={self.is_base}, accumulated_value={self.accumulated_value}, {len(self.builders)} builders")
-        
+
         # Base layers: ignore accumulated_value (always 0), just use builder value
         if self.is_base:
             if not self.builders:
@@ -166,10 +188,10 @@ class LayerGroup:
                     last_value = builder_value
             print(f"[DEBUG LayerGroup.get_current_value] Final result (base): {last_value}")
             return last_value
-        
+
         # Modifier layers: start with accumulated value and apply modes
         result = self.accumulated_value
-        
+
         # Initialize if None (for direction.offset that hasn't accumulated yet)
         if result is None:
             # Determine the correct zero value from first builder's type
@@ -181,7 +203,7 @@ class LayerGroup:
                     result = 0.0
             else:
                 result = 0.0
-        
+
         for builder in self.builders:
             builder_value = builder.get_interpolated_value()
             print(f"[DEBUG LayerGroup.get_current_value]   Modifier builder: value={builder_value}, mode={builder.config.mode}")
@@ -191,6 +213,46 @@ class LayerGroup:
         print(f"[DEBUG LayerGroup.get_current_value] Final result (modifier): {result}")
         return result
 
+    def _recalculate_final_target(self):
+        """Recalculate cached final target value after all builders complete"""
+        if not self.builders:
+            self.final_target = None
+            return
+
+        # Base layers: return last builder's target (most recent operation)
+        if self.is_base:
+            self.final_target = self.builders[-1].target_value
+            return
+
+        # Modifier layers: compute final accumulated value after all builders complete
+        result = self.accumulated_value
+
+        # Initialize if None (for direction.offset)
+        if result is None:
+            first_target = self.builders[0].target_value
+            if isinstance(first_target, Vec2):
+                result = Vec2(0, 0)
+            else:
+                result = 0.0
+
+        # Apply all builder targets
+        for builder in self.builders:
+            target = builder.target_value
+            if target is not None:
+                result = self._apply_mode(result, target, builder.config.mode)
+
+        self.final_target = result
+
+    @property
+    def value(self) -> Any:
+        """Current value (accumulated + all active builders)"""
+        return self.get_current_value()
+
+    @property
+    def target(self) -> Optional[Any]:
+        """Final target value after all active builders complete (cached)"""
+        return self.final_target
+
     def should_persist(self) -> bool:
         """Should this group stay alive?
 
@@ -199,24 +261,27 @@ class LayerGroup:
         """
         # Any layer persists if it has active builders
         if len(self.builders) > 0:
+            print(f"[DEBUG should_persist] {self.layer_name}: YES - has {len(self.builders)} active builders")
             return True
 
         # Base layers with no builders should be removed
         if self.is_base:
+            print(f"[DEBUG should_persist] {self.layer_name}: NO - base layer with no builders")
             return False
 
         # Modifier persists if it has accumulated non-zero value
-        return not self._is_reverted_to_zero()
+        is_zero = self._is_reverted_to_zero()
+        print(f"[DEBUG should_persist] {self.layer_name}: {'NO' if is_zero else 'YES'} - modifier layer, accumulated_value={self.accumulated_value}, is_zero={is_zero}")
+        return not is_zero
 
     def _is_reverted_to_zero(self) -> bool:
         """Check if accumulated value is effectively zero/identity"""
-        zero = self._zero_value()
-
-        if isinstance(zero, Vec2):
+        if isinstance(self.accumulated_value, Vec2):
             return (abs(self.accumulated_value.x) < EPSILON and
                     abs(self.accumulated_value.y) < EPSILON)
 
-        return abs(self.accumulated_value - zero) < EPSILON
+        # For scalar values (float), check if close to 0.0
+        return abs(self.accumulated_value) < EPSILON
 
     def enqueue_builder(self, execution_callback: Callable):
         """Add a builder to this group's queue"""

@@ -285,19 +285,27 @@ def test_layer_direction_offset_by(on_success, on_failure):
     def check_result():
         rig_check = actions.user.mouse_rig()
 
+        # DEBUG: Print all available layers
+        print(f"DEBUG: rig.state.layers = {rig_check.state.layers}")
+        print(f"DEBUG: _layer_groups keys = {list(rig_check.state._layer_groups.keys())}")
+
+        # DEBUG: Check what direction values we have
+        direction = rig_check.state.direction
+        print(f"DEBUG: direction.value = ({direction.x:.2f}, {direction.y:.2f})")
+        print(f"DEBUG: direction.offset = {rig_check.state.direction.offset}")
+
         # Check direction offset state
         offset_state = rig_check.state.direction.offset
         if not offset_state:
-            on_failure("Expected direction.offset state but not found")
+            on_failure(f"Expected direction.offset state but not found. Available layers: {rig_check.state.layers}, layer_groups: {list(rig_check.state._layer_groups.keys())}")
             return
 
         # Check layer exists in rig.state.layers
         if "direction.offset" not in rig_check.state.layers:
-            on_failure("Expected 'direction.offset' layer in rig.state.layers")
+            on_failure(f"Expected 'direction.offset' layer in rig.state.layers. Found: {rig_check.state.layers}")
             return
 
         # Check overall rig direction (should be pointing down/right at 90deg)
-        direction = rig_check.state.direction
         if abs(direction.x) > 0.1 or abs(direction.y - 1.0) > 0.1:
             on_failure(f"Rig direction is ({direction.x:.2f}, {direction.y:.2f}), expected (0, 1)")
             return

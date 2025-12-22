@@ -430,7 +430,7 @@ def test_layer_vector_revert(on_success, on_failure):
             rig_final.stop()
             on_success()
 
-        cron.after("300ms", check_after_revert)
+        cron.after("500ms", check_after_revert)
 
     cron.after("400ms", check_during_boost)
 

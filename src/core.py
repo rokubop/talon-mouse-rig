@@ -125,6 +125,10 @@ class Vec2:
     def to_tuple(self) -> Tuple[float, float]:
         return (self.x, self.y)
 
+    def copy(self) -> 'Vec2':
+        """Return a copy of this vector"""
+        return Vec2(self.x, self.y)
+
     def to_cardinal(self) -> Optional[str]:
         """Convert vector to cardinal/intercardinal direction string
 

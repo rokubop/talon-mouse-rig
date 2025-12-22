@@ -109,14 +109,14 @@ def wait_for_stop(check_duration=0.3, timeout=TIMEOUT):
     return False
 
 
-def move_to_center():
+def move_to_center(fast_mode=False):
     """Move mouse to center position instantly"""
     actions.user.mouse_rig().stop()
-    actions.sleep("100ms")
+    actions.sleep("50ms" if fast_mode else "100ms")
 
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
-    actions.sleep("200ms")
+    actions.sleep("50ms" if fast_mode else "200ms")
 
 
 def run_single_test(test_name, test_func, on_complete=None, test_group=None, fast_mode=False):
@@ -168,7 +168,7 @@ def run_single_test(test_name, test_func, on_complete=None, test_group=None, fas
     try:
         # Skip move_to_center for validation and contract tests
         if test_group not in ("Validation", "Contracts"):
-            move_to_center()
+            move_to_center(fast_mode)
 
         sig = inspect.signature(test_func)
         is_async_test = len(sig.parameters) >= 2
@@ -244,7 +244,9 @@ def run_all_tests(tests, group_name):
                 print("Stopping test run due to failure")
                 show_summary()
             elif _test_runner_state["running"]:
-                cron.after("200ms", run_next_test)
+                fast_mode = actions.user.ui_elements_get_state("fast_mode", True)
+                delay = "50ms" if fast_mode else "200ms"
+                cron.after(delay, run_next_test)
 
         fast_mode = actions.user.ui_elements_get_state("fast_mode", True)
         run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=_test_runner_state["group_name"], fast_mode=fast_mode)
