@@ -26,7 +26,7 @@ def test_pos_to():
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
     assert rig._state._frame_loop_job is None, "Frame loop should be stopped"
-    assert len(rig._state._active_builders) == 0, f"Expected no active builders, got {len(rig._state._active_builders)}"
+    assert len(rig._state._layer_groups) == 0, f"Expected no active builders, got {len(rig._state._layer_groups)}"
 
 
 def test_pos_to_over(on_success, on_failure):
@@ -49,8 +49,8 @@ def test_pos_to_over(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -88,8 +88,8 @@ def test_pos_to_over_hold_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -117,8 +117,8 @@ def test_pos_to_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -154,8 +154,8 @@ def test_pos_by(on_success, on_failure):
             if rig_check._state._frame_loop_job is not None:
                 on_failure("Frame loop should be stopped")
                 return
-            if len(rig_check._state._active_builders) != 0:
-                on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+            if len(rig_check._state._layer_groups) != 0:
+                on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
                 return
             on_success()
         else:
@@ -188,8 +188,8 @@ def test_pos_by_over(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -235,8 +235,8 @@ def test_pos_by_over_hold_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig.api("talon").pos.by(dx, dy).over(300).then(check_after_over).hold(300).then(check_after_hold).revert(300).then(check_after_revert)
@@ -265,8 +265,8 @@ def test_pos_by_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -324,8 +324,8 @@ def test_layer_pos_to_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -385,8 +385,8 @@ def test_layer_pos_by_revert(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
 
     rig = actions.user.mouse_rig()
@@ -422,7 +422,7 @@ def test_pos_by_twice():
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
     assert rig._state._frame_loop_job is None, "Frame loop should be stopped"
-    assert len(rig._state._active_builders) == 0, f"Expected no active builders, got {len(rig._state._active_builders)}"
+    assert len(rig._state._layer_groups) == 0, f"Expected no active builders, got {len(rig._state._layer_groups)}"
 
 
 def test_pos_to_then_by():
@@ -450,7 +450,7 @@ def test_pos_to_then_by():
     # State checks
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
     assert rig._state._frame_loop_job is None, "Frame loop should be stopped"
-    assert len(rig._state._active_builders) == 0, f"Expected no active builders, got {len(rig._state._active_builders)}"
+    assert len(rig._state._layer_groups) == 0, f"Expected no active builders, got {len(rig._state._layer_groups)}"
 
 
 # ============================================================================

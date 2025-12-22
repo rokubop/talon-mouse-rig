@@ -341,7 +341,7 @@ def test_stop_immediate():
     assert rig.state.speed == 0, f"Speed should be 0, got {rig.state.speed}"
     assert len(rig.state.layers) == 0, f"Expected no active layers, got: {rig.state.layers}"
     assert rig._state._frame_loop_job is None, "Frame loop should be stopped"
-    assert len(rig._state._active_builders) == 0, f"Expected no active builders, got {len(rig._state._active_builders)}"
+    assert len(rig._state._layer_groups) == 0, f"Expected no active builders, got {len(rig._state._layer_groups)}"
 
 
 def test_stop_over(on_success, on_failure):
@@ -362,8 +362,8 @@ def test_stop_over(on_success, on_failure):
         if rig_check._state._frame_loop_job is not None:
             on_failure("Frame loop should be stopped")
             return
-        if len(rig_check._state._active_builders) != 0:
-            on_failure(f"Expected no active builders, got {len(rig_check._state._active_builders)}")
+        if len(rig_check._state._layer_groups) != 0:
+            on_failure(f"Expected no active builders, got {len(rig_check._state._layer_groups)}")
             return
         on_success()
 
