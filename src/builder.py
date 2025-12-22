@@ -27,6 +27,7 @@ from . import mode_operations
 
 if TYPE_CHECKING:
     from .state import RigState
+    from .layer_group import LayerGroup
 
 
 class BehaviorProxy:
@@ -950,7 +951,7 @@ class PropertyBuilder:
 
 class ActiveBuilder:
     """An active builder being executed in the state manager
-    
+
     Builders are now managed by LayerGroups - they are siblings within a group,
     not parent/child relationships.
     """
@@ -964,7 +965,7 @@ class ActiveBuilder:
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
         self.queue = queue  # Optional queue for accessing accumulated state
-        
+
         # Back-reference to containing group (set by LayerGroup.add_builder)
         self.group: Optional['LayerGroup'] = None
 
@@ -1169,7 +1170,7 @@ class ActiveBuilder:
             - phase_transitions: List of (builder, completed_phase) for callbacks
         """
         phase_transitions = []
-        
+
         if self.group_lifecycle:
             self.group_lifecycle.advance(current_time)
             if self.group_lifecycle.is_complete():
@@ -1183,7 +1184,7 @@ class ActiveBuilder:
 
         # Update lifecycle
         self.lifecycle.advance(current_time)
-        
+
         # Track phase transition
         new_phase = self.lifecycle.phase
         if old_phase != new_phase and old_phase is not None:
@@ -1203,6 +1204,9 @@ class ActiveBuilder:
         current_time = time.perf_counter()
         phase, progress = self.lifecycle.advance(current_time)
         mode = self.config.mode
+        
+        if self.config.property == "pos" and phase is None and self.lifecycle.has_reverted():
+            print(f"[DEBUG _get_own_value] REVERT COMPLETE: base_value={self.base_value}, target_value={self.target_value}, has_reverted={self.lifecycle.has_reverted()}")
 
         if self.config.property == "speed":
             # Get neutral value based on mode
@@ -1349,7 +1353,7 @@ class ActiveBuilder:
 
     def get_interpolated_value(self) -> Any:
         """Get current interpolated value for this builder
-        
+
         No children - just return own value. Group handles aggregation.
         """
         # Handle group lifecycle if active
@@ -1369,6 +1373,6 @@ class ActiveBuilder:
                 self.group_lifecycle.has_reverted(),
                 interpolation
             )
-        
+
         # Return own value
         return self._get_own_value()

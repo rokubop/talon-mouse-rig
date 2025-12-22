@@ -172,182 +172,43 @@ class RigState:
 
         Returns None if layer doesn't exist
         """
-        if layer in self._active_builders:
-            return self._active_builders[layer].time_alive
+        if layer in self._layer_groups:
+            group = self._layer_groups[layer]
+            if group.builders:
+                # Return time of first builder
+                return group.builders[0].time_alive
         return None
-
-    def _handle_user_layer_behavior(self, builder: 'ActiveBuilder', existing: 'ActiveBuilder', behavior: str) -> bool:
-        """Handle behavior for existing user layer
-
-        Returns True if handled (early return), False if should continue processing
-        """
-        layer = builder.config.layer_name
-
-        if behavior == "replace":
-            # Replace old layer state with new state
-            # Key: Set base_value to old value so tick animates old → new
-
-            # Capture current value BEFORE any state changes
-            current_time = time.perf_counter()
-            existing.advance(current_time)  # Ensure up-to-date
-            old_value = existing.get_interpolated_value()
-
-            # REPLACE semantics for pos.offset:
-            # The old builder has already emitted some pixels (tracked in _total_emitted_int)
-            # The new builder needs to continue from there to reach its target, then revert ALL the way to zero
-
-            if builder.config.property == "pos" and builder.config.mode == "offset":
-                # Get how much was already emitted by old builder
-                old_emitted = getattr(existing, '_total_emitted_int', Vec2(0, 0))
-
-                # Transfer emission tracking to new builder so it knows where we are
-                builder._total_emitted_int = old_emitted
-                builder._last_emitted_relative_pos = old_value
-
-                # Keep target as-is (the new absolute target)
-                # The frame loop will emit: target - already_emitted
-            elif builder.config.mode == "override":
-                # Override mode (absolute values): Keep target as-is
-                # Just update base_value to current value so animation goes from current -> target
-                # This applies to pos.override.to(), speed.override.to(), direction.override.to()
-                builder.base_value = old_value
-            else:
-                # Standard replace for offset mode: emit only the remaining delta
-                remaining_delta = builder.target_value - old_value
-                # Use appropriate zero value based on property type
-                if isinstance(builder.base_value, Vec2):
-                    builder.base_value = Vec2(0, 0)
-                else:
-                    builder.base_value = 0.0
-                builder.target_value = remaining_delta
-
-            # ATOMIC REPLACE: Add new builder first, then remove old
-            # This prevents a gap where the layer is empty (which could emit zero)
-            self._active_builders[layer] = builder
-
-            # Track layer order (same logic as in add_builder)
-            if builder.config.order is not None:
-                self._layer_orders[layer] = builder.config.order
-            elif not builder.config.is_base_layer():
-                if layer not in self._layer_orders:
-                    self._layer_orders[layer] = self._next_auto_order
-                    self._next_auto_order += 1
-
-            return True  # Handled, we manually added the builder
-        elif behavior == "throttle":
-            # No args = ignore while any builder active on layer
-            if not builder.config.behavior_args:
-                return True  # Ignored, early return
-
-            # With args = check throttle timing
-            if self._check_throttle(builder, layer):
-                return True  # Throttled, early return
-            
-            existing.add_child(builder)
-            return True  # Handled, early return
-        elif behavior == "stack":
-            # Stack - add as child
-            if builder.config.behavior_args:
-                # Stack with max count - enforce limit
-                # Max includes parent + children, so max=2 means parent + 1 child
-                max_count = builder.config.behavior_args[0]
-                total_count = 1 + len(existing.children)  # parent + children
-                if total_count >= max_count:
-                    # Already at max, don't add
-                    return True  # Handled, early return
-
-            existing.add_child(builder)
-            return True  # Handled, early return
-        elif behavior == "queue":
-            # Queue behavior: add as child so both builders coexist
-            # Each queue item will animate sequentially but both exist on the layer
-            if builder.config.behavior_args:
-                # Queue with max count - enforce limit
-                # Max includes parent + children, so max=2 means parent + 1 child
-                max_count = builder.config.behavior_args[0]
-                total_count = 1 + len(existing.children)  # parent + children
-                if total_count >= max_count:
-                    # Already at max, don't add
-                    return True  # Handled, early return
-
-            existing.add_child(builder)
-            return True  # Handled, added as child
 
     def _check_throttle(self, builder: 'ActiveBuilder', layer: str) -> bool:
         """Check if builder should be throttled
-        
+
         Returns:
             True if throttled (should skip), False if allowed to proceed
         """
         throttle_key = self._get_throttle_key(layer, builder)
         throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-        
+
         if throttle_key in self._throttle_times:
             elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
             if elapsed < throttle_ms:
                 return True  # Throttled
-        
+
         self._throttle_times[throttle_key] = time.perf_counter()
         return False  # Not throttled
 
-    def _handle_base_layer_behavior(self, builder: 'ActiveBuilder', behavior: str) -> bool:
-        """Handle behavior for base layer operations
-        
-        Returns:
-            True if the builder was handled and should be skipped, False otherwise
-        """
-        layer = builder.config.layer_name
-
-        if behavior == "replace" and builder.config.is_base_layer():
-            # For base layers, each property has its own layer (base.speed, base.direction, etc.)
-            # If a base layer already exists for this property, remove it
-            if layer in self._active_builders:
-                self.remove_builder(layer)
-        elif behavior == "throttle":
-            if self._check_throttle(builder, layer):
-                return True  # Throttled, skip adding builder
-        
-        return False  # Not handled, continue with adding builder
-
-    def _handle_instant_completion(self, builder: 'ActiveBuilder', layer: str):
-        """Handle builders that complete instantly (no lifecycle)"""
-        # For synchronous operations, execute immediately if frame loop isn't running
-        if builder.config.is_synchronous and self._frame_loop_job is None:
-            builder.execute_synchronous()
-            # Synchronous execution already updated state, just cleanup
-            if builder.config.is_base_layer():
-                del self._active_builders[layer]
-                throttle_key = self._get_throttle_key(layer, builder)
-                if throttle_key in self._throttle_times:
-                    del self._throttle_times[throttle_key]
-            return
-
-        # Non-synchronous instant completion (bake the value)
-        if builder.config.is_base_layer():
-            if builder.config.get_effective_bake():
-                self._bake_builder(builder, removing_layer=layer)
-            del self._active_builders[layer]
-            throttle_key = self._get_throttle_key(layer, builder)
-            if throttle_key in self._throttle_times:
-                del self._throttle_times[throttle_key]
-
     def add_builder(self, builder: 'ActiveBuilder'):
-        """Add an active builder to state
+        """Add a builder to its layer group
 
-        For user layers, if layer exists, add as child to existing builder.
-        For base layers, operations execute with their configured lifecycle.
-
-        Args:
-            builder: The ActiveBuilder to add
+        Creates group if needed, handles behaviors, manages queue.
         """
         layer = builder.config.layer_name
 
-        # Handle bake operation immediately
+        # Handle special operators
         if builder.config.operator == "bake":
             self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
             return
 
-        # Handle debounce behavior - store as pending builder
+        # Handle debounce behavior
         if builder.config.behavior == "debounce":
             if not builder.config.behavior_args:
                 from .contracts import ConfigError
@@ -356,200 +217,273 @@ class RigState:
             delay_ms = builder.config.behavior_args[0]
             debounce_key = self._get_debounce_key(layer, builder.config)
 
-            # Cancel any existing pending debounce for this key
+            # Cancel existing debounce
             if debounce_key in self._debounce_pending:
                 _, _, _, old_cron_job = self._debounce_pending[debounce_key]
                 if old_cron_job is not None:
                     cron.cancel(old_cron_job)
 
-            # Store pending builder
+            # Store pending
             target_time = time.perf_counter() + (delay_ms / 1000.0)
 
-            # Schedule execution with cron fallback if no frame loop
             cron_job = None
             if self._frame_loop_job is None:
-                # No active frame loop, use cron
                 def execute_debounced():
                     if debounce_key in self._debounce_pending:
                         _, config, is_base, _ = self._debounce_pending[debounce_key]
                         del self._debounce_pending[debounce_key]
-                        # Clear debounce behavior so builder executes normally
                         config.behavior = None
                         config.behavior_args = ()
-                        # Create and add the actual builder
                         from .builder import ActiveBuilder
                         actual_builder = ActiveBuilder(config, self, is_base)
                         self.add_builder(actual_builder)
 
                 cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
 
-            # Store pending builder (will be checked by frame loop if active)
             self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_base_layer(), cron_job)
             return
 
-        # Handle rate-based builder caching
+        # Handle rate-based caching
         rate_cache_key = self._get_rate_cache_key(layer, builder.config)
         if rate_cache_key is not None:
-            # This is a rate-based operation
             if rate_cache_key in self._rate_builder_cache:
                 cached_builder, cached_target = self._rate_builder_cache[rate_cache_key]
 
-                # Check if target matches (with epsilon comparison for floats)
-                targets_match = False
-                new_target = builder.target_value
+                # Check if targets match
+                targets_match = self._targets_match(builder.target_value, cached_target)
 
-                if isinstance(new_target, (int, float)) and isinstance(cached_target, (int, float)):
-                    from .core import EPSILON
-                    targets_match = abs(new_target - cached_target) < EPSILON
-                elif isinstance(new_target, tuple) and isinstance(cached_target, tuple):
-                    from .core import EPSILON
-                    targets_match = all(abs(a - b) < EPSILON for a, b in zip(new_target, cached_target))
-                elif isinstance(new_target, Vec2) and isinstance(cached_target, Vec2):
-                    from .core import EPSILON
-                    targets_match = abs(new_target.x - cached_target.x) < EPSILON and abs(new_target.y - cached_target.y) < EPSILON
-                else:
-                    targets_match = new_target == cached_target
-
-                if targets_match and layer in self._active_builders:
-                    # Same target, builder already in progress - ignore new call
+                if targets_match and layer in self._layer_groups:
+                    # Same target in progress - ignore
                     return
                 else:
-                    # Different target - replace old builder with new one
-                    # IMPORTANT: Capture the old builder's current animated value BEFORE removing it
-                    # This value becomes the starting point for the new builder's animation
-                    if layer in self._active_builders:
-                        old_builder = self._active_builders[layer]
-                        old_current_value = old_builder.get_interpolated_value()
+                    # Different target - replace
+                    if layer in self._layer_groups:
+                        group = self._layer_groups[layer]
+                        old_current_value = group.get_current_value()
 
-                        # Remove the old builder
-                        self.remove_builder(layer)
-
-                        # Update the new builder's base_value to start from the old builder's current position
-                        # This ensures smooth transitions when replacing rate-based animations
+                        # Update builder to start from current
                         builder.base_value = old_current_value
-
-                        # Recalculate target_value based on the new base_value
                         builder.target_value = builder._calculate_target_value()
 
-                        # Recalculate rate-based duration with the new base_value
-                        if builder.config.over_rate is not None:
-                            if builder.config.property == "speed":
-                                builder.config.over_ms = rate_utils.calculate_speed_duration(
-                                    builder.base_value, builder.target_value, builder.config.over_rate
-                                )
-                            elif builder.config.property == "direction":
-                                if builder.config.operator == "to":
-                                    target_dir = Vec2.from_tuple(builder.config.value).normalized()
-                                    builder.config.over_ms = rate_utils.calculate_direction_duration(
-                                        builder.base_value, target_dir, builder.config.over_rate
-                                    )
-                                elif builder.config.operator in ("by", "add"):
-                                    angle_delta = builder.config.value[0] if isinstance(builder.config.value, tuple) else builder.config.value
-                                    builder.config.over_ms = rate_utils.calculate_direction_by_duration(
-                                        angle_delta, builder.config.over_rate
-                                    )
-                            elif builder.config.property == "pos":
-                                if builder.config.operator == "to":
-                                    target_pos = Vec2.from_tuple(builder.config.value)
-                                    builder.config.over_ms = rate_utils.calculate_position_duration(
-                                        builder.base_value, target_pos, builder.config.over_rate
-                                    )
-                                elif builder.config.operator in ("by", "add"):
-                                    offset = Vec2.from_tuple(builder.config.value)
-                                    builder.config.over_ms = rate_utils.calculate_position_by_duration(
-                                        offset, builder.config.over_rate
-                                    )
-                            elif builder.config.property == "vector":
-                                target_vec = Vec2.from_tuple(builder.config.value) if builder.config.operator == "to" else builder.base_value + Vec2.from_tuple(builder.config.value)
-                                builder.config.over_ms = rate_utils.calculate_vector_duration(
-                                    builder.base_value, target_vec, builder.config.over_rate, builder.config.over_rate
-                                )
+                        # Recalculate rate duration
+                        self._recalculate_rate_duration(builder)
 
             # Cache this builder
             self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
 
-        # Validate mode consistency for modifier layers
-        if builder.config.is_modifier_layer() and layer in self._active_builders:
-            existing_builder = self._active_builders[layer]
-            existing_mode = existing_builder.config.mode
-            new_mode = builder.config.mode
+        # Get or create group
+        group = self._get_or_create_group(builder)
 
-            # Check for mode mixing
-            if existing_mode is not None and new_mode is not None and existing_mode != new_mode:
-                from .contracts import ConfigError
-                raise ConfigError(
-                    f"Cannot mix modes on layer '{layer}'.\n"
-                    f"Existing mode: '{existing_mode}'\n"
-                    f"Attempted mode: '{new_mode}'\n\n"
-                    f"Each layer must use a single mode. Either use .replace or use separate layers for different modes:\n"
-                    f"  rig.layer('boost').speed.offset.to(100)\n"
-                    f"  rig.layer('cap').speed.override.to(200)  # Different layer"
-                )
-
+        # Handle behaviors
         behavior = builder.config.get_effective_behavior()
 
-        if builder.config.is_modifier_layer() and layer in self._active_builders:
-            if self._handle_user_layer_behavior(builder, self._active_builders[layer], behavior):
+        if behavior == "throttle":
+            if self._check_throttle(builder, layer):
+                return  # Throttled, skip
+
+        if behavior == "replace":
+            # Get current accumulated value
+            current_value = group.get_current_value()
+            builder.base_value = current_value
+            builder.target_value = builder._calculate_target_value()
+
+            # Clear existing builders
+            group.clear_builders()
+
+        elif behavior == "stack":
+            # Check max
+            if builder.config.behavior_args:
+                max_count = builder.config.behavior_args[0]
+                if len(group.builders) >= max_count:
+                    return  # At max, skip
+
+        elif behavior == "queue":
+            # Check max
+            if builder.config.behavior_args:
+                max_count = builder.config.behavior_args[0]
+                total = len(group.builders) + len(group.pending_queue)
+                if group.is_queue_active:
+                    total += 1  # Count currently executing
+                if total >= max_count:
+                    return  # At max, skip
+
+            # If queue is active or has pending, enqueue
+            if group.is_queue_active or len(group.pending_queue) > 0:
+                def execute_callback():
+                    group.add_builder(builder)
+                    if not builder.lifecycle.is_complete():
+                        self._ensure_frame_loop_running()
+
+                group.enqueue_builder(execute_callback)
                 return
+            else:
+                # First in queue - execute immediately
+                group.is_queue_active = True
 
-        if self._handle_base_layer_behavior(builder, behavior):
-            return
+        # Add builder to group
+        group.add_builder(builder)
 
-        self._active_builders[layer] = builder
+        # Start frame loop if needed
+        if not builder.lifecycle.is_complete():
+            self._ensure_frame_loop_running()
+        elif builder.config.is_synchronous:
+            # Handle instant completion
+            builder.execute_synchronous()
+            bake_result = group.on_builder_complete(builder)
+            if bake_result == "bake_to_base":
+                self._bake_group_to_base(group)
+            
+            # Remove the builder immediately for synchronous operations
+            group.remove_builder(builder)
 
-        # Track layer order
+            # Clean up empty base groups
+            if group.is_base and not group.should_persist():
+                del self._layer_groups[layer]
+                if layer in self._layer_orders:
+                    del self._layer_orders[layer]
+
+    def _get_or_create_group(self, builder: 'ActiveBuilder') -> 'LayerGroup':
+        """Get existing group or create new one for this builder"""
+        layer = builder.config.layer_name
+
+        if layer in self._layer_groups:
+            return self._layer_groups[layer]
+
+        # Create new group
+        from .layer_group import LayerGroup
+
+        group = LayerGroup(
+            layer_name=layer,
+            property=builder.config.property,
+            mode=builder.config.mode,
+            is_base=builder.config.is_base_layer(),
+            order=builder.config.order
+        )
+
+        # Track order
         if builder.config.order is not None:
             self._layer_orders[layer] = builder.config.order
         elif not builder.config.is_base_layer():
             if layer not in self._layer_orders:
                 self._layer_orders[layer] = self._next_auto_order
                 self._next_auto_order += 1
+                group.order = self._layer_orders[layer]
 
-        # Start frame loop if builder has lifecycle
-        if not builder.lifecycle.is_complete():
-            self._ensure_frame_loop_running()
+        self._layer_groups[layer] = group
+        return group
+
+    def _targets_match(self, target1: Any, target2: Any) -> bool:
+        """Check if two target values match (with epsilon for floats)"""
+        from .core import EPSILON
+
+        if isinstance(target1, (int, float)) and isinstance(target2, (int, float)):
+            return abs(target1 - target2) < EPSILON
+        elif isinstance(target1, tuple) and isinstance(target2, tuple):
+            return all(abs(a - b) < EPSILON for a, b in zip(target1, target2))
+        elif isinstance(target1, Vec2) and isinstance(target2, Vec2):
+            return abs(target1.x - target2.x) < EPSILON and abs(target1.y - target2.y) < EPSILON
+        else:
+            return target1 == target2
+
+    def _recalculate_rate_duration(self, builder: 'ActiveBuilder'):
+        """Recalculate rate-based duration after base_value changed"""
+        if builder.config.over_rate is None:
             return
 
-        # Handle instant completion
-        self._handle_instant_completion(builder, layer)
+        if builder.config.property == "speed":
+            builder.config.over_ms = rate_utils.calculate_speed_duration(
+                builder.base_value, builder.target_value, builder.config.over_rate
+            )
+        elif builder.config.property == "direction":
+            if builder.config.operator == "to":
+                target_dir = Vec2.from_tuple(builder.config.value).normalized()
+                builder.config.over_ms = rate_utils.calculate_direction_duration(
+                    builder.base_value, target_dir, builder.config.over_rate
+                )
+            elif builder.config.operator in ("by", "add"):
+                angle_delta = builder.config.value[0] if isinstance(builder.config.value, tuple) else builder.config.value
+                builder.config.over_ms = rate_utils.calculate_direction_by_duration(
+                    angle_delta, builder.config.over_rate
+                )
+        elif builder.config.property == "pos":
+            if builder.config.operator == "to":
+                target_pos = Vec2.from_tuple(builder.config.value)
+                builder.config.over_ms = rate_utils.calculate_position_duration(
+                    builder.base_value, target_pos, builder.config.over_rate
+                )
+            elif builder.config.operator in ("by", "add"):
+                offset = Vec2.from_tuple(builder.config.value)
+                builder.config.over_ms = rate_utils.calculate_position_by_duration(
+                    offset, builder.config.over_rate
+                )
+        elif builder.config.property == "vector":
+            target_vec = Vec2.from_tuple(builder.config.value) if builder.config.operator == "to" else builder.base_value + Vec2.from_tuple(builder.config.value)
+            builder.config.over_ms = rate_utils.calculate_vector_duration(
+                builder.base_value, target_vec, builder.config.over_rate, builder.config.over_rate
+            )
 
-        # After adding builder, check if frame loop should be running
-        # (e.g., if layer creates velocity movement even with base speed 0)
-        if self._should_frame_loop_be_active():
-            self._ensure_frame_loop_running()
+    def _bake_group_to_base(self, group: 'LayerGroup'):
+        """Bake base layer group's value into base state"""
+        if not group.is_base:
+            return
+
+        current_value = group.get_current_value()
+        prop = group.property
+
+        # Apply to base state
+        if prop == "pos":
+            if isinstance(current_value, tuple):
+                self._absolute_base_pos = Vec2.from_tuple(current_value)
+            else:
+                self._absolute_base_pos = current_value
+        elif prop == "speed":
+            self._base_speed = float(current_value)
+        elif prop == "direction":
+            if isinstance(current_value, tuple):
+                self._base_direction = Vec2.from_tuple(current_value).normalized()
+            else:
+                self._base_direction = current_value.normalized() if hasattr(current_value, 'normalized') else current_value
+        elif prop == "vector":
+            if isinstance(current_value, tuple):
+                self._base_direction = Vec2.from_tuple(current_value).normalized()
+                self._base_speed = Vec2.from_tuple(current_value).magnitude()
+            else:
+                self._base_direction = current_value.normalized()
+                self._base_speed = current_value.magnitude()
+
 
     def remove_builder(self, layer: str, bake: bool = False):
-        """Remove an active builder"""
-        if layer in self._active_builders:
-            builder = self._active_builders[layer]
+        """Remove a layer group"""
+        if layer not in self._layer_groups:
+            return
 
-            # If bake=true, merge values into base
-            if builder.config.get_effective_bake() or bake:
-                self._bake_builder(builder, removing_layer=layer)
+        group = self._layer_groups[layer]
 
-            # Clean up rate builder cache
+        # If bake=true, bake current value into base
+        if bake:
+            if group.is_base:
+                self._bake_group_to_base(group)
+            else:
+                # Modifier - keep accumulated value
+                pass
+
+        # Clean up rate builder cache for all builders in group
+        for builder in group.builders:
             rate_cache_key = self._get_rate_cache_key(layer, builder.config)
             if rate_cache_key is not None and rate_cache_key in self._rate_builder_cache:
                 del self._rate_builder_cache[rate_cache_key]
-
-            del self._active_builders[layer]
-
-            # Remove order tracking
-            if layer in self._layer_orders:
-                del self._layer_orders[layer]
 
             # Clean up throttle tracking
             throttle_key = self._get_throttle_key(layer, builder)
             if throttle_key in self._throttle_times:
                 del self._throttle_times[throttle_key]
 
-            # Notify queue system to start next item
-            if builder.config.behavior == "queue":
-                queue_key = self._get_queue_key(layer, builder)
-                final_value = builder.get_interpolated_value()
-                self._queue_manager.on_builder_complete(queue_key, builder.config.property, final_value)
+        # Remove group
+        del self._layer_groups[layer]
 
-        # Frame loop will be stopped by _tick_frame after final mouse movement
+        # Remove order tracking
+        if layer in self._layer_orders:
+            del self._layer_orders[layer]
 
     def _bake_builder(self, builder: 'ActiveBuilder', removing_layer: Optional[str] = None):
         """Merge builder's final aggregated value into base state
@@ -627,8 +561,8 @@ class RigState:
 
             # For instant position changes, apply manually only if frame loop won't handle it
             # Exclude the builder being removed from the active count
-            active_count = len(self._active_builders)
-            if removing_layer and removing_layer in self._active_builders:
+            active_count = len(self._layer_groups)
+            if removing_layer and removing_layer in self._layer_groups:
                 active_count -= 1
 
             will_be_active = self._has_movement() or active_count > 0
@@ -652,13 +586,14 @@ class RigState:
         """
         if layer:
             # Bake from a specific layer - remove it and bake its value
-            if layer in self._active_builders:
-                builder = self._active_builders[layer]
-                if builder.config.property == property_name:
-                    # Force bake this builder
-                    self._bake_builder(builder)
-                    # Remove the builder
-                    del self._active_builders[layer]
+            if layer in self._layer_groups:
+                group = self._layer_groups[layer]
+                if group.property == property_name:
+                    # Bake the group's current value
+                    if group.is_base:
+                        self._bake_group_to_base(group)
+                    # Remove the group
+                    del self._layer_groups[layer]
         else:
             # Bake current computed value for this property
             current_value = getattr(self, property_name)
@@ -673,14 +608,14 @@ class RigState:
             elif property_name == "pos":
                 self._absolute_base_pos = current_value
 
-            # Remove all base layer builders affecting this property
+            # Remove all base layer groups affecting this property
             layers_to_remove = [
-                l for l, b in self._active_builders.items()
-                if b.config.is_base_layer() and b.config.property == property_name
+                l for l, g in self._layer_groups.items()
+                if g.is_base and g.property == property_name
             ]
             for l in layers_to_remove:
-                if l in self._active_builders:
-                    del self._active_builders[l]
+                if l in self._layer_groups:
+                    del self._layer_groups[l]
 
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2, bool]:
         """Compute current state by applying all active layers to base.
@@ -700,45 +635,44 @@ class RigState:
         direction = Vec2(self._base_direction.x, self._base_direction.y)
         pos_is_override = False
 
-        # Separate builders by layer type
-        base_builders = []   # Anonymous layers (base operations)
-        user_builders = []   # User layers
+        # Separate groups by layer type
+        base_groups = []   # Base layer groups
+        user_groups = []   # User layer groups
 
-        for layer_name, builder in self._active_builders.items():
-            if builder.config.is_base_layer():
-                base_builders.append(builder)
+        for layer_name, group in self._layer_groups.items():
+            if group.is_base:
+                base_groups.append(group)
             else:
-                user_builders.append(builder)
+                user_groups.append(group)
 
         # Sort user layers by order
-        def get_layer_order(builder: 'ActiveBuilder') -> int:
-            layer_name = builder.config.layer_name
-            return self._layer_orders.get(layer_name, 999999)  # Unordered layers go last
+        def get_layer_order(group: 'LayerGroup') -> int:
+            return group.order if group.order is not None else 999999
 
-        user_builders = sorted(user_builders, key=get_layer_order)
+        user_groups = sorted(user_groups, key=get_layer_order)
 
         # Process in layer order: base → user layers
-        for builder in base_builders:
-            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
+        for group in base_groups:
+            pos, speed, direction, override = self._apply_group(group, pos, speed, direction)
             pos_is_override = pos_is_override or override
 
-        for builder in user_builders:
-            pos, speed, direction, override = self._apply_layer(builder, pos, speed, direction)
+        for group in user_groups:
+            pos, speed, direction, override = self._apply_group(group, pos, speed, direction)
             pos_is_override = pos_is_override or override
 
         return (pos, speed, direction, pos_is_override)
 
-    def _apply_layer(
+    def _apply_group(
         self,
-        builder: 'ActiveBuilder',
+        group: 'LayerGroup',
         pos: Vec2,
         speed: float,
         direction: Vec2
     ) -> tuple[Vec2, float, Vec2, bool]:
-        """Apply a layer's operations
+        """Apply a layer group's aggregated value
 
         Args:
-            builder: The builder to apply
+            group: The layer group to apply
             pos, speed, direction: Current accumulated state values
 
         Returns:
@@ -750,9 +684,9 @@ class RigState:
         - override: current_value is ABSOLUTE (replaces accumulated)
         - scale: current_value is a MULTIPLIER (multiplies accumulated)
         """
-        prop = builder.config.property
-        mode = builder.config.mode
-        current_value = builder.get_interpolated_value()
+        prop = group.property
+        mode = group.mode
+        current_value = group.get_current_value()
         pos_is_override = False
 
         if prop == "speed":
@@ -779,38 +713,34 @@ class RigState:
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
 
-        # Separate builders by layer type
-        base_builders = []
-        user_builders = []
+        # Separate groups by layer type
+        base_groups = []
+        user_groups = []
 
-        for layer_name, builder in self._active_builders.items():
-            if builder.config.property in ("speed", "direction", "vector"):
-                if builder.config.is_base_layer():
-                    base_builders.append(builder)
+        for layer_name, group in self._layer_groups.items():
+            if group.property in ("speed", "direction", "vector"):
+                if group.is_base:
+                    base_groups.append(group)
                 else:
-                    user_builders.append(builder)
+                    user_groups.append(group)
 
         # Sort user layers by order
-        def get_layer_order(builder: 'ActiveBuilder') -> int:
-            layer_name = builder.config.layer_name
-            return self._layer_orders.get(layer_name, 999999)
+        def get_layer_order(group: 'LayerGroup') -> int:
+            return group.order if group.order is not None else 999999
 
-        user_builders = sorted(user_builders, key=get_layer_order)
+        user_groups = sorted(user_groups, key=get_layer_order)
 
-        # Apply all velocity builders
-        for builder in base_builders + user_builders:
-            prop = builder.config.property
-            mode = builder.config.mode
-            current_value = builder.get_interpolated_value()
+        # Apply all velocity groups
+        for group in base_groups + user_groups:
+            prop = group.property
+            mode = group.mode
+            current_value = group.get_current_value()
 
             if prop == "speed":
-                prev_speed = speed
                 speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
             elif prop == "direction":
-                prev_direction = direction
                 direction = mode_operations.apply_direction_mode(mode, current_value, direction)
             elif prop == "vector":
-                prev_speed, prev_direction = speed, direction
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
 
         return speed, direction
@@ -845,9 +775,8 @@ class RigState:
         """Process all position builders and gather their contributions
 
         Returns:
-            (has_absolute_position, absolute_target, relative_delta, relative_position_updates)
-            - has_absolute_position: True if any pos.to() builder exists
-            - absolute_target: Target position from pos.to() (if exists)
+            - has_absolute_position: True if any pos.to() builders exist
+            - absolute_target: Target position for absolute builders (last one wins)
             - relative_delta: Accumulated delta from all pos.by() builders
             - relative_position_updates: List of (builder, new_value, new_int_value) for tracking updates
         """
@@ -856,45 +785,53 @@ class RigState:
         relative_delta = Vec2(0, 0)
         relative_position_updates = []
 
-        for layer_name, builder in self._active_builders.items():
-            if builder.config.property != "pos":
+        for layer_name, group in self._layer_groups.items():
+            if group.property != "pos":
                 continue
 
-            if builder.config.movement_type == "absolute":
+            # Check movement type from first builder (all should match in a group)
+            if not group.builders:
+                continue
+
+            first_builder = group.builders[0]
+
+            if first_builder.config.movement_type == "absolute":
                 # pos.to() - absolute positioning
+                # Use group's aggregated value (handles mode correctly)
                 has_absolute_position = True
-                absolute_target = builder.get_interpolated_value()
-                # Note: only one absolute position builder should be active at a time
-                # If multiple exist, last one wins (matches current override behavior)
+                absolute_target = group.get_current_value()
+                print(f"[DEBUG _process_position_builders] Layer '{layer_name}': absolute_target={absolute_target}, mode={group.mode}, builders={len(group.builders)}")
             else:
                 # pos.by() - pure relative delta
-                current_interpolated = builder.get_interpolated_value()
+                for builder in group.builders:
+                    current_interpolated = builder.get_interpolated_value()
 
-                # Initialize tracking attributes if needed
-                if not hasattr(builder, '_last_emitted_relative_pos'):
-                    builder._last_emitted_relative_pos = Vec2(0, 0)
-                if not hasattr(builder, '_total_emitted_int'):
-                    builder._total_emitted_int = Vec2(0, 0)
+                    # Initialize tracking attributes if needed
+                    if not hasattr(builder, '_last_emitted_relative_pos'):
+                        builder._last_emitted_relative_pos = Vec2(0, 0)
+                    if not hasattr(builder, '_total_emitted_int'):
+                        builder._total_emitted_int = Vec2(0, 0)
 
-                # Compute integer delta accounting for accumulated error
-                target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
-                actual_delta_int = target_total_int - builder._total_emitted_int
+                    # Compute integer delta accounting for accumulated error
+                    target_total_int = Vec2(round(current_interpolated.x), round(current_interpolated.y))
+                    actual_delta_int = target_total_int - builder._total_emitted_int
 
-                relative_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
+                    relative_delta += Vec2(actual_delta_int.x, actual_delta_int.y)
 
-                # The new total is what we've already emitted plus what we're about to emit
-                new_total_emitted = builder._total_emitted_int + actual_delta_int
+                    # The new total is what we've already emitted plus what we're about to emit
+                    new_total_emitted = builder._total_emitted_int + actual_delta_int
 
-                # Store update to apply after builder removal check
-                relative_position_updates.append((builder, current_interpolated, new_total_emitted))
+                    # Store update to apply after builder removal check
+                    relative_position_updates.append((builder, current_interpolated, new_total_emitted))
 
         return has_absolute_position, absolute_target, relative_delta, relative_position_updates
 
     def _has_api_overrides(self) -> bool:
-        """Check if any active builder has API overrides"""
-        for builder in self._active_builders.values():
-            if builder.config.api_override is not None:
-                return True
+        """Check if any active group has API overrides"""
+        for group in self._layer_groups.values():
+            for builder in group.builders:
+                if builder.config.api_override is not None:
+                    return True
         return False
 
     def _get_override_functions(self):
@@ -907,9 +844,10 @@ class RigState:
 
         # Find override (last one wins if multiple)
         api_override = None
-        for builder in self._active_builders.values():
-            if builder.config.api_override is not None:
-                api_override = builder.config.api_override
+        for group in self._layer_groups.values():
+            for builder in group.builders:
+                if builder.config.api_override is not None:
+                    api_override = builder.config.api_override
 
         from .mouse_api import get_mouse_move_functions
         return get_mouse_move_functions(api_override, api_override)
@@ -1047,6 +985,7 @@ class RigState:
         7. Update tracking for remaining builders
         8. Execute callbacks and stop if done
         """
+        print(f"[DEBUG _tick_frame] START - active groups: {len(self._layer_groups)}")
         current_time, dt = self._calculate_delta_time()
         if dt is None:
             return
@@ -1059,6 +998,7 @@ class RigState:
         phase_transitions = self._advance_all_builders(current_time)
 
         if manual_movement_detected:
+            print(f"[DEBUG _tick_frame] Manual movement detected, early exit")
             self._remove_completed_builders(current_time)
             self._execute_phase_callbacks(phase_transitions)
             self._stop_frame_loop_if_done()
@@ -1087,6 +1027,7 @@ class RigState:
         completed_layers = self._remove_completed_builders(current_time)
 
         # 6. Execute callbacks and stop if done
+        print(f"[DEBUG _tick_frame] About to execute {len(phase_transitions)} phase callbacks")
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
@@ -1106,7 +1047,7 @@ class RigState:
         return (now, dt)
 
     def _advance_all_builders(self, current_time: float) -> list[tuple['ActiveBuilder', str]]:
-        """Advance all builders and track phase transitions.
+        """Advance all groups and track phase transitions.
 
         Args:
             current_time: Current timestamp from perf_counter() (captured once per frame)
@@ -1116,22 +1057,15 @@ class RigState:
         """
         phase_transitions = []
 
-        for layer, builder in list(self._active_builders.items()):
-            old_phase = builder.lifecycle.phase
-            is_active, child_transitions = builder.advance(current_time)  # Returns (bool, list)
-            new_phase = builder.lifecycle.phase
-
-            if old_phase != new_phase and old_phase is not None:
-                phase_transitions.append((builder, old_phase))
-
-            # Add child phase transitions
-            if child_transitions:
-                phase_transitions.extend(child_transitions)
+        for layer, group in list(self._layer_groups.items()):
+            # Advance the group (which advances all builders)
+            group_transitions = group.advance(current_time)
+            phase_transitions.extend(group_transitions)
 
         return phase_transitions
 
     def _remove_completed_builders(self, current_time: float) -> set[str]:
-        """Remove builders that are no longer active
+        """Remove completed builders from groups
 
         Args:
             current_time: Current timestamp from perf_counter() (captured once per frame)
@@ -1139,71 +1073,57 @@ class RigState:
         Returns:
             Set of layer names that were completed and removed
         """
-        completed = []
+        completed_layers = set()
 
-        for layer, builder in list(self._active_builders.items()):
-            # Check if already marked for removal (e.g., group_lifecycle completed)
-            if builder._marked_for_removal:
-                completed.append(layer)
-                continue
+        for layer, group in list(self._layer_groups.items()):
+            builders_to_remove = []
 
-            # Final advance to ensure target achieved
-            still_active, _ = builder.advance(current_time)
+            for builder in group.builders:
+                # Check if marked for removal
+                if builder._marked_for_removal:
+                    builders_to_remove.append(builder)
+                    continue
 
-            if not still_active:
-                # For relative position builders, emit any remaining delta after final advance
-                if (builder.config.property == "pos" and
-                    builder.config.movement_type == "relative" and
-                    hasattr(builder, '_total_emitted_int')):
+                # Final advance to ensure target achieved
+                completed_phase, _ = builder.advance(current_time)
 
-                    # Get final value after completion
-                    final_value = builder.get_interpolated_value()
-                    final_target_int = Vec2(round(final_value.x), round(final_value.y))
+                if completed_phase is not None:
+                    print(f"[DEBUG _remove_completed_builders] Builder completing phase '{completed_phase}'")
+                    # For relative position builders, emit any remaining delta
+                    if (builder.config.property == "pos" and
+                        builder.config.movement_type == "relative" and
+                        hasattr(builder, '_total_emitted_int')):
 
-                    # Emit any remaining delta that wasn't captured in main tick
-                    # Compare integer targets to avoid rounding errors
-                    final_delta_int = final_target_int - builder._total_emitted_int
+                        final_value = builder.get_interpolated_value()
+                        final_target_int = Vec2(round(final_value.x), round(final_value.y))
+                        final_delta_int = final_target_int - builder._total_emitted_int
 
-                    if final_delta_int.x != 0 or final_delta_int.y != 0:
-                        _, move_relative_override = self._get_override_functions()
-                        if move_relative_override is not None:
-                            move_relative_override(int(final_delta_int.x), int(final_delta_int.y))
-                        else:
-                            mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
+                        print(f"[DEBUG _remove_completed_builders] Relative position: final_value={final_value}, final_target_int={final_target_int}, total_emitted={builder._total_emitted_int}, final_delta_int={final_delta_int}")
 
-                completed.append(layer)
+                        if final_delta_int.x != 0 or final_delta_int.y != 0:
+                            print(f"[DEBUG _remove_completed_builders] Emitting final delta: ({int(final_delta_int.x)}, {int(final_delta_int.y)})")
+                            _, move_relative_override = self._get_override_functions()
+                            if move_relative_override is not None:
+                                move_relative_override(int(final_delta_int.x), int(final_delta_int.y))
+                            else:
+                                mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
 
-        for layer in completed:
-            builder = self._active_builders.get(layer)
+                    builders_to_remove.append(builder)
 
-            # Check if this is a named layer queue that needs a placeholder
-            if builder and hasattr(builder, '_create_queue_placeholder'):
-                # Capture the final accumulated value
-                final_value = builder.get_interpolated_value()
+            # Remove completed builders from group
+            for builder in builders_to_remove:
+                bake_result = group.on_builder_complete(builder)
+                if bake_result == "bake_to_base":
+                    self._bake_group_to_base(group)
 
-                # Remove the completed builder
-                self.remove_builder(layer)
+            # Check if group should be removed
+            if not group.should_persist():
+                del self._layer_groups[layer]
+                if layer in self._layer_orders:
+                    del self._layer_orders[layer]
+                completed_layers.add(layer)
 
-                # Create a placeholder builder with no lifecycle
-                from .builder import RigBuilder
-                from .contracts import BuilderConfig
-
-                placeholder_config = BuilderConfig()
-                placeholder_config.layer_name = layer
-                placeholder_config.property = builder.config.property
-                placeholder_config.mode = builder.config.mode
-                placeholder_config.operator = "to"
-                placeholder_config.value = final_value
-                placeholder_config.movement_type = builder.config.movement_type
-                # No lifecycle - instant application
-
-                from .builder import ActiveBuilder
-                placeholder = ActiveBuilder(placeholder_config, self, is_base_layer=False)
-                self._active_builders[layer] = placeholder
-            else:
-                self.remove_builder(layer)
-
-        return set(completed)
+        return completed_layers
 
     def _execute_phase_callbacks(self, phase_transitions: list[tuple['ActiveBuilder', str]]):
         """Execute callbacks for completed phases"""
@@ -1212,20 +1132,27 @@ class RigState:
 
     def _stop_frame_loop_if_done(self):
         """Stop frame loop if no longer needed"""
-        if not self._should_frame_loop_be_active():
+        should_be_active = self._should_frame_loop_be_active()
+        print(f"[DEBUG _stop_frame_loop_if_done] should_be_active={should_be_active}")
+        if not should_be_active:
+            print(f"[DEBUG _stop_frame_loop_if_done] STOPPING frame loop")
             self._stop_frame_loop()
 
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
+        print(f"[DEBUG _ensure_frame_loop_running] Called, job exists: {self._frame_loop_job is not None}")
         if self._frame_loop_job is None:
             frame_interval = settings.get("user.mouse_rig_frame_interval", 16)
             self._frame_loop_job = cron.interval(f"{frame_interval}ms", self._tick_frame)
             self._last_frame_time = None
             # Sync to actual mouse position only if we have absolute position builders
             has_absolute_builder = any(
-                builder.config.property == "pos" and builder.config.movement_type == "absolute"
-                for builder in self._active_builders.values()
+                group.property == "pos" and any(
+                    builder.config.movement_type == "absolute"
+                    for builder in group.builders
+                )
+                for group in self._layer_groups.values()
             )
             if has_absolute_builder:
                 current_mouse = Vec2(*ctrl.mouse_pos())
@@ -1266,10 +1193,10 @@ class RigState:
         if self._base_speed != 0:
             return True
 
-        # Check if any velocity-affecting builders exist
+        # Check if any velocity-affecting groups exist
         # If they do, they could create movement even with base speed 0
-        for builder in self._active_builders.values():
-            prop = builder.config.property
+        for group in self._layer_groups.values():
+            prop = group.property
             if prop in ("speed", "direction", "vector"):
                 # For speed/vector with offset mode, they add to velocity
                 # For direction, it only matters if speed > 0
@@ -1284,23 +1211,25 @@ class RigState:
         Frame loop runs when:
         1. There's velocity movement (speed > 0), OR
         2. Any builder has an incomplete lifecycle (in OVER, HOLD, or REVERT phase)
-        3. Any child builder has an incomplete lifecycle
 
         Frame loop stops when:
-        - No velocity AND all builders and their children have completed their lifecycle
+        - No velocity AND all builders have completed their lifecycle
         """
-        if self._has_movement():
+        has_movement = self._has_movement()
+        print(f"[DEBUG _should_frame_loop_be_active] has_movement={has_movement}, groups={len(self._layer_groups)}")
+        if has_movement:
             return True
 
-        # Check if any builder or its children have an incomplete lifecycle
-        for layer, builder in self._active_builders.items():
-            if not builder.lifecycle.is_complete():
-                return True
-            # Check children (only layers have children, but all builders have the array)
-            for child in builder.children:
-                if not child.lifecycle.is_complete():
+        # Check if any builder has an incomplete lifecycle
+        for group in self._layer_groups.values():
+            print(f"[DEBUG _should_frame_loop_be_active] Checking group '{group.layer_name}': {len(group.builders)} builders")
+            for builder in group.builders:
+                is_complete = builder.lifecycle.is_complete()
+                print(f"[DEBUG _should_frame_loop_be_active]   Builder {builder.config.property}.{builder.config.operator}(): complete={is_complete}, phase={builder.lifecycle.phase}")
+                if not is_complete:
                     return True
 
+        print(f"[DEBUG _should_frame_loop_be_active] No active work, returning False")
         return False
 
     def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
@@ -1362,8 +1291,8 @@ class RigState:
         Example:
             rig.state.layers  # ["sprint", "drift"]
         """
-        return [layer for layer, builder in self._active_builders.items()
-                if builder.config.is_modifier_layer()]
+        return [layer for layer, group in self._layer_groups.items()
+                if not group.is_base]
 
     # Layer state access
     class LayerState:
@@ -1482,11 +1411,14 @@ class RigState:
                 print(f"Sprint speed: {sprint.speed}")
                 print(f"Phase: {sprint.phase}")
         """
-        if layer_name not in self._active_builders:
+        if layer_name not in self._layer_groups:
             return None
 
-        builder = self._active_builders[layer_name]
-        return RigState.LayerState(builder)
+        group = self._layer_groups[layer_name]
+        # Return state based on first builder in group
+        if not group.builders:
+            return None
+        return RigState.LayerState(group.builders[0])
 
     # Base state access
     class BaseState:
@@ -1547,12 +1479,15 @@ class RigState:
         @property
         def target(self):
             """Target value from base layer animation (None if no base animation)"""
-            # Find base layers for this property
-            for layer_name, builder in self._rig_state._active_builders.items():
-                if (builder.config.is_base_layer() and
-                    builder.config.property == self._property_name and
-                    not builder.lifecycle.is_complete()):
-                    return builder.target_value
+            # Find base groups for this property
+            for layer_name, group in self._rig_state._layer_groups.items():
+                if (group.is_base and
+                    group.property == self._property_name and
+                    len(group.builders) > 0):
+                    # Return target of first active builder
+                    for builder in group.builders:
+                        if not builder.lifecycle.is_complete():
+                            return builder.target_value
             return None
 
         # Shortcuts for Vec2 properties (pos, direction, vector)
@@ -1575,19 +1510,19 @@ class RigState:
         def offset(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .offset mode"""
             layer_name = f"{self._property_name}.offset"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
 
         @property
         def override(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .override mode"""
             layer_name = f"{self._property_name}.override"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
 
         @property
         def scale(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .scale mode"""
             layer_name = f"{self._property_name}.scale"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._active_builders else None
+            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
 
         def __repr__(self):
             # Show available properties/methods, not the computed value
@@ -1757,26 +1692,25 @@ class RigState:
         all_kwargs = {'easing': easing, **kwargs}
         config.validate_method_kwargs('stop', **all_kwargs)
 
-        # 1. Bake all active builders into base
-        for layer in list(self._active_builders.keys()):
-            builder = self._active_builders[layer]
-            if not builder.lifecycle.has_reverted():
-                self._bake_builder(builder)
+        # 1. Bake all active groups into base
+        for layer in list(self._layer_groups.keys()):
+            group = self._layer_groups[layer]
+            if group.is_base:
+                self._bake_group_to_base(group)
 
-        # 2. Clear all active builders and layer tracking
-        self._active_builders.clear()
+        # 2. Clear all active groups and layer tracking
+        self._layer_groups.clear()
         self._layer_orders.clear()
         self._throttle_times.clear()
         self._rate_builder_cache.clear()
         self._debounce_pending.clear()
-        self._queue_manager.clear_all()
 
         # 3. Decelerate speed to 0
         if transition_ms is None or transition_ms == 0:
             # Immediate stop
             self._base_speed = 0.0
-            # Stop frame loop if no active builders
-            if len(self._active_builders) == 0:
+            # Stop frame loop if no active groups
+            if len(self._layer_groups) == 0:
                 self._stop_frame_loop()
         else:
             # Smooth deceleration - create base layer builder
@@ -1792,8 +1726,7 @@ class RigState:
             config.over_easing = easing
 
             builder = ActiveBuilder(config, self, is_base_layer=True)
-            self._active_builders[config.layer_name] = builder
-            self._ensure_frame_loop_running()
+            self.add_builder(builder)
 
     def reverse(self, transition_ms: Optional[float] = None):
         """Reverse direction (180 degrees turn)"""
@@ -1802,9 +1735,8 @@ class RigState:
 
     def bake_all(self):
         """Bake all active builders immediately"""
-        for layer in list(self._active_builders.keys()):
+        for layer in list(self._layer_groups.keys()):
             self.remove_builder(layer, bake=True)
-        self._queue_manager.clear_all()
 
     def reset(self):
         """Reset everything to default state
@@ -1818,13 +1750,12 @@ class RigState:
         # Stop frame loop
         self._stop_frame_loop()
 
-        # Clear all active builders and tracking
-        self._active_builders.clear()
+        # Clear all active groups and tracking
+        self._layer_groups.clear()
         self._layer_orders.clear()
         self._throttle_times.clear()
         self._rate_builder_cache.clear()
         self._debounce_pending.clear()
-        self._queue_manager.clear_all()
 
         # Reset base state to defaults
         self._base_speed = 0.0
@@ -1846,12 +1777,7 @@ class RigState:
         self._stop_callbacks.clear()
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
-        """Trigger revert on builder tree
-
-        Strategy:
-        1. Capture current aggregated value from all children
-        2. Clear all children (bake the aggregate)
-        3. Create group lifecycle that reverses from aggregate to neutral
+        """Trigger revert on a layer group
 
         Args:
             layer: Layer name to revert
@@ -1859,37 +1785,14 @@ class RigState:
             easing: Easing function for the revert
             current_time: Current timestamp from perf_counter() (if called from frame loop)
         """
-        if layer in self._active_builders:
-            builder = self._active_builders[layer]
+        if layer in self._layer_groups:
+            group = self._layer_groups[layer]
 
-            # Capture current aggregated value
-            current_value = builder.get_interpolated_value()
+            # Trigger revert on all builders in the group
+            if current_time is None:
+                current_time = time.perf_counter()
 
-            # Get base value (neutral/zero for the property type)
-            # Use builder's own config since children might be empty after first revert
-            if builder.config.property == "speed":
-                base_value = 0
-            elif builder.config.property == "direction":
-                base_value = builder.base_value  # Original direction
-            elif builder.config.property == "pos":
-                base_value = Vec2(0, 0)  # Zero offset
-            elif builder.config.property == "vector":
-                base_value = Vec2(0, 0)  # Zero velocity
-            else:
-                base_value = 0
+            for builder in group.builders:
+                builder.lifecycle.trigger_revert(current_time, revert_ms, easing)
 
-            # Create group lifecycle for coordinated revert
-            builder.group_lifecycle = Lifecycle(is_modifier_layer=not builder.is_base_layer)
-            builder.group_lifecycle.over_ms = 0  # Skip over phase
-            builder.group_lifecycle.hold_ms = 0  # Skip hold phase
-            builder.group_lifecycle.revert_ms = revert_ms if revert_ms is not None else 0
-            builder.group_lifecycle.revert_easing = easing
-            builder.group_lifecycle.phase = LifecyclePhase.REVERT
-            builder.group_lifecycle.phase_start_time = current_time if current_time is not None else time.perf_counter()
-
-            # Store aggregate values for animation
-            builder.group_base_value = base_value
-            builder.group_target_value = current_value
-
-            # Clear all children - we'll revert as a single coordinated unit
-            builder.children = []
+            self._ensure_frame_loop_running()
