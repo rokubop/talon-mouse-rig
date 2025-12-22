@@ -328,19 +328,37 @@ class RigState:
             self._ensure_frame_loop_running()
         elif builder.config.is_synchronous:
             # Handle instant completion
+            print(f"[DEBUG add_builder] Synchronous execution for {builder.config.property}.{builder.config.operator}()")
             builder.execute_synchronous()
             bake_result = group.on_builder_complete(builder)
+            print(f"[DEBUG add_builder] Bake result: {bake_result}")
             if bake_result == "bake_to_base":
                 self._bake_group_to_base(group)
             
             # Remove the builder immediately for synchronous operations
+            print(f"[DEBUG add_builder] Removing builder from group, group had {len(group.builders)} builders")
             group.remove_builder(builder)
+            print(f"[DEBUG add_builder] After removal, group has {len(group.builders)} builders")
 
             # Clean up empty base groups
             if group.is_base and not group.should_persist():
+                # Velocity properties need frame loop even after sync completion
+                velocity_properties = {"speed", "direction", "vector"}
+                if builder.config.property in velocity_properties:
+                    # Start frame loop for velocity-based movement
+                    print(f"[DEBUG add_builder] Starting frame loop for velocity property {builder.config.property}")
+                    self._ensure_frame_loop_running()
+                
+                # Clean up the empty group
+                print(f"[DEBUG add_builder] Deleting empty group {layer}")
                 del self._layer_groups[layer]
                 if layer in self._layer_orders:
                     del self._layer_orders[layer]
+        else:
+            # Builder is complete but not synchronous (e.g., speed.to(), direction.to())
+            # These need frame loop to clean up and apply velocity
+            print(f"[DEBUG add_builder] Non-synchronous complete builder for {builder.config.property}, starting frame loop")
+            self._ensure_frame_loop_running()
 
     def _get_or_create_group(self, builder: 'ActiveBuilder') -> 'LayerGroup':
         """Get existing group or create new one for this builder"""
