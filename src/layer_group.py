@@ -46,7 +46,11 @@ class LayerGroup:
         self.builders: list['ActiveBuilder'] = []
 
         # Accumulated state (for modifier layers - persists after builders complete)
-        self.accumulated_value: Any = self._zero_value()
+        # For direction.offset, starts as None and gets initialized based on first value type
+        if property == "direction" and mode == "offset":
+            self.accumulated_value: Any = None
+        else:
+            self.accumulated_value: Any = self._zero_value()
 
         # Queue system (sequential execution within this layer)
         self.pending_queue: deque[Callable] = deque()
@@ -88,14 +92,15 @@ class LayerGroup:
         Returns:
             "bake_to_base" for base layers (including reverted ones)
             "baked_to_group" for modifier layers
-            "reverted" for modifier layers that reverted (don't bake)
+            "reverted" for modifier layers that reverted (clears accumulated value)
         """
         if builder.lifecycle.has_reverted():
             if self.is_base:
                 # Base layers need to restore original value when reverting
                 return "bake_to_base"
             else:
-                # Modifier layers that revert don't bake (layer persists with accumulated value)
+                # Modifier layers that revert clear their accumulated value
+                self.accumulated_value = self._zero_value()
                 return "reverted"
 
         value = builder.get_interpolated_value()
@@ -105,12 +110,24 @@ class LayerGroup:
             return "bake_to_base"
 
         # Modifier layers: accumulate in group
+        # Initialize accumulated_value for direction.offset based on first value type
+        if self.accumulated_value is None:
+            if isinstance(value, (int, float)):
+                self.accumulated_value = 0.0
+            elif isinstance(value, Vec2):
+                self.accumulated_value = Vec2(0, 0)
+            else:
+                self.accumulated_value = value
+        
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
         return "baked_to_group"
 
     def _apply_mode(self, current: Any, incoming: Any, mode: Optional[str]) -> Any:
-        """Apply mode operation to combine values"""
+        """Apply mode operation to combine values within this layer group"""
         if mode == "offset" or mode == "add":
+            # Accumulate values (angles add, vectors add)
+            if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
+                return current + incoming
             if isinstance(current, Vec2) and isinstance(incoming, Vec2):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
             return current + incoming
@@ -152,6 +169,19 @@ class LayerGroup:
         
         # Modifier layers: start with accumulated value and apply modes
         result = self.accumulated_value
+        
+        # Initialize if None (for direction.offset that hasn't accumulated yet)
+        if result is None:
+            # Determine the correct zero value from first builder's type
+            if self.builders:
+                first_value = self.builders[0].get_interpolated_value()
+                if isinstance(first_value, Vec2):
+                    result = Vec2(0, 0)
+                else:
+                    result = 0.0
+            else:
+                result = 0.0
+        
         for builder in self.builders:
             builder_value = builder.get_interpolated_value()
             print(f"[DEBUG LayerGroup.get_current_value]   Modifier builder: value={builder_value}, mode={builder.config.mode}")

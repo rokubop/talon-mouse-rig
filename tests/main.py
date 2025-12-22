@@ -245,7 +245,8 @@ def run_all_tests(tests, group_name):
             elif _test_runner_state["running"]:
                 cron.after("200ms", run_next_test)
 
-        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=_test_runner_state["group_name"])
+        fast_mode = actions.user.ui_elements_get_state("fast_mode", True)
+        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=_test_runner_state["group_name"], fast_mode=fast_mode)
 
     run_next_test()
 
@@ -366,7 +367,8 @@ def run_all_tests_global(test_groups):
             if _test_runner_state["running"]:
                 run_next_test()
 
-        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=group_name, fast_mode=True)
+        fast_mode = actions.user.ui_elements_get_state("fast_mode", True)
+        run_single_test(test_name, test_func, on_complete=on_test_complete, test_group=group_name, fast_mode=fast_mode)
 
     def finalize_results():
         passed = _test_runner_state["passed_count"]
@@ -430,9 +432,12 @@ def toggle_run_all(tests, group_name):
 
 def test_runner_ui(test_groups):
     """UI element showing test runner with collapsible groups and run controls"""
-    screen, window, div, button, state, icon, text = actions.user.ui_elements(
-        ["screen", "window", "div", "button", "state", "icon", "text"]
+    screen, window, div, button, state, icon, text, checkbox = actions.user.ui_elements(
+        ["screen", "window", "div", "button", "state", "icon", "text", "checkbox"]
     )
+
+    # Fast mode checkbox (applies to all test runs)
+    fast_mode, set_fast_mode = state.use("fast_mode", True)
 
     # Run All Tests button at top
     run_all_tests_active = state.get("run_all_tests_global", False)
@@ -440,9 +445,18 @@ def test_runner_ui(test_groups):
     run_all_tests_label = "Stop All Tests" if run_all_tests_active else "Run All Tests"
     run_all_tests_color = "#ff5555" if run_all_tests_active else "#0088ff"
 
+    checkbox_props = {
+        "background_color": "#1e1e1e",
+        "border_color": "#3e3e3e",
+        "border_width": 1,
+        "border_radius": 2,
+    }
+
     run_all_tests_button = div(
         flex_direction="row",
         justify_content="center",
+        align_items="center",
+        gap=16,
         margin_bottom=24
     )[
         button(
@@ -458,6 +472,10 @@ def test_runner_ui(test_groups):
         )[
             icon(run_all_tests_icon, size=14, color="white"),
             text(run_all_tests_label, color="white", font_weight="bold", font_size=13)
+        ],
+        div(flex_direction="row", gap=8, align_items="center", margin_left=32)[
+            checkbox(checkbox_props, background_color="#454545", id="fast_mode", checked=fast_mode, on_change=lambda e: set_fast_mode(e.checked)),
+            text("Fast", for_id="fast_mode", color="#cccccc", font_size=14, font_weight="bold"),
         ]
     ]
 
@@ -526,7 +544,7 @@ def test_runner_ui(test_groups):
                         color="#cccccc",
                         font_size=13,
                         border_radius=2,
-                        on_click=lambda e, f=test_func, n=test_name, g=group_name: run_single_test(n, f, test_group=g)
+                        on_click=lambda e, f=test_func, n=test_name, g=group_name: run_single_test(n, f, test_group=g, fast_mode=actions.user.ui_elements_get_state("fast_mode", True))
                     )
                 )
 
