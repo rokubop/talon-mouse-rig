@@ -969,14 +969,10 @@ class ActiveBuilder:
         # Back-reference to containing group (set by LayerGroup.add_builder)
         self.group: Optional['LayerGroup'] = None
 
-        # For base layers, set mode based on operator semantics
+        # For base layers, always use override mode to store absolute result values
+        # Modes (offset/scale) are only meaningful for modifier layers
         if config.mode is None and is_base_layer:
-            if config.operator == "to":
-                config.mode = "override"  # Absolute value
-            elif config.operator in ("mul", "div"):
-                config.mode = "scale"  # Multiplicative
-            else:
-                config.mode = "offset"
+            config.mode = "override"
 
         self.group_lifecycle: Optional[Lifecycle] = None
         self.group_base_value: Optional[Any] = None
@@ -1016,12 +1012,22 @@ class ActiveBuilder:
                 # pos.by() - always start at zero for offset mode
                 # Queue accumulated state is tracked separately by the queue system
                 self.base_value = Vec2(0, 0)
+            elif is_base_layer:
+                # For base layer operations, use computed value (includes pending builders)
+                prop_state = getattr(rig_state, config.property)
+                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
             else:
-                # speed.by(), direction.by() - use base state
+                # For modifier layers: speed.by(), direction.by() - use base state
                 self.base_value = self._get_base_value()
         else:
-            # For all other operations (sub, mul, div), use base state
-            self.base_value = self._get_base_value()
+            # For all other operations (sub, mul, div)
+            if is_base_layer:
+                # For base layer operations, use computed value (includes pending builders)
+                prop_state = getattr(rig_state, config.property)
+                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
+            else:
+                # For modifier layers, use base state
+                self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
 
@@ -1204,7 +1210,7 @@ class ActiveBuilder:
         current_time = time.perf_counter()
         phase, progress = self.lifecycle.advance(current_time)
         mode = self.config.mode
-        
+
         if self.config.property == "pos" and phase is None and self.lifecycle.has_reverted():
             print(f"[DEBUG _get_own_value] REVERT COMPLETE: base_value={self.base_value}, target_value={self.target_value}, has_reverted={self.lifecycle.has_reverted()}")
 

@@ -86,12 +86,17 @@ class LayerGroup:
         """Builder completed - bake its value
 
         Returns:
-            "bake_to_base" for base layers
+            "bake_to_base" for base layers (including reverted ones)
             "baked_to_group" for modifier layers
+            "reverted" for modifier layers that reverted (don't bake)
         """
         if builder.lifecycle.has_reverted():
-            # Don't bake reverted builders
-            return "reverted"
+            if self.is_base:
+                # Base layers need to restore original value when reverting
+                return "bake_to_base"
+            else:
+                # Modifier layers that revert don't bake (layer persists with accumulated value)
+                return "reverted"
 
         value = builder.get_interpolated_value()
 
@@ -123,19 +128,37 @@ class LayerGroup:
             return current + incoming
 
     def get_current_value(self) -> Any:
-        """Get aggregated value: accumulated + all active builders"""
+        """Get aggregated value: accumulated + all active builders
+        
+        For base layers: Just return the builder's value directly (modes don't apply)
+        For modifier layers: Apply modes (offset/override/scale) to accumulated value
+        """
+        print(f"[DEBUG LayerGroup.get_current_value] Layer '{self.layer_name}': is_base={self.is_base}, accumulated_value={self.accumulated_value}, {len(self.builders)} builders")
+        
+        # Base layers: ignore accumulated_value (always 0), just use builder value
+        if self.is_base:
+            if not self.builders:
+                return self.accumulated_value  # Should be 0
+            # For base layers, return the LAST builder's value (most recent operation)
+            # Multiple builders shouldn't normally exist, but can occur with instant operations
+            last_value = self.accumulated_value
+            for builder in self.builders:
+                builder_value = builder.get_interpolated_value()
+                print(f"[DEBUG LayerGroup.get_current_value]   Base builder: value={builder_value}")
+                if builder_value is not None:
+                    last_value = builder_value
+            print(f"[DEBUG LayerGroup.get_current_value] Final result (base): {last_value}")
+            return last_value
+        
+        # Modifier layers: start with accumulated value and apply modes
         result = self.accumulated_value
-        print(f"[DEBUG LayerGroup.get_current_value] Layer '{self.layer_name}': starting with accumulated_value={result}, {len(self.builders)} builders")
-
         for builder in self.builders:
-            # Always include builder value - the builder's get_interpolated_value()
-            # handles returning the correct final value when complete
             builder_value = builder.get_interpolated_value()
-            print(f"[DEBUG LayerGroup.get_current_value]   Builder: value={builder_value}, mode={builder.config.mode}, complete={builder.lifecycle.is_complete()}, phase={builder.lifecycle.phase}")
+            print(f"[DEBUG LayerGroup.get_current_value]   Modifier builder: value={builder_value}, mode={builder.config.mode}")
             if builder_value is not None:
                 result = self._apply_mode(result, builder_value, builder.config.mode)
-        
-        print(f"[DEBUG LayerGroup.get_current_value] Final result: {result}")
+
+        print(f"[DEBUG LayerGroup.get_current_value] Final result (modifier): {result}")
         return result
 
     def should_persist(self) -> bool:
@@ -186,7 +209,7 @@ class LayerGroup:
 
     def on_builder_complete(self, builder: 'ActiveBuilder'):
         """Called when a builder completes - handle queue progression
-        
+
         Note: Does NOT remove the builder - caller is responsible for removal
         """
         # Bake the builder

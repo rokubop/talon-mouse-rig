@@ -334,7 +334,7 @@ class RigState:
             print(f"[DEBUG add_builder] Bake result: {bake_result}")
             if bake_result == "bake_to_base":
                 self._bake_group_to_base(group)
-            
+
             # Remove the builder immediately for synchronous operations
             print(f"[DEBUG add_builder] Removing builder from group, group had {len(group.builders)} builders")
             group.remove_builder(builder)
@@ -348,7 +348,7 @@ class RigState:
                     # Start frame loop for velocity-based movement
                     print(f"[DEBUG add_builder] Starting frame loop for velocity property {builder.config.property}")
                     self._ensure_frame_loop_running()
-                
+
                 # Clean up the empty group
                 print(f"[DEBUG add_builder] Deleting empty group {layer}")
                 del self._layer_groups[layer]
@@ -447,6 +447,7 @@ class RigState:
 
         current_value = group.get_current_value()
         prop = group.property
+        print(f"[DEBUG _bake_group_to_base] Baking {prop}: current_value={current_value}")
 
         # Apply to base state
         if prop == "pos":
@@ -1003,7 +1004,6 @@ class RigState:
         7. Update tracking for remaining builders
         8. Execute callbacks and stop if done
         """
-        print(f"[DEBUG _tick_frame] START - active groups: {len(self._layer_groups)}")
         current_time, dt = self._calculate_delta_time()
         if dt is None:
             return
@@ -1016,7 +1016,6 @@ class RigState:
         phase_transitions = self._advance_all_builders(current_time)
 
         if manual_movement_detected:
-            print(f"[DEBUG _tick_frame] Manual movement detected, early exit")
             self._remove_completed_builders(current_time)
             self._execute_phase_callbacks(phase_transitions)
             self._stop_frame_loop_if_done()
@@ -1045,7 +1044,6 @@ class RigState:
         completed_layers = self._remove_completed_builders(current_time)
 
         # 6. Execute callbacks and stop if done
-        print(f"[DEBUG _tick_frame] About to execute {len(phase_transitions)} phase callbacks")
         self._execute_phase_callbacks(phase_transitions)
         self._stop_frame_loop_if_done()
 
@@ -1133,6 +1131,9 @@ class RigState:
                 bake_result = group.on_builder_complete(builder)
                 if bake_result == "bake_to_base":
                     self._bake_group_to_base(group)
+                
+                # Actually remove the builder from the group
+                group.remove_builder(builder)
 
             # Check if group should be removed
             if not group.should_persist():
@@ -1151,15 +1152,12 @@ class RigState:
     def _stop_frame_loop_if_done(self):
         """Stop frame loop if no longer needed"""
         should_be_active = self._should_frame_loop_be_active()
-        print(f"[DEBUG _stop_frame_loop_if_done] should_be_active={should_be_active}")
         if not should_be_active:
-            print(f"[DEBUG _stop_frame_loop_if_done] STOPPING frame loop")
             self._stop_frame_loop()
 
 
     def _ensure_frame_loop_running(self):
         """Start frame loop if not already running"""
-        print(f"[DEBUG _ensure_frame_loop_running] Called, job exists: {self._frame_loop_job is not None}")
         if self._frame_loop_job is None:
             frame_interval = settings.get("user.mouse_rig_frame_interval", 16)
             self._frame_loop_job = cron.interval(f"{frame_interval}ms", self._tick_frame)
@@ -1234,20 +1232,15 @@ class RigState:
         - No velocity AND all builders have completed their lifecycle
         """
         has_movement = self._has_movement()
-        print(f"[DEBUG _should_frame_loop_be_active] has_movement={has_movement}, groups={len(self._layer_groups)}")
         if has_movement:
             return True
 
         # Check if any builder has an incomplete lifecycle
         for group in self._layer_groups.values():
-            print(f"[DEBUG _should_frame_loop_be_active] Checking group '{group.layer_name}': {len(group.builders)} builders")
             for builder in group.builders:
-                is_complete = builder.lifecycle.is_complete()
-                print(f"[DEBUG _should_frame_loop_be_active]   Builder {builder.config.property}.{builder.config.operator}(): complete={is_complete}, phase={builder.lifecycle.phase}")
-                if not is_complete:
+                if not builder.lifecycle.is_complete():
                     return True
 
-        print(f"[DEBUG _should_frame_loop_be_active] No active work, returning False")
         return False
 
     def _get_cardinal_direction(self, direction: Vec2) -> Optional[str]:
