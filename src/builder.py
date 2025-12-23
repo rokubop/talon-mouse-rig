@@ -1030,6 +1030,10 @@ class ActiveBuilder:
                 self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
+        
+        # Revert target for offset mode with replace (set by state manager)
+        # When set, this overrides the normal revert behavior to cancel accumulated value
+        self.revert_target: Optional[Any] = None
 
         # Auto-detect same-axis direction reversal for smooth zero-crossing
         if (config.property == "direction" and
@@ -1294,14 +1298,17 @@ class ActiveBuilder:
                 neutral = Vec2(0, 0)
                 if phase is None:
                     if self.lifecycle.has_reverted():
-                        return neutral
+                        # If revert_target is set (from replace), use it instead of neutral
+                        return self.revert_target if self.revert_target is not None else neutral
                     return self.target_value
                 elif phase == LifecyclePhase.OVER:
                     return self.target_value * progress
                 elif phase == LifecyclePhase.HOLD:
                     return self.target_value
                 elif phase == LifecyclePhase.REVERT:
-                    return self.target_value * (1.0 - progress)
+                    # If revert_target is set (from replace), animate to it instead of neutral
+                    revert_to = self.revert_target if self.revert_target is not None else neutral
+                    return self.target_value + (revert_to - self.target_value) * progress
             else:  # override
                 # Override mode: animate absolute position from base
                 if phase is None:

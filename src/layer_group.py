@@ -146,25 +146,33 @@ class LayerGroup:
                 return current + incoming
             if isinstance(current, Vec2) and isinstance(incoming, Vec2):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
-            # Type mismatch: if current is scalar but incoming is Vec2, treat current as zero
+            # Type mismatch: if current is scalar but incoming is Vec2, replace with incoming
             if isinstance(current, (int, float)) and isinstance(incoming, Vec2):
                 return incoming
             if isinstance(current, Vec2) and isinstance(incoming, (int, float)):
-                # This shouldn't happen but handle it gracefully
+                # Vec2 + scalar angle: can't mix, keep the Vec2 (or could convert to angle)
+                # For now, treat the scalar as negligible and keep the vector
                 return current
-            return current + incoming
+            # Fallback for unexpected types
+            return incoming
         elif mode == "override":
             # Override replaces
             return incoming
         elif mode == "scale" or mode == "mul":
             if isinstance(current, Vec2) and isinstance(incoming, (int, float)):
                 return Vec2(current.x * incoming, current.y * incoming)
-            return current * incoming
+            if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
+                return current * incoming
+            # Fallback for unexpected types
+            return incoming
         else:
             # Default: additive
             if isinstance(current, Vec2) and isinstance(incoming, Vec2):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
-            return current + incoming
+            if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
+                return current + incoming
+            # Type mismatch fallback
+            return incoming
 
     def get_current_value(self) -> Any:
         """Get aggregated value: accumulated + all active builders
@@ -276,12 +284,20 @@ class LayerGroup:
 
     def _is_reverted_to_zero(self) -> bool:
         """Check if accumulated value is effectively zero/identity"""
+        # Handle None (uninitialized direction.offset)
+        if self.accumulated_value is None:
+            return True
+            
         if isinstance(self.accumulated_value, Vec2):
             return (abs(self.accumulated_value.x) < EPSILON and
                     abs(self.accumulated_value.y) < EPSILON)
 
-        # For scalar values (float), check if close to 0.0
-        return abs(self.accumulated_value) < EPSILON
+        # For scalar values (int, float), check if close to 0.0
+        if isinstance(self.accumulated_value, (int, float)):
+            return abs(self.accumulated_value) < EPSILON
+            
+        # Fallback: unknown type, consider not zero to be safe
+        return False
 
     def enqueue_builder(self, execution_callback: Callable):
         """Add a builder to this group's queue"""

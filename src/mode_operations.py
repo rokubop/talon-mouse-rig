@@ -287,11 +287,21 @@ def calculate_position_target(
             return current + Vec2.from_tuple(value)
 
     else:  # offset
-        # Offset mode: store offset vector
+        # Offset mode: store offset vector (contribution to add)
+        # When current is non-zero (e.g., from replace with accumulated value),
+        # we want the contribution to reach the target, not add the full offset
         if operator == "to":
-            return Vec2.from_tuple(value)
+            desired_offset = Vec2.from_tuple(value)
+            # If current is non-zero, we're replacing: contribute (desired - current)
+            if current.x != 0 or current.y != 0:
+                return desired_offset - current
+            return desired_offset
         elif operator in ("by", "add"):
-            return Vec2.from_tuple(value)
+            desired_offset = Vec2.from_tuple(value)
+            # If current is non-zero, we're replacing: contribute (desired - current)
+            if current.x != 0 or current.y != 0:
+                return desired_offset - current
+            return desired_offset
 
     return current
 

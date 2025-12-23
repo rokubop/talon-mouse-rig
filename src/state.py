@@ -286,7 +286,7 @@ class RigState:
                 return  # Throttled, skip
 
         if behavior == "replace":
-            # Get current accumulated value
+            # Get current accumulated value from the group
             current_value = group.get_current_value()
 
             # Special case: absolute position operations need actual mouse position
@@ -299,10 +299,22 @@ class RigState:
                 from talon import ctrl
                 current_value = Vec2(*ctrl.mouse_pos())
 
+            # Bake current value into accumulated_value before clearing builders
+            # This preserves what's been applied so far
+            if not group.is_base:
+                group.accumulated_value = current_value
+
+            # For offset mode: new builder should contribute (target - current)
+            # For override mode: new builder should go from current to target
             builder.base_value = current_value
             builder.target_value = builder._calculate_target_value()
-
-            # Clear existing builders
+            
+            # For offset mode with revert: the builder needs to know to revert
+            # the entire accumulated value, not just its contribution
+            if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
+                builder.revert_target = -current_value
+            
+            # Clear existing builders (after baking their state)
             group.clear_builders()
 
         elif behavior == "stack":
