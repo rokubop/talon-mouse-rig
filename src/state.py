@@ -299,18 +299,26 @@ class RigState:
                 from talon import ctrl
                 current_value = Vec2(*ctrl.mouse_pos())
 
-            # Bake current value into accumulated_value before clearing builders
-            # This preserves what's been applied so far
+            # For pos.offset with revert: DO bake (need to track what to revert)
+            # For pos.offset without revert: don't bake (consumable deltas)
+            # For speed/direction/vector.offset: always bake (persistent modifiers)
+            # For override mode: always bake (absolute state)
             if not group.is_base:
-                group.accumulated_value = current_value
+                is_position_offset = (builder.config.property == "pos" and builder.config.mode == "offset")
+                should_bake = True
+                if is_position_offset and not builder.lifecycle.revert_ms:
+                    should_bake = False  # pos.offset without revert: don't bake
+                if should_bake:
+                    group.accumulated_value = current_value
 
             # For offset mode: new builder should contribute (target - current)
             # For override mode: new builder should go from current to target
             builder.base_value = current_value
             builder.target_value = builder._calculate_target_value()
             
-            # For offset mode with revert: the builder needs to know to revert
-            # the entire accumulated value, not just its contribution
+            # For offset mode with revert: the builder needs to revert the accumulated state
+            # For pos.offset: revert the delta that was already physically moved
+            # For speed/direction/vector.offset: revert the accumulated modifier
             if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
                 # Negate current_value (handle both Vec2 and scalar types)
                 from .core import Vec2

@@ -133,8 +133,8 @@ def test_behavior_replace_pos_offset_by_over_revert(on_success, on_failure):
 
     def check_pos():
         x, y = ctrl.mouse_pos()
-        # After replace and revert, should be back at start position
-        if x != start_x or y != start_y:
+        # After replace and revert, should be back at start position (±2px tolerance for rounding)
+        if abs(x - start_x) > 2 or abs(y - start_y) > 2:
             on_failure(f"After replace+revert: expected ({start_x}, {start_y}), got ({x}, {y})")
             return
         on_success()
