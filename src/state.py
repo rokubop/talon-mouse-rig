@@ -374,26 +374,32 @@ class RigState:
             True if builder was enqueued (caller should return early)
             False if builder should be executed immediately
         """
+        print(f"[DEBUG _apply_queue_behavior] Layer '{group.layer_name}': is_queue_active={group.is_queue_active}, pending_queue_len={len(group.pending_queue)}, active_builders={len(group.builders)}")
+
         # Check max
         if builder.config.behavior_args:
             max_count = builder.config.behavior_args[0]
+            # Count active builders + pending queue items
+            # Don't add 1 for is_queue_active - executing builder is already in group.builders
             total = len(group.builders) + len(group.pending_queue)
-            if group.is_queue_active:
-                total += 1  # Count currently executing
             if total >= max_count:
+                print(f"[DEBUG _apply_queue_behavior] At max queue limit: {total} >= {max_count}, skipping")
                 return True  # At max, skip
 
         # If queue is active or has pending, enqueue
         if group.is_queue_active or len(group.pending_queue) > 0:
             def execute_callback():
+                print(f"[DEBUG _apply_queue_behavior] Executing queued builder for layer '{group.layer_name}'")
                 group.add_builder(builder)
                 if not builder.lifecycle.is_complete():
                     self._ensure_frame_loop_running()
 
+            print(f"[DEBUG _apply_queue_behavior] Enqueueing builder (queue active or has pending)")
             group.enqueue_builder(execute_callback)
             return True  # Enqueued, caller should return
         else:
             # First in queue - execute immediately
+            print(f"[DEBUG _apply_queue_behavior] First in queue - executing immediately and marking queue active")
             group.is_queue_active = True
             return False  # Execute immediately
 
@@ -1253,8 +1259,13 @@ class RigState:
 
         for layer, group in list(self._layer_groups.items()):
             # Advance the group (which advances all builders)
-            group_transitions = group.advance(current_time)
+            group_transitions, builders_to_remove = group.advance(current_time)
             phase_transitions.extend(group_transitions)
+            
+            # Store bake results for _remove_completed_builders to use
+            if not hasattr(group, '_pending_bake_results'):
+                group._pending_bake_results = []
+            group._pending_bake_results.extend(builders_to_remove)
 
         return phase_transitions
 
@@ -1304,12 +1315,18 @@ class RigState:
 
                     builders_to_remove.append(builder)
 
+            # Process pending bake results (from advance())
+            if hasattr(group, '_pending_bake_results'):
+                for builder, bake_result in group._pending_bake_results:
+                    if builder in group.builders:  # Only process if still in group
+                        if bake_result == "bake_to_base":
+                            self._bake_group_to_base(group)
+                group._pending_bake_results = []
+            
             # Remove completed builders from group
             for builder in builders_to_remove:
-                bake_result = group.on_builder_complete(builder)
-                if bake_result == "bake_to_base":
-                    self._bake_group_to_base(group)
-
+                print(f"[DEBUG _remove_completed_builders] Removing completed builder from layer '{layer}', behavior={builder.config.behavior}")
+                # Don't call on_builder_complete again - already called in advance()
                 # Actually remove the builder from the group
                 group.remove_builder(builder)
 

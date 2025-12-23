@@ -287,7 +287,7 @@ class LayerGroup:
         # Handle None (uninitialized direction.offset)
         if self.accumulated_value is None:
             return True
-            
+
         if isinstance(self.accumulated_value, Vec2):
             return (abs(self.accumulated_value.x) < EPSILON and
                     abs(self.accumulated_value.y) < EPSILON)
@@ -295,7 +295,7 @@ class LayerGroup:
         # For scalar values (int, float), check if close to 0.0
         if isinstance(self.accumulated_value, (int, float)):
             return abs(self.accumulated_value) < EPSILON
-            
+
         # Fallback: unknown type, consider not zero to be safe
         return False
 
@@ -309,10 +309,14 @@ class LayerGroup:
         Returns:
             True if a builder was started, False if queue empty
         """
+        print(f"[DEBUG LayerGroup.start_next_queued] Layer '{self.layer_name}': pending_queue_len={len(self.pending_queue)}")
+
         if len(self.pending_queue) == 0:
+            print(f"[DEBUG LayerGroup.start_next_queued] Queue empty, marking queue as inactive")
             self.is_queue_active = False
             return False
 
+        print(f"[DEBUG LayerGroup.start_next_queued] Starting next queued builder")
         callback = self.pending_queue.popleft()
         self.is_queue_active = True
         callback()  # Execute the builder
@@ -323,14 +327,18 @@ class LayerGroup:
 
         Note: Does NOT remove the builder - caller is responsible for removal
         """
+        print(f"[DEBUG LayerGroup.on_builder_complete] Layer '{self.layer_name}': builder behavior={builder.config.behavior}, pending_queue_len={len(self.pending_queue)}")
+
         # Bake the builder
         bake_result = self.bake_builder(builder)
 
         # Don't remove builder here - let the caller decide when to remove
         # This ensures final position emission happens before removal
 
-        # If queue behavior, start next
-        if builder.config.behavior == "queue":
+        # If there are pending queue items, start next regardless of this builder's behavior
+        # This handles cases where builder 1 has no queue behavior, but builder 2 was queued
+        if len(self.pending_queue) > 0:
+            print(f"[DEBUG LayerGroup.on_builder_complete] Pending queue items found, starting next queued builder")
             self.start_next_queued()
 
         return bake_result
@@ -353,20 +361,32 @@ class LayerGroup:
             if old_phase != new_phase and old_phase is not None:
                 phase_transitions.append((builder, old_phase))
 
-            # Check if builder should be removed
-            if builder.lifecycle.should_be_garbage_collected():
-                # Mark for removal - will be processed after this frame's position emission
-                print(f"[DEBUG LayerGroup.advance] Builder completing, marking for removal")
+            # Check if builder transitioned to completion (phase becomes None)
+            is_complete = builder.lifecycle.is_complete()
+            should_gc = builder.lifecycle.should_be_garbage_collected()
+
+            if builder.config.behavior == "queue":
+                print(f"[DEBUG LayerGroup.advance] Queue builder: phase={new_phase}, old_phase={old_phase}, is_complete={is_complete}, should_gc={should_gc}")
+
+            # If builder just completed (transitioned to phase=None), mark for removal
+            # Bake NOW before final emission to capture correct value
+            if old_phase is not None and new_phase is None:
+                print(f"[DEBUG LayerGroup.advance] Builder completed (phase transition to None), marking for removal, behavior={builder.config.behavior}")
                 builder._marked_for_removal = True
                 bake_result = self.on_builder_complete(builder)
-                print(f"[DEBUG LayerGroup.advance] Bake result: {bake_result}, group still has {len(self.builders)} builders")
+                builders_to_remove.append((builder, bake_result))
+            elif should_gc:
+                # Standard garbage collection for non-completing transitions
+                print(f"[DEBUG LayerGroup.advance] Builder should_gc=True, marking for removal, behavior={builder.config.behavior}")
+                builder._marked_for_removal = True
+                bake_result = self.on_builder_complete(builder)
                 builders_to_remove.append((builder, bake_result))
 
         # Don't remove builders here - let _remove_completed_builders handle it
         # after final position emission. This ensures absolute position builders
         # emit their final target position.
 
-        return phase_transitions
+        return phase_transitions, builders_to_remove
 
     def __repr__(self) -> str:
         return f"<LayerGroup '{self.layer_name}' {self.property} mode={self.mode} builders={len(self.builders)} accumulated={self.accumulated_value}>"

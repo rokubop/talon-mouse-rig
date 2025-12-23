@@ -430,39 +430,8 @@ class RigBuilder:
 
         self._calculate_rate_durations()
 
-        # Execute based on behavior mode
-        if self.config.behavior == "queue":
-            self._execute_queue_behavior()
-        else:
-            self._execute_direct()
-
-    def _execute_queue_behavior(self):
-        """Execute builder with queue behavior - enqueue or start immediately"""
-        # Create temporary ActiveBuilder to get queue key
-        temp_active = ActiveBuilder(self.config, self.rig_state, self.is_base_layer)
-        queue_key = self.rig_state._get_queue_key(self.config.layer_name, temp_active)
-        queue = self.rig_state._queue_manager.get_queue(queue_key)
-
-        # Capture config for execution callback
-        config = self.config
-        is_base = self.is_base_layer
-
-        def execute_callback():
-            """Callback to execute this builder"""
-            new_builder = ActiveBuilder(config, self.rig_state, is_base, queue=queue)
-            self.rig_state.add_builder(new_builder)
-
-        # Check if queue is actively executing OR has items waiting
-        if queue.current is not None or not queue.is_empty():
-            # Enqueue for later execution
-            self.rig_state._queue_manager.enqueue(queue_key, execute_callback)
-        else:
-            # First execution: set as current and execute immediately
-            queue.current = execute_callback
-            execute_callback()
-
-    def _execute_direct(self):
-        """Execute builder directly without queue behavior"""
+        # Queue behavior is now handled by RigState.add_builder() and LayerGroup
+        # Just create the ActiveBuilder and add it - the queue logic is in state.py
         active = ActiveBuilder(self.config, self.rig_state, self.is_base_layer)
         self.rig_state.add_builder(active)
 
@@ -956,7 +925,7 @@ class ActiveBuilder:
     not parent/child relationships.
     """
 
-    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_base_layer: bool, queue=None):
+    def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_base_layer: bool):
         import time
 
         self.config = config
@@ -964,7 +933,6 @@ class ActiveBuilder:
         self.is_base_layer = is_base_layer
         self.layer = config.layer_name
         self.creation_time = time.perf_counter()
-        self.queue = queue  # Optional queue for accessing accumulated state
 
         # Back-reference to containing group (set by LayerGroup.add_builder)
         self.group: Optional['LayerGroup'] = None
@@ -1030,7 +998,7 @@ class ActiveBuilder:
                 self.base_value = self._get_base_value()
 
         self.target_value = self._calculate_target_value()
-        
+
         # Revert target for offset mode with replace (set by state manager)
         # When set, this overrides the normal revert behavior to cancel accumulated value
         self.revert_target: Optional[Any] = None
