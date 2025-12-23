@@ -179,8 +179,10 @@ class RigState:
                 return group.builders[0].time_alive
         return None
 
-    def _check_throttle(self, builder: 'ActiveBuilder', layer: str) -> bool:
-        """Check if builder should be throttled
+    def _apply_throttle_behavior(self, builder: 'ActiveBuilder', layer: str) -> bool:
+        """Apply throttle behavior: check and record throttle time
+
+        Side effect: Updates throttle timestamp when not throttled
 
         Returns:
             True if throttled (should skip), False if allowed to proceed
@@ -196,179 +198,219 @@ class RigState:
         self._throttle_times[throttle_key] = time.perf_counter()
         return False  # Not throttled
 
-    def add_builder(self, builder: 'ActiveBuilder'):
-        """Add a builder to its layer group
+    def _apply_debounce_behavior(self, builder: 'ActiveBuilder', layer: str):
+        """Apply debounce behavior: schedule builder for delayed execution
 
-        Creates group if needed, handles behaviors, manages queue.
+        Cancels any existing debounced builder with the same key and schedules
+        the new builder to execute after the specified delay.
+
+        Args:
+            builder: The builder to schedule
+            layer: The layer name
+        """
+        if not builder.config.behavior_args:
+            from .contracts import ConfigError
+            raise ConfigError("debounce() requires a delay in milliseconds")
+
+        delay_ms = builder.config.behavior_args[0]
+        debounce_key = self._get_debounce_key(layer, builder.config)
+
+        # Cancel existing debounce
+        if debounce_key in self._debounce_pending:
+            _, _, _, old_cron_job = self._debounce_pending[debounce_key]
+            if old_cron_job is not None:
+                cron.cancel(old_cron_job)
+
+        # Store pending
+        target_time = time.perf_counter() + (delay_ms / 1000.0)
+
+        cron_job = None
+        if self._frame_loop_job is None:
+            def execute_debounced():
+                if debounce_key in self._debounce_pending:
+                    _, config, is_base, _ = self._debounce_pending[debounce_key]
+                    del self._debounce_pending[debounce_key]
+                    config.behavior = None
+                    config.behavior_args = ()
+                    from .builder import ActiveBuilder
+                    actual_builder = ActiveBuilder(config, self, is_base)
+                    self.add_builder(actual_builder)
+
+            cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
+
+        self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_base_layer(), cron_job)
+
+    def _check_and_update_rate_cache(self, builder: 'ActiveBuilder', layer: str) -> bool:
+        """Check rate-based cache and update builder/cache as needed
+
+        Side effects: May modify builder.base_value, builder.target_value, and update cache
+
+        For rate-based builders (using .over_rate or .revert_rate), checks if a
+        matching builder is already in progress. If targets match, skips this builder.
+        If targets differ, updates the new builder to start from current value.
+
+        Args:
+            builder: The builder to check and potentially update
+            layer: The layer name
+
+        Returns:
+            True if builder should be skipped (matching target in progress)
+            False if builder should proceed
+        """
+        rate_cache_key = self._get_rate_cache_key(layer, builder.config)
+        if rate_cache_key is None:
+            return False  # Not a rate-based operation
+
+        if rate_cache_key in self._rate_builder_cache:
+            cached_builder, cached_target = self._rate_builder_cache[rate_cache_key]
+
+            # Check if targets match
+            targets_match = self._targets_match(builder.target_value, cached_target)
+
+            if targets_match and layer in self._layer_groups:
+                # Same target in progress - skip
+                return True
+            else:
+                # Different target - replace
+                if layer in self._layer_groups:
+                    group = self._layer_groups[layer]
+                    old_current_value = group.get_current_value()
+
+                    # Update builder to start from current
+                    builder.base_value = old_current_value
+                    builder.target_value = builder._calculate_target_value()
+
+                    # Recalculate rate duration
+                    self._recalculate_rate_duration(builder)
+
+        # Cache this builder
+        self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
+        return False
+
+    def _apply_replace_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup'):
+        """Apply replace behavior: clear existing builders and update the new one
+
+        Replace behavior bakes the current value, updates the new builder to start
+        from that value, and clears all existing builders in the group.
+
+        Args:
+            builder: The new builder to add
+            group: The layer group to apply replace behavior to
+        """
+        # Get current accumulated value from the group
+        current_value = group.get_current_value()
+
+        # Special case: absolute position operations need actual mouse position
+        # This matches pre-refactor behavior where pos.to() read from ctrl.mouse_pos()
+        # Applies to both base layers and modifier layers with override mode
+        if (builder.config.property == "pos" and
+            builder.config.movement_type == "absolute" and
+            len(group.builders) == 0):
+            from .core import Vec2
+            from talon import ctrl
+            current_value = Vec2(*ctrl.mouse_pos())
+
+        # For pos.offset with revert: DO bake (need to track what to revert)
+        # For pos.offset without revert: don't bake (consumable deltas)
+        # For speed/direction/vector.offset: always bake (persistent modifiers)
+        # For override mode: always bake (absolute state)
+        if not group.is_base:
+            is_position_offset = (builder.config.property == "pos" and builder.config.mode == "offset")
+            should_bake = True
+            if is_position_offset and not builder.lifecycle.revert_ms:
+                should_bake = False  # pos.offset without revert: don't bake
+            if should_bake:
+                group.accumulated_value = current_value
+
+        # For offset mode: new builder should contribute (target - current)
+        # For override mode: new builder should go from current to target
+        builder.base_value = current_value
+        builder.target_value = builder._calculate_target_value()
+
+        # For offset mode with revert: the builder needs to revert the accumulated state
+        # For pos.offset: revert the delta that was already physically moved
+        # For speed/direction/vector.offset: revert the accumulated modifier
+        if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
+            # Negate current_value (handle both Vec2 and scalar types)
+            from .core import Vec2
+            if isinstance(current_value, Vec2):
+                builder.revert_target = Vec2(-current_value.x, -current_value.y)
+            elif isinstance(current_value, (int, float)):
+                builder.revert_target = -current_value
+            else:
+                builder.revert_target = None
+
+        # Clear existing builders (after baking their state)
+        group.clear_builders()
+
+    def _apply_stack_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup') -> bool:
+        """Apply stack behavior: check if limit is reached (pure check, no side effects)
+
+        Args:
+            builder: The builder to check
+            group: The layer group to check
+
+        Returns:
+            True if at stack limit (should skip builder)
+            False if under limit (should add builder)
+        """
+        if builder.config.behavior_args:
+            max_count = builder.config.behavior_args[0]
+            if len(group.builders) >= max_count:
+                return True  # At max, skip
+        return False
+
+    def _apply_queue_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup') -> bool:
+        """Apply queue behavior: enqueue or execute builder based on queue state
+
+        If queue is active or has pending items, enqueues the builder.
+        If queue is empty, marks it as active and returns False to execute immediately.
+
+        Args:
+            builder: The builder to enqueue or execute
+            group: The layer group managing the queue
+
+        Returns:
+            True if builder was enqueued (caller should return early)
+            False if builder should be executed immediately
+        """
+        # Check max
+        if builder.config.behavior_args:
+            max_count = builder.config.behavior_args[0]
+            total = len(group.builders) + len(group.pending_queue)
+            if group.is_queue_active:
+                total += 1  # Count currently executing
+            if total >= max_count:
+                return True  # At max, skip
+
+        # If queue is active or has pending, enqueue
+        if group.is_queue_active or len(group.pending_queue) > 0:
+            def execute_callback():
+                group.add_builder(builder)
+                if not builder.lifecycle.is_complete():
+                    self._ensure_frame_loop_running()
+
+            group.enqueue_builder(execute_callback)
+            return True  # Enqueued, caller should return
+        else:
+            # First in queue - execute immediately
+            group.is_queue_active = True
+            return False  # Execute immediately
+
+    def _finalize_builder_completion(self, builder: 'ActiveBuilder', group: 'LayerGroup'):
+        """Handle builder completion and cleanup
+
+        Handles both synchronous (pos.to, pos.by) and instant completion
+        (speed.to, direction.to without .over) cases. Manages baking, builder
+        removal, frame loop starting, and group cleanup.
+
+        Args:
+            builder: The completed builder
+            group: The layer group containing the builder
         """
         layer = builder.config.layer_name
 
-        # DEBUG: Log builder details
-        print(f"[DEBUG add_builder] Adding builder: layer={layer}, property={builder.config.property}, mode={builder.config.mode}, operator={builder.config.operator}, value={builder.config.value}")
-        print(f"[DEBUG add_builder] is_base_layer={builder.config.is_base_layer()}, layer_type={builder.config.layer_type}")
-
-        # Handle special operators
-        if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
-            return
-
-        # Handle debounce behavior
-        if builder.config.behavior == "debounce":
-            if not builder.config.behavior_args:
-                from .contracts import ConfigError
-                raise ConfigError("debounce() requires a delay in milliseconds")
-
-            delay_ms = builder.config.behavior_args[0]
-            debounce_key = self._get_debounce_key(layer, builder.config)
-
-            # Cancel existing debounce
-            if debounce_key in self._debounce_pending:
-                _, _, _, old_cron_job = self._debounce_pending[debounce_key]
-                if old_cron_job is not None:
-                    cron.cancel(old_cron_job)
-
-            # Store pending
-            target_time = time.perf_counter() + (delay_ms / 1000.0)
-
-            cron_job = None
-            if self._frame_loop_job is None:
-                def execute_debounced():
-                    if debounce_key in self._debounce_pending:
-                        _, config, is_base, _ = self._debounce_pending[debounce_key]
-                        del self._debounce_pending[debounce_key]
-                        config.behavior = None
-                        config.behavior_args = ()
-                        from .builder import ActiveBuilder
-                        actual_builder = ActiveBuilder(config, self, is_base)
-                        self.add_builder(actual_builder)
-
-                cron_job = cron.after(f"{delay_ms}ms", execute_debounced)
-
-            self._debounce_pending[debounce_key] = (target_time, builder.config, builder.config.is_base_layer(), cron_job)
-            return
-
-        # Handle rate-based caching
-        rate_cache_key = self._get_rate_cache_key(layer, builder.config)
-        if rate_cache_key is not None:
-            if rate_cache_key in self._rate_builder_cache:
-                cached_builder, cached_target = self._rate_builder_cache[rate_cache_key]
-
-                # Check if targets match
-                targets_match = self._targets_match(builder.target_value, cached_target)
-
-                if targets_match and layer in self._layer_groups:
-                    # Same target in progress - ignore
-                    return
-                else:
-                    # Different target - replace
-                    if layer in self._layer_groups:
-                        group = self._layer_groups[layer]
-                        old_current_value = group.get_current_value()
-
-                        # Update builder to start from current
-                        builder.base_value = old_current_value
-                        builder.target_value = builder._calculate_target_value()
-
-                        # Recalculate rate duration
-                        self._recalculate_rate_duration(builder)
-
-            # Cache this builder
-            self._rate_builder_cache[rate_cache_key] = (builder, builder.target_value)
-
-        # Get or create group
-        group = self._get_or_create_group(builder)
-
-        # Handle behaviors
-        behavior = builder.config.get_effective_behavior()
-
-        if behavior == "throttle":
-            if self._check_throttle(builder, layer):
-                return  # Throttled, skip
-
-        if behavior == "replace":
-            # Get current accumulated value from the group
-            current_value = group.get_current_value()
-
-            # Special case: absolute position operations need actual mouse position
-            # This matches pre-refactor behavior where pos.to() read from ctrl.mouse_pos()
-            # Applies to both base layers and modifier layers with override mode
-            if (builder.config.property == "pos" and
-                builder.config.movement_type == "absolute" and
-                len(group.builders) == 0):
-                from .core import Vec2
-                from talon import ctrl
-                current_value = Vec2(*ctrl.mouse_pos())
-
-            # For pos.offset with revert: DO bake (need to track what to revert)
-            # For pos.offset without revert: don't bake (consumable deltas)
-            # For speed/direction/vector.offset: always bake (persistent modifiers)
-            # For override mode: always bake (absolute state)
-            if not group.is_base:
-                is_position_offset = (builder.config.property == "pos" and builder.config.mode == "offset")
-                should_bake = True
-                if is_position_offset and not builder.lifecycle.revert_ms:
-                    should_bake = False  # pos.offset without revert: don't bake
-                if should_bake:
-                    group.accumulated_value = current_value
-
-            # For offset mode: new builder should contribute (target - current)
-            # For override mode: new builder should go from current to target
-            builder.base_value = current_value
-            builder.target_value = builder._calculate_target_value()
-            
-            # For offset mode with revert: the builder needs to revert the accumulated state
-            # For pos.offset: revert the delta that was already physically moved
-            # For speed/direction/vector.offset: revert the accumulated modifier
-            if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
-                # Negate current_value (handle both Vec2 and scalar types)
-                from .core import Vec2
-                if isinstance(current_value, Vec2):
-                    builder.revert_target = Vec2(-current_value.x, -current_value.y)
-                elif isinstance(current_value, (int, float)):
-                    builder.revert_target = -current_value
-                else:
-                    builder.revert_target = None
-            
-            # Clear existing builders (after baking their state)
-            group.clear_builders()
-
-        elif behavior == "stack":
-            # Check max
-            if builder.config.behavior_args:
-                max_count = builder.config.behavior_args[0]
-                if len(group.builders) >= max_count:
-                    return  # At max, skip
-
-        elif behavior == "queue":
-            # Check max
-            if builder.config.behavior_args:
-                max_count = builder.config.behavior_args[0]
-                total = len(group.builders) + len(group.pending_queue)
-                if group.is_queue_active:
-                    total += 1  # Count currently executing
-                if total >= max_count:
-                    return  # At max, skip
-
-            # If queue is active or has pending, enqueue
-            if group.is_queue_active or len(group.pending_queue) > 0:
-                def execute_callback():
-                    group.add_builder(builder)
-                    if not builder.lifecycle.is_complete():
-                        self._ensure_frame_loop_running()
-
-                group.enqueue_builder(execute_callback)
-                return
-            else:
-                # First in queue - execute immediately
-                group.is_queue_active = True
-
-        # Add builder to group
-        group.add_builder(builder)
-
-        # Start frame loop if needed
-        if not builder.lifecycle.is_complete():
-            self._ensure_frame_loop_running()
-        elif builder.config.is_synchronous:
+        if builder.config.is_synchronous:
             # Handle synchronous instant completion (pos.to, pos.by)
             print(f"[DEBUG add_builder] Synchronous execution for {builder.config.property}.{builder.config.operator}()")
             builder.execute_synchronous()
@@ -418,6 +460,55 @@ class RigState:
                     del self._layer_orders[layer]
             else:
                 print(f"[DEBUG add_builder] Group SHOULD persist - keeping layer {layer}")
+
+    def add_builder(self, builder: 'ActiveBuilder'):
+        """Add a builder to its layer group
+
+        Creates group if needed, handles behaviors, manages queue.
+        """
+        layer = builder.config.layer_name
+
+        print(f"[DEBUG add_builder] Adding builder: layer={layer}, property={builder.config.property}, mode={builder.config.mode}, operator={builder.config.operator}, value={builder.config.value}")
+        print(f"[DEBUG add_builder] is_base_layer={builder.config.is_base_layer()}, layer_type={builder.config.layer_type}")
+
+        if builder.config.operator == "bake":
+            self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
+            return
+
+        if builder.config.behavior == "debounce":
+            self._apply_debounce_behavior(builder, layer)
+            return
+
+        should_skip_cached = self._check_and_update_rate_cache(builder, layer)
+        if should_skip_cached:
+            return
+
+        group = self._get_or_create_group(builder)
+
+        behavior = builder.config.get_effective_behavior()
+
+        if behavior == "throttle":
+            is_throttled = self._apply_throttle_behavior(builder, layer)
+            if is_throttled:
+                return
+
+        if behavior == "replace":
+            self._apply_replace_behavior(builder, group)
+        elif behavior == "stack":
+            is_at_stack_limit = self._apply_stack_behavior(builder, group)
+            if is_at_stack_limit:
+                return
+        elif behavior == "queue":
+            was_enqueued = self._apply_queue_behavior(builder, group)
+            if was_enqueued:
+                return
+
+        group.add_builder(builder)
+
+        if not builder.lifecycle.is_complete():
+            self._ensure_frame_loop_running()
+        else:
+            self._finalize_builder_completion(builder, group)
 
     def _get_or_create_group(self, builder: 'ActiveBuilder') -> 'LayerGroup':
         """Get existing group or create new one for this builder"""
@@ -1937,7 +2028,7 @@ class RigState:
                     builder.lifecycle.start(current_time)
                     builder.lifecycle.phase = LifecyclePhase.REVERT
                     builder.lifecycle.phase_start_time = current_time
-                    
+
                     print(f"[DEBUG trigger_revert] Adding builder to group")
 
                     # Now add it to the group
