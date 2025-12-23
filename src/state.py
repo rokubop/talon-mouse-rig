@@ -182,21 +182,42 @@ class RigState:
     def _apply_throttle_behavior(self, builder: 'ActiveBuilder', layer: str) -> bool:
         """Apply throttle behavior: check and record throttle time
 
-        Side effect: Updates throttle timestamp when not throttled
+        Two modes:
+        1. throttle() without args: Ignore while any builder with throttle behavior is active on layer
+        2. throttle(ms): Rate limit calls to once per ms (time-based)
+
+        Side effect: Updates throttle timestamp when not throttled (time-based mode only)
 
         Returns:
             True if throttled (should skip), False if allowed to proceed
         """
         throttle_key = self._get_throttle_key(layer, builder)
-        throttle_ms = builder.config.behavior_args[0] if builder.config.behavior_args else 0
-
-        if throttle_key in self._throttle_times:
-            elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
-            if elapsed < throttle_ms:
-                return True  # Throttled
-
-        self._throttle_times[throttle_key] = time.perf_counter()
-        return False  # Not throttled
+        
+        # Check if we have a time-based throttle or a "while active" throttle
+        has_time_arg = bool(builder.config.behavior_args)
+        
+        if has_time_arg:
+            # Time-based throttle: throttle(ms)
+            throttle_ms = builder.config.behavior_args[0]
+            if throttle_key in self._throttle_times:
+                elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
+                if elapsed < throttle_ms:
+                    print(f"[DEBUG throttle] Time-based throttle: REJECTED (elapsed {elapsed:.1f}ms < {throttle_ms}ms)")
+                    return True  # Throttled
+            self._throttle_times[throttle_key] = time.perf_counter()
+            print(f"[DEBUG throttle] Time-based throttle: ALLOWED")
+            return False  # Not throttled
+        else:
+            # "While active" throttle: throttle()
+            # Check if there are any active builders with throttle behavior on this layer
+            if layer in self._layer_groups:
+                group = self._layer_groups[layer]
+                active_throttled_count = sum(1 for b in group.builders if b.config.behavior == "throttle")
+                if active_throttled_count > 0:
+                    print(f"[DEBUG throttle] While-active throttle: REJECTED (found {active_throttled_count} active throttled builders)")
+                    return True  # Found an active throttled builder - reject this one
+            print(f"[DEBUG throttle] While-active throttle: ALLOWED (no active throttled builders)")
+            return False  # No active throttled builders - allow this one
 
     def _apply_debounce_behavior(self, builder: 'ActiveBuilder', layer: str):
         """Apply debounce behavior: schedule builder for delayed execution
@@ -1261,7 +1282,7 @@ class RigState:
             # Advance the group (which advances all builders)
             group_transitions, builders_to_remove = group.advance(current_time)
             phase_transitions.extend(group_transitions)
-            
+
             # Store bake results for _remove_completed_builders to use
             if not hasattr(group, '_pending_bake_results'):
                 group._pending_bake_results = []
@@ -1322,7 +1343,7 @@ class RigState:
                         if bake_result == "bake_to_base":
                             self._bake_group_to_base(group)
                 group._pending_bake_results = []
-            
+
             # Remove completed builders from group
             for builder in builders_to_remove:
                 print(f"[DEBUG _remove_completed_builders] Removing completed builder from layer '{layer}', behavior={builder.config.behavior}")

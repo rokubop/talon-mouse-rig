@@ -570,7 +570,7 @@ def test_rate_reuse_different_property_independent(on_success, on_failure):
     rig.direction.to(1, 0)
     # Both should execute independently
     rig.speed.to(10).over(rate=10).then(increment_speed)
-    rig.direction.by(90).over(rate=45).then(increment_direction)
+    rig.direction.by(90).over(rate=90).then(increment_direction)
 
     cron.after("1500ms", check_independent)
 
