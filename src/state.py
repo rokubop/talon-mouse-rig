@@ -312,7 +312,14 @@ class RigState:
             # For offset mode with revert: the builder needs to know to revert
             # the entire accumulated value, not just its contribution
             if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
-                builder.revert_target = -current_value
+                # Negate current_value (handle both Vec2 and scalar types)
+                from .core import Vec2
+                if isinstance(current_value, Vec2):
+                    builder.revert_target = Vec2(-current_value.x, -current_value.y)
+                elif isinstance(current_value, (int, float)):
+                    builder.revert_target = -current_value
+                else:
+                    builder.revert_target = None
             
             # Clear existing builders (after baking their state)
             group.clear_builders()
