@@ -1427,6 +1427,11 @@ class RigState:
                                 mouse_move_relative(int(final_delta_int.x), int(final_delta_int.y))
 
                     builders_to_remove.append(builder)
+                elif builder.lifecycle.should_be_garbage_collected():
+                    # Builder is complete/reverted but didn't have a phase transition this frame
+                    # (revert completed in a previous frame, or instant completion)
+                    print(f"[DEBUG _remove_completed_builders] Builder ready for cleanup: layer={layer}, has_reverted={builder.lifecycle.has_reverted()}, is_complete={builder.lifecycle.is_complete()}")
+                    builders_to_remove.append(builder)
 
             # Process pending bake results (from advance())
             if hasattr(group, '_pending_bake_results'):
