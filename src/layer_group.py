@@ -55,6 +55,16 @@ class LayerGroup:
         else:
             self.accumulated_value: Any = self._zero_value()
 
+        # Committed state (for pos.offset only - tracks physical movement that's been baked)
+        # All other properties: None (not applicable)
+        if property == "pos":
+            self.committed_value: Optional[Any] = Vec2(0, 0)
+        else:
+            self.committed_value: Optional[Any] = None
+
+        # Replace behavior state (for pos.offset only)
+        self.replace_target: Optional[Any] = None  # Absolute target for replace operations
+
         # Cached final target value (what accumulated_value will be after all builders complete)
         self.final_target: Optional[Any] = None
 
@@ -135,6 +145,43 @@ class LayerGroup:
         print(f"[DEBUG on_builder_complete] BEFORE apply_mode: accumulated={self.accumulated_value}, incoming={value}, mode={builder.config.mode}")
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
         print(f"[DEBUG on_builder_complete] AFTER apply_mode: accumulated={self.accumulated_value}")
+        
+        # Handle replace behavior cleanup (pos.offset only)
+        if self.replace_target is not None and self.committed_value is not None:
+            print(f"[DEBUG on_builder_complete] Replace cleanup: committed={self.committed_value}, accumulated={self.accumulated_value}, target={self.replace_target}")
+            
+            # Consolidate accumulated into committed (with clamping)
+            if isinstance(self.accumulated_value, Vec2) and isinstance(self.committed_value, Vec2):
+                total_x = self.committed_value.x + self.accumulated_value.x
+                total_y = self.committed_value.y + self.accumulated_value.y
+                
+                # Clamp per axis based on direction
+                if isinstance(self.replace_target, Vec2):
+                    if self.committed_value.x < self.replace_target.x:
+                        total_x = min(total_x, self.replace_target.x)
+                    elif self.committed_value.x > self.replace_target.x:
+                        total_x = max(total_x, self.replace_target.x)
+                    else:
+                        total_x = self.replace_target.x
+                    
+                    if self.committed_value.y < self.replace_target.y:
+                        total_y = min(total_y, self.replace_target.y)
+                    elif self.committed_value.y > self.replace_target.y:
+                        total_y = max(total_y, self.replace_target.y)
+                    else:
+                        total_y = self.replace_target.y
+                    
+                    self.committed_value = Vec2(total_x, total_y)
+            
+            # Reset for next operation
+            if isinstance(self.accumulated_value, Vec2):
+                self.accumulated_value = Vec2(0, 0)
+            else:
+                self.accumulated_value = 0.0
+            
+            self.replace_target = None
+            print(f"[DEBUG on_builder_complete] After cleanup: committed={self.committed_value}, accumulated={self.accumulated_value}")
+        
         return "baked_to_group"
 
     def _apply_mode(self, current: Any, incoming: Any, mode: Optional[str]) -> Any:
@@ -181,6 +228,8 @@ class LayerGroup:
 
         For base layers: Just return the builder's value directly (modes don't apply)
         For modifier layers: Apply modes (offset/override/scale) to accumulated value
+        
+        For pos.offset with replace: Clamps output based on replace_target
         """
         print(f"[DEBUG LayerGroup.get_current_value] Layer '{self.layer_name}': is_base={self.is_base}, accumulated_value={self.accumulated_value}, {len(self.builders)} builders")
 
@@ -219,6 +268,38 @@ class LayerGroup:
             print(f"[DEBUG LayerGroup.get_current_value]   Modifier builder: value={builder_value}, mode={builder.config.mode}")
             if builder_value is not None:
                 result = self._apply_mode(result, builder_value, builder.config.mode)
+        
+        print(f"[DEBUG LayerGroup.get_current_value] Before clamp: result={result}, replace_target={self.replace_target}, committed={self.committed_value}")
+
+        # Apply replace clamping for pos.offset
+        if self.replace_target is not None and self.committed_value is not None:
+            print(f"[DEBUG LayerGroup.get_current_value] ENTERING CLAMP LOGIC")
+            # Total = committed + accumulated (with active builders)
+            if isinstance(result, Vec2) and isinstance(self.committed_value, Vec2):
+                total = Vec2(
+                    self.committed_value.x + result.x,
+                    self.committed_value.y + result.y
+                )
+                
+                print(f"[DEBUG LayerGroup.get_current_value] Clamp calc: total={total}")
+                
+                # Clamp based on approach direction (per axis)
+                if isinstance(self.replace_target, Vec2):
+                    clamped_x = total.x
+                    clamped_y = total.y
+                    
+                    if self.committed_value.x < self.replace_target.x:
+                        clamped_x = min(total.x, self.replace_target.x)
+                    elif self.committed_value.x > self.replace_target.x:
+                        clamped_x = max(total.x, self.replace_target.x)
+                    
+                    if self.committed_value.y < self.replace_target.y:
+                        clamped_y = min(total.y, self.replace_target.y)
+                    elif self.committed_value.y > self.replace_target.y:
+                        clamped_y = max(total.y, self.replace_target.y)
+                    
+                    result = Vec2(clamped_x - self.committed_value.x, clamped_y - self.committed_value.y)
+                    print(f"[DEBUG LayerGroup.get_current_value] Clamped: committed={self.committed_value}, target={self.replace_target}, result={result}")
 
         print(f"[DEBUG LayerGroup.get_current_value] Final result (modifier): {result}")
         return result

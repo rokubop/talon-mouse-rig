@@ -80,14 +80,14 @@ Physical position = (5, 0)
 ```python
 def get_current_value(self):
     total = committed_value + accumulated_value
-    
+
     if replace_target is not None:
         # Dynamic clamping based on approach direction
         if committed_value < replace_target:
             total = min(total, replace_target)  # upper clamp
         elif committed_value > replace_target:
             total = max(total, replace_target)  # lower clamp
-    
+
     return total
 ```
 
@@ -229,7 +229,7 @@ def on_builder_complete(self, builder):
 - But clamp in `get_current_value()`: `min(committed + accumulated, replace_target)`
 - So: committed(5) + accumulated(10) = 15, clamped to 10 ✓
 
-**Challenge:** 
+**Challenge:**
 - After builder completes, replace_target should be cleared
 - Then accumulated(10) + committed(5) = 15 (wrong!)
 - **We need to transfer accumulated to committed when replace completes**
@@ -253,7 +253,7 @@ When replace builder completes in `on_builder_complete()`:
 if self.replace_target is not None:
     # Consolidate everything into committed
     total = self.committed_value + self.accumulated_value
-    
+
     # Apply the clamp based on direction
     if self.committed_value < self.replace_target:
         self.committed_value = min(total, self.replace_target)
@@ -261,7 +261,7 @@ if self.replace_target is not None:
         self.committed_value = max(total, self.replace_target)
     else:
         self.committed_value = self.replace_target
-    
+
     # Reset for next operation
     self.accumulated_value = self._zero_value()
     self.replace_target = None
@@ -273,7 +273,7 @@ This ensures:
 - Revert of the layer will revert the full committed value (10)
 
 ### Challenge 6: Non-pos Properties
-**Good news:** 
+**Good news:**
 - speed/direction/vector never have committed_value
 - They don't need clamping logic
 - Replace just snapshots and resets accumulated_value (current behavior)

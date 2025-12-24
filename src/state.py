@@ -309,89 +309,112 @@ class RigState:
         return False
 
     def _apply_replace_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup'):
-        """Apply replace behavior: clear existing builders and update the new one
-
-        Replace behavior bakes the current value, updates the new builder to start
-        from that value, and clears all existing builders in the group.
-
+        """Apply replace behavior with new committed_value architecture
+        
+        For pos.offset:
+        - Bakes current progress to committed_value
+        - Sets replace_target for clamping
+        - Builder animates its full target value
+        - Output gets clamped by LayerGroup.get_current_value()
+        
+        For other properties:
+        - Simple snapshot and reset behavior (no committed tracking)
+        
         Args:
             builder: The new builder to add
             group: The layer group to apply replace behavior to
         """
-        # Get current accumulated value from the group
-        current_value = group.get_current_value()
-        print(f"[DEBUG REPLACE] Layer '{group.layer_name}': current_value={current_value}, old_accumulated={group.accumulated_value}")
-
-        # Special case: absolute position operations need actual mouse position
-        # This matches pre-refactor behavior where pos.to() read from ctrl.mouse_pos()
-        # Applies to both base layers and modifier layers with override mode
-        if (builder.config.property == "pos" and
-            builder.config.movement_type == "absolute" and
-            len(group.builders) == 0):
-            from .core import Vec2
-            from talon import ctrl
-            current_value = Vec2(*ctrl.mouse_pos())
-
-        # Baking logic for replace behavior:
-        # - pos.offset WITH revert: BAKE (need to track total offset for revert)
-        # - pos.offset WITHOUT revert: DON'T bake (consumable deltas)
-        # - speed/direction/vector.offset: BAKE (persistent modifiers)
-        # - override mode: BAKE (absolute state)
-        if not group.is_base:
-            is_position_offset = (builder.config.property == "pos" and builder.config.mode == "offset")
-            should_bake = True
-            if is_position_offset and not builder.lifecycle.revert_ms:
-                should_bake = False  # pos.offset without revert: don't bake
-            print(f"[DEBUG REPLACE] is_position_offset={is_position_offset}, has_revert={bool(builder.lifecycle.revert_ms)}, should_bake={should_bake}")
-            if should_bake:
-                group.accumulated_value = current_value
-                print(f"[DEBUG REPLACE] BAKED: accumulated_value={group.accumulated_value}")
-            else:
-                # Reset accumulated_value when not baking (pos.offset without revert)
-                # The new builder will animate from current → target, and when it completes,
-                # it will bake target to accumulated_value
-                from .core import Vec2
-                if isinstance(group.accumulated_value, Vec2):
-                    group.accumulated_value = Vec2(0, 0)
-                else:
-                    group.accumulated_value = 0
-                print(f"[DEBUG REPLACE] RESET: accumulated_value={group.accumulated_value}")
-
-        # For offset mode with replace: target should be the NEW offset value (not added to current)
-        # For override mode: new builder should go from current to target
-        builder.base_value = current_value
-        print(f"[DEBUG REPLACE] Set base_value={builder.base_value}")
+        from .core import Vec2
         
-        if builder.config.mode == "offset":
-            # For offset mode with replace, target is the new absolute offset value
-            # e.g., if replacing offset(100) with offset(50), target should be 50, not current + 50
-            from .core import Vec2
-            if isinstance(builder.config.value, tuple):
-                builder.target_value = Vec2.from_tuple(builder.config.value)
-            else:
-                builder.target_value = builder.config.value
-            print(f"[DEBUG REPLACE] Set target_value={builder.target_value} (offset mode)")
-        else:
-            # For override mode, calculate normally
-            builder.target_value = builder._calculate_target_value()
-            print(f"[DEBUG REPLACE] Set target_value={builder.target_value} (override mode)")
-
-        # For offset mode with revert: revert back to negate accumulated value
-        # When replace baked accumulated_value, we need to revert that as well
-        if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
-            from .core import Vec2
-            # Revert target should negate the accumulated value to undo all physical movement
-            accumulated = group.accumulated_value if should_bake else Vec2(0, 0)
-            if isinstance(accumulated, Vec2):
-                builder.revert_target = Vec2(-accumulated.x, -accumulated.y)
-            elif isinstance(accumulated, (int, float)):
-                builder.revert_target = -accumulated
-            else:
-                builder.revert_target = None
-            print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target} (to negate accumulated={accumulated})")
-
-        # Clear existing builders (after baking their state)
+        # Get current value (includes accumulated + active builders)
+        current_value = group.get_current_value()
+        print(f"[DEBUG REPLACE] Layer '{group.layer_name}': property={builder.config.property}, mode={builder.config.mode}")
+        print(f"[DEBUG REPLACE] current_value={current_value}, accumulated={group.accumulated_value}, committed={group.committed_value}")
+        
+        # Clear existing builders first (they've been accounted for in current_value)
         group.clear_builders()
+        
+        # POS.OFFSET: Use committed_value architecture
+        if builder.config.property == "pos" and builder.config.mode == "offset":
+            # Bake current progress to committed_value
+            print(f"[DEBUG REPLACE] Baking logic: current_value type={type(current_value)}, is Vec2? {isinstance(current_value, Vec2)}")
+            if isinstance(current_value, Vec2):
+                if group.committed_value is None:
+                    group.committed_value = Vec2(0, 0)
+                
+                # Add current_value to committed (baking the progress from active builders)
+                group.committed_value = Vec2(
+                    group.committed_value.x + current_value.x,
+                    group.committed_value.y + current_value.y
+                )
+                
+                # Reset accumulated for new builder
+                group.accumulated_value = Vec2(0, 0)
+                
+                print(f"[DEBUG REPLACE] Baked to committed: committed={group.committed_value}, accumulated={group.accumulated_value}")
+            
+            # Set up replace_target (user's absolute target)
+            if isinstance(builder.config.value, tuple):
+                group.replace_target = Vec2.from_tuple(builder.config.value)
+            else:
+                group.replace_target = builder.config.value
+            
+            # Builder animates from 0 to full target value
+            builder.base_value = Vec2(0, 0)
+            builder.target_value = group.replace_target
+            
+            print(f"[DEBUG REPLACE] Setup builder: base=0, target={builder.target_value}, replace_target={group.replace_target}")
+            
+            # Revert handling: revert back to zero (start position)
+            if builder.lifecycle.revert_ms:
+                # After forward animation, we'll have:
+                # - committed = replace_target (from cleanup in on_builder_complete)
+                # - accumulated = 0
+                # Revert needs to go back to (0, 0) total, so revert to 0
+                if isinstance(group.replace_target, Vec2):
+                    builder.revert_target = Vec2(0, 0)
+                else:
+                    builder.revert_target = 0.0
+                print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target}")
+        
+        # OTHER PROPERTIES: Simple snapshot and reset
+        else:
+            # Snapshot current value to accumulated
+            if not group.is_base:
+                group.accumulated_value = current_value
+                print(f"[DEBUG REPLACE] Snapshotted: accumulated={group.accumulated_value}")
+            
+            # Builder starts from current position
+            # For pos.override on base layer, use actual mouse position, not group's current_value
+            if builder.config.property == "pos" and builder.config.mode == "override" and group.is_base:
+                from talon import ctrl
+                mouse_x, mouse_y = ctrl.mouse_pos()
+                builder.base_value = Vec2(mouse_x, mouse_y)
+            else:
+                builder.base_value = current_value
+            
+            if builder.config.mode == "offset":
+                # For offset mode, target is absolute offset value
+                if isinstance(builder.config.value, tuple):
+                    builder.target_value = Vec2.from_tuple(builder.config.value)
+                else:
+                    builder.target_value = builder.config.value
+            else:
+                # For override/scale mode, calculate normally
+                builder.target_value = builder._calculate_target_value()
+            
+            print(f"[DEBUG REPLACE] Setup builder: base={builder.base_value}, target={builder.target_value}")
+            
+            # Revert for offset mode: negate the accumulated
+            if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
+                accumulated = group.accumulated_value
+                if isinstance(accumulated, Vec2):
+                    builder.revert_target = Vec2(-accumulated.x, -accumulated.y)
+                elif isinstance(accumulated, (int, float)):
+                    builder.revert_target = -accumulated
+                else:
+                    builder.revert_target = None
+                print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target}")
 
     def _apply_stack_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup') -> bool:
         """Apply stack behavior: check if limit is reached (pure check, no side effects)
@@ -1077,6 +1100,39 @@ class RigState:
                     # Store update to apply after builder removal check
                     relative_position_updates.append((builder, current_interpolated, new_total_emitted))
 
+        # Apply replace clamping if any pos.offset group has a replace_target
+        for layer_name, group in self._layer_groups.items():
+            if group.property != "pos":
+                continue
+            if not group.builders:
+                continue
+            first_builder = group.builders[0]
+            if first_builder.config.movement_type == "relative" and group.replace_target is not None:
+                # Clamp: committed + current should not exceed replace_target
+                # For relative, we need to clamp the total accumulated movement
+                print(f"[DEBUG CLAMPING] Layer '{layer_name}': committed={group.committed_value}, replace_target={group.replace_target}")
+                print(f"[DEBUG CLAMPING] Before clamp: relative_delta={relative_delta}")
+                
+                # Current total that will be accumulated: committed + what we're about to add
+                # We need to ensure that doesn't exceed replace_target
+                projected_total = group.committed_value + relative_delta
+                print(f"[DEBUG CLAMPING] projected_total={projected_total}")
+                
+                # Clamp to replace_target
+                clamped_total = Vec2(
+                    max(-abs(group.replace_target.x), min(abs(group.replace_target.x), projected_total.x)),
+                    max(-abs(group.replace_target.y), min(abs(group.replace_target.y), projected_total.y))
+                )
+                print(f"[DEBUG CLAMPING] clamped_total={clamped_total}")
+                
+                # The delta we can actually apply is: clamped_total - committed
+                clamped_delta = clamped_total - group.committed_value
+                print(f"[DEBUG CLAMPING] After clamp: clamped_delta={clamped_delta}")
+                
+                # Replace relative_delta with the clamped version
+                relative_delta = clamped_delta
+                break  # Only one pos.offset group should have replace_target
+
         return has_absolute_position, absolute_target, relative_delta, relative_position_updates
 
     def _has_api_overrides(self) -> bool:
@@ -1267,6 +1323,13 @@ class RigState:
 
         # 3. Emit mouse movement (absolute or relative mode)
         self._emit_mouse_movement(has_absolute_position, absolute_target, frame_delta)
+
+        # 3.5. Update committed_value for pos.offset groups with replace_target
+        for group in self._layer_groups.values():
+            if group.property == "pos" and group.replace_target is not None:
+                if group.builders and group.builders[0].config.movement_type == "relative":
+                    group.committed_value += relative_delta
+                    print(f"[DEBUG COMMIT UPDATE] Updated committed_value to {group.committed_value}")
 
         # 4. Update tracking BEFORE checking for completion to avoid double-emission
         # We update unconditionally here since the deltas were already emitted
