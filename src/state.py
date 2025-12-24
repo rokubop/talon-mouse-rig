@@ -192,10 +192,10 @@ class RigState:
             True if throttled (should skip), False if allowed to proceed
         """
         throttle_key = self._get_throttle_key(layer, builder)
-        
+
         # Check if we have a time-based throttle or a "while active" throttle
         has_time_arg = bool(builder.config.behavior_args)
-        
+
         if has_time_arg:
             # Time-based throttle: throttle(ms)
             throttle_ms = builder.config.behavior_args[0]
@@ -320,6 +320,7 @@ class RigState:
         """
         # Get current accumulated value from the group
         current_value = group.get_current_value()
+        print(f"[DEBUG REPLACE] Layer '{group.layer_name}': current_value={current_value}, old_accumulated={group.accumulated_value}")
 
         # Special case: absolute position operations need actual mouse position
         # This matches pre-refactor behavior where pos.to() read from ctrl.mouse_pos()
@@ -331,35 +332,63 @@ class RigState:
             from talon import ctrl
             current_value = Vec2(*ctrl.mouse_pos())
 
-        # For pos.offset with revert: DO bake (need to track what to revert)
-        # For pos.offset without revert: don't bake (consumable deltas)
-        # For speed/direction/vector.offset: always bake (persistent modifiers)
-        # For override mode: always bake (absolute state)
+        # Baking logic for replace behavior:
+        # - pos.offset WITH revert: BAKE (need to track total offset for revert)
+        # - pos.offset WITHOUT revert: DON'T bake (consumable deltas)
+        # - speed/direction/vector.offset: BAKE (persistent modifiers)
+        # - override mode: BAKE (absolute state)
         if not group.is_base:
             is_position_offset = (builder.config.property == "pos" and builder.config.mode == "offset")
             should_bake = True
             if is_position_offset and not builder.lifecycle.revert_ms:
                 should_bake = False  # pos.offset without revert: don't bake
+            print(f"[DEBUG REPLACE] is_position_offset={is_position_offset}, has_revert={bool(builder.lifecycle.revert_ms)}, should_bake={should_bake}")
             if should_bake:
                 group.accumulated_value = current_value
+                print(f"[DEBUG REPLACE] BAKED: accumulated_value={group.accumulated_value}")
+            else:
+                # Reset accumulated_value when not baking (pos.offset without revert)
+                # The new builder will animate from current → target, and when it completes,
+                # it will bake target to accumulated_value
+                from .core import Vec2
+                if isinstance(group.accumulated_value, Vec2):
+                    group.accumulated_value = Vec2(0, 0)
+                else:
+                    group.accumulated_value = 0
+                print(f"[DEBUG REPLACE] RESET: accumulated_value={group.accumulated_value}")
 
-        # For offset mode: new builder should contribute (target - current)
+        # For offset mode with replace: target should be the NEW offset value (not added to current)
         # For override mode: new builder should go from current to target
         builder.base_value = current_value
-        builder.target_value = builder._calculate_target_value()
-
-        # For offset mode with revert: the builder needs to revert the accumulated state
-        # For pos.offset: revert the delta that was already physically moved
-        # For speed/direction/vector.offset: revert the accumulated modifier
-        if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
-            # Negate current_value (handle both Vec2 and scalar types)
+        print(f"[DEBUG REPLACE] Set base_value={builder.base_value}")
+        
+        if builder.config.mode == "offset":
+            # For offset mode with replace, target is the new absolute offset value
+            # e.g., if replacing offset(100) with offset(50), target should be 50, not current + 50
             from .core import Vec2
-            if isinstance(current_value, Vec2):
-                builder.revert_target = Vec2(-current_value.x, -current_value.y)
-            elif isinstance(current_value, (int, float)):
-                builder.revert_target = -current_value
+            if isinstance(builder.config.value, tuple):
+                builder.target_value = Vec2.from_tuple(builder.config.value)
+            else:
+                builder.target_value = builder.config.value
+            print(f"[DEBUG REPLACE] Set target_value={builder.target_value} (offset mode)")
+        else:
+            # For override mode, calculate normally
+            builder.target_value = builder._calculate_target_value()
+            print(f"[DEBUG REPLACE] Set target_value={builder.target_value} (override mode)")
+
+        # For offset mode with revert: revert back to negate accumulated value
+        # When replace baked accumulated_value, we need to revert that as well
+        if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
+            from .core import Vec2
+            # Revert target should negate the accumulated value to undo all physical movement
+            accumulated = group.accumulated_value if should_bake else Vec2(0, 0)
+            if isinstance(accumulated, Vec2):
+                builder.revert_target = Vec2(-accumulated.x, -accumulated.y)
+            elif isinstance(accumulated, (int, float)):
+                builder.revert_target = -accumulated
             else:
                 builder.revert_target = None
+            print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target} (to negate accumulated={accumulated})")
 
         # Clear existing builders (after baking their state)
         group.clear_builders()

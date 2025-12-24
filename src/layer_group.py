@@ -132,7 +132,9 @@ class LayerGroup:
             else:
                 self.accumulated_value = value
 
+        print(f"[DEBUG on_builder_complete] BEFORE apply_mode: accumulated={self.accumulated_value}, incoming={value}, mode={builder.config.mode}")
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
+        print(f"[DEBUG on_builder_complete] AFTER apply_mode: accumulated={self.accumulated_value}")
         return "baked_to_group"
 
     def _apply_mode(self, current: Any, incoming: Any, mode: Optional[str]) -> Any:
