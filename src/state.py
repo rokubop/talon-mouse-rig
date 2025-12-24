@@ -310,30 +310,30 @@ class RigState:
 
     def _apply_replace_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup'):
         """Apply replace behavior with new committed_value architecture
-        
+
         For pos.offset:
         - Bakes current progress to committed_value
         - Sets replace_target for clamping
         - Builder animates its full target value
         - Output gets clamped by LayerGroup.get_current_value()
-        
+
         For other properties:
         - Simple snapshot and reset behavior (no committed tracking)
-        
+
         Args:
             builder: The new builder to add
             group: The layer group to apply replace behavior to
         """
         from .core import Vec2
-        
+
         # Get current value (includes accumulated + active builders)
         current_value = group.get_current_value()
         print(f"[DEBUG REPLACE] Layer '{group.layer_name}': property={builder.config.property}, mode={builder.config.mode}")
         print(f"[DEBUG REPLACE] current_value={current_value}, accumulated={group.accumulated_value}, committed={group.committed_value}")
-        
+
         # Clear existing builders first (they've been accounted for in current_value)
         group.clear_builders()
-        
+
         # POS.OFFSET: Use committed_value architecture
         if builder.config.property == "pos" and builder.config.mode == "offset":
             # Bake current progress to committed_value
@@ -341,30 +341,30 @@ class RigState:
             if isinstance(current_value, Vec2):
                 if group.committed_value is None:
                     group.committed_value = Vec2(0, 0)
-                
+
                 # Add current_value to committed (baking the progress from active builders)
                 group.committed_value = Vec2(
                     group.committed_value.x + current_value.x,
                     group.committed_value.y + current_value.y
                 )
-                
+
                 # Reset accumulated for new builder
                 group.accumulated_value = Vec2(0, 0)
-                
+
                 print(f"[DEBUG REPLACE] Baked to committed: committed={group.committed_value}, accumulated={group.accumulated_value}")
-            
+
             # Set up replace_target (user's absolute target)
             if isinstance(builder.config.value, tuple):
                 group.replace_target = Vec2.from_tuple(builder.config.value)
             else:
                 group.replace_target = builder.config.value
-            
+
             # Builder animates from 0 to full target value
             builder.base_value = Vec2(0, 0)
             builder.target_value = group.replace_target
-            
+
             print(f"[DEBUG REPLACE] Setup builder: base=0, target={builder.target_value}, replace_target={group.replace_target}")
-            
+
             # Revert handling: revert back to zero (start position)
             if builder.lifecycle.revert_ms:
                 # After forward animation, we'll have:
@@ -376,14 +376,14 @@ class RigState:
                 else:
                     builder.revert_target = 0.0
                 print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target}")
-        
+
         # OTHER PROPERTIES: Simple snapshot and reset
         else:
             # Snapshot current value to accumulated
             if not group.is_base:
                 group.accumulated_value = current_value
                 print(f"[DEBUG REPLACE] Snapshotted: accumulated={group.accumulated_value}")
-            
+
             # Builder starts from current position
             # For pos.override on base layer, use actual mouse position, not group's current_value
             if builder.config.property == "pos" and builder.config.mode == "override" and group.is_base:
@@ -392,7 +392,7 @@ class RigState:
                 builder.base_value = Vec2(mouse_x, mouse_y)
             else:
                 builder.base_value = current_value
-            
+
             if builder.config.mode == "offset":
                 # For offset mode, target is absolute offset value
                 if isinstance(builder.config.value, tuple):
@@ -402,9 +402,9 @@ class RigState:
             else:
                 # For override/scale mode, calculate normally
                 builder.target_value = builder._calculate_target_value()
-            
+
             print(f"[DEBUG REPLACE] Setup builder: base={builder.base_value}, target={builder.target_value}")
-            
+
             # Revert for offset mode: negate the accumulated
             if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
                 accumulated = group.accumulated_value
@@ -1112,23 +1112,23 @@ class RigState:
                 # For relative, we need to clamp the total accumulated movement
                 print(f"[DEBUG CLAMPING] Layer '{layer_name}': committed={group.committed_value}, replace_target={group.replace_target}")
                 print(f"[DEBUG CLAMPING] Before clamp: relative_delta={relative_delta}")
-                
+
                 # Current total that will be accumulated: committed + what we're about to add
                 # We need to ensure that doesn't exceed replace_target
                 projected_total = group.committed_value + relative_delta
                 print(f"[DEBUG CLAMPING] projected_total={projected_total}")
-                
+
                 # Clamp to replace_target
                 clamped_total = Vec2(
                     max(-abs(group.replace_target.x), min(abs(group.replace_target.x), projected_total.x)),
                     max(-abs(group.replace_target.y), min(abs(group.replace_target.y), projected_total.y))
                 )
                 print(f"[DEBUG CLAMPING] clamped_total={clamped_total}")
-                
+
                 # The delta we can actually apply is: clamped_total - committed
                 clamped_delta = clamped_total - group.committed_value
                 print(f"[DEBUG CLAMPING] After clamp: clamped_delta={clamped_delta}")
-                
+
                 # Replace relative_delta with the clamped version
                 relative_delta = clamped_delta
                 break  # Only one pos.offset group should have replace_target

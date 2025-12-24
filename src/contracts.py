@@ -471,9 +471,13 @@ class BuilderConfig:
         """Get behavior with defaults applied"""
         if self.behavior is not None:
             return self.behavior
-        # No default behavior - explicit is better than implicit
-        # .replace(), .stack(), .queue(), .throttle() must be specified
-        return None
+        # Default behaviors based on operator semantics:
+        # .to() = replace (set to value)
+        # .by()/.add()/.mul() = stack (modify value)
+        if self.operator == "to":
+            return "replace"
+        else:
+            return "stack"
 
     def get_effective_bake(self) -> bool:
         """Get bake setting with defaults applied"""

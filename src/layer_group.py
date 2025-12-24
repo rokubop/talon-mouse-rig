@@ -113,17 +113,21 @@ class LayerGroup:
             "baked_to_group" for modifier layers
             "reverted" for modifier layers that reverted (clears accumulated value)
         """
+        print(f"[DEBUG on_builder_complete] Layer '{self.layer_name}': has_reverted={builder.lifecycle.has_reverted()}, is_base={self.is_base}")
         if builder.lifecycle.has_reverted():
             if self.is_base:
                 # Base layers need to restore original value when reverting
+                print(f"[DEBUG on_builder_complete] Reverted base layer - returning bake_to_base")
                 return "bake_to_base"
             else:
                 # Modifier layers that revert clear their accumulated value
                 # Set to zero based on current type, not property default
+                print(f"[DEBUG on_builder_complete] Reverted modifier layer - clearing accumulated_value (was {self.accumulated_value})")
                 if isinstance(self.accumulated_value, Vec2):
                     self.accumulated_value = Vec2(0, 0)
                 else:
                     self.accumulated_value = 0.0
+                print(f"[DEBUG on_builder_complete] After clear: accumulated_value={self.accumulated_value}")
                 return "reverted"
 
         value = builder.get_interpolated_value()
@@ -145,16 +149,16 @@ class LayerGroup:
         print(f"[DEBUG on_builder_complete] BEFORE apply_mode: accumulated={self.accumulated_value}, incoming={value}, mode={builder.config.mode}")
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
         print(f"[DEBUG on_builder_complete] AFTER apply_mode: accumulated={self.accumulated_value}")
-        
+
         # Handle replace behavior cleanup (pos.offset only)
         if self.replace_target is not None and self.committed_value is not None:
             print(f"[DEBUG on_builder_complete] Replace cleanup: committed={self.committed_value}, accumulated={self.accumulated_value}, target={self.replace_target}")
-            
+
             # Consolidate accumulated into committed (with clamping)
             if isinstance(self.accumulated_value, Vec2) and isinstance(self.committed_value, Vec2):
                 total_x = self.committed_value.x + self.accumulated_value.x
                 total_y = self.committed_value.y + self.accumulated_value.y
-                
+
                 # Clamp per axis based on direction
                 if isinstance(self.replace_target, Vec2):
                     if self.committed_value.x < self.replace_target.x:
@@ -163,25 +167,25 @@ class LayerGroup:
                         total_x = max(total_x, self.replace_target.x)
                     else:
                         total_x = self.replace_target.x
-                    
+
                     if self.committed_value.y < self.replace_target.y:
                         total_y = min(total_y, self.replace_target.y)
                     elif self.committed_value.y > self.replace_target.y:
                         total_y = max(total_y, self.replace_target.y)
                     else:
                         total_y = self.replace_target.y
-                    
+
                     self.committed_value = Vec2(total_x, total_y)
-            
+
             # Reset for next operation
             if isinstance(self.accumulated_value, Vec2):
                 self.accumulated_value = Vec2(0, 0)
             else:
                 self.accumulated_value = 0.0
-            
+
             self.replace_target = None
             print(f"[DEBUG on_builder_complete] After cleanup: committed={self.committed_value}, accumulated={self.accumulated_value}")
-        
+
         return "baked_to_group"
 
     def _apply_mode(self, current: Any, incoming: Any, mode: Optional[str]) -> Any:
@@ -228,7 +232,7 @@ class LayerGroup:
 
         For base layers: Just return the builder's value directly (modes don't apply)
         For modifier layers: Apply modes (offset/override/scale) to accumulated value
-        
+
         For pos.offset with replace: Clamps output based on replace_target
         """
         print(f"[DEBUG LayerGroup.get_current_value] Layer '{self.layer_name}': is_base={self.is_base}, accumulated_value={self.accumulated_value}, {len(self.builders)} builders")
@@ -268,7 +272,7 @@ class LayerGroup:
             print(f"[DEBUG LayerGroup.get_current_value]   Modifier builder: value={builder_value}, mode={builder.config.mode}")
             if builder_value is not None:
                 result = self._apply_mode(result, builder_value, builder.config.mode)
-        
+
         print(f"[DEBUG LayerGroup.get_current_value] Before clamp: result={result}, replace_target={self.replace_target}, committed={self.committed_value}")
 
         # Apply replace clamping for pos.offset
@@ -280,24 +284,24 @@ class LayerGroup:
                     self.committed_value.x + result.x,
                     self.committed_value.y + result.y
                 )
-                
+
                 print(f"[DEBUG LayerGroup.get_current_value] Clamp calc: total={total}")
-                
+
                 # Clamp based on approach direction (per axis)
                 if isinstance(self.replace_target, Vec2):
                     clamped_x = total.x
                     clamped_y = total.y
-                    
+
                     if self.committed_value.x < self.replace_target.x:
                         clamped_x = min(total.x, self.replace_target.x)
                     elif self.committed_value.x > self.replace_target.x:
                         clamped_x = max(total.x, self.replace_target.x)
-                    
+
                     if self.committed_value.y < self.replace_target.y:
                         clamped_y = min(total.y, self.replace_target.y)
                     elif self.committed_value.y > self.replace_target.y:
                         clamped_y = max(total.y, self.replace_target.y)
-                    
+
                     result = Vec2(clamped_x - self.committed_value.x, clamped_y - self.committed_value.y)
                     print(f"[DEBUG LayerGroup.get_current_value] Clamped: committed={self.committed_value}, target={self.replace_target}, result={result}")
 
