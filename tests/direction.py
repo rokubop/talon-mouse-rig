@@ -284,15 +284,7 @@ def test_layer_direction_offset_by(on_success, on_failure):
 
     def check_result():
         rig_check = actions.user.mouse_rig()
-
-        # DEBUG: Print all available layers
-        print(f"DEBUG: rig.state.layers = {rig_check.state.layers}")
-        print(f"DEBUG: _layer_groups keys = {list(rig_check.state._layer_groups.keys())}")
-
-        # DEBUG: Check what direction values we have
         direction = rig_check.state.direction
-        print(f"DEBUG: direction.value = ({direction.x:.2f}, {direction.y:.2f})")
-        print(f"DEBUG: direction.offset = {rig_check.state.direction.offset}")
 
         # Check direction offset state
         offset_state = rig_check.state.direction.offset

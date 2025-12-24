@@ -248,7 +248,6 @@ def test_behavior_queue_property_syntax(on_success, on_failure):
     def check_after_first():
         x, y = ctrl.mouse_pos()
         expected_x = start_x + dx1
-        print("Checking after first:", x, y)
         if x != expected_x:
             on_failure(f"After first: expected x={expected_x}, got {x}")
             return
@@ -256,7 +255,6 @@ def test_behavior_queue_property_syntax(on_success, on_failure):
     def check_after_second():
         x, y = ctrl.mouse_pos()
         expected_y = start_y + dy2
-        print("Checking after second:", x, y)
         if y != expected_y:
             on_failure(f"After second: expected y={expected_y}, got {y}")
             return

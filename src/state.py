@@ -202,10 +202,8 @@ class RigState:
             if throttle_key in self._throttle_times:
                 elapsed = (time.perf_counter() - self._throttle_times[throttle_key]) * 1000
                 if elapsed < throttle_ms:
-                    print(f"[DEBUG throttle] Time-based throttle: REJECTED (elapsed {elapsed:.1f}ms < {throttle_ms}ms)")
                     return True  # Throttled
             self._throttle_times[throttle_key] = time.perf_counter()
-            print(f"[DEBUG throttle] Time-based throttle: ALLOWED")
             return False  # Not throttled
         else:
             # "While active" throttle: throttle()
@@ -214,9 +212,7 @@ class RigState:
                 group = self._layer_groups[layer]
                 active_throttled_count = sum(1 for b in group.builders if b.config.behavior == "throttle")
                 if active_throttled_count > 0:
-                    print(f"[DEBUG throttle] While-active throttle: REJECTED (found {active_throttled_count} active throttled builders)")
                     return True  # Found an active throttled builder - reject this one
-            print(f"[DEBUG throttle] While-active throttle: ALLOWED (no active throttled builders)")
             return False  # No active throttled builders - allow this one
 
     def _apply_debounce_behavior(self, builder: 'ActiveBuilder', layer: str):
@@ -328,8 +324,6 @@ class RigState:
 
         # Get current value (includes accumulated + active builders)
         current_value = group.get_current_value()
-        print(f"[DEBUG REPLACE] Layer '{group.layer_name}': property={builder.config.property}, mode={builder.config.mode}")
-        print(f"[DEBUG REPLACE] current_value={current_value}, accumulated={group.accumulated_value}, committed={group.committed_value}")
 
         # Clear existing builders first (they've been accounted for in current_value)
         group.clear_builders()
@@ -337,7 +331,6 @@ class RigState:
         # POS.OFFSET: Use committed_value architecture
         if builder.config.property == "pos" and builder.config.mode == "offset":
             # Bake current progress to committed_value
-            print(f"[DEBUG REPLACE] Baking logic: current_value type={type(current_value)}, is Vec2? {isinstance(current_value, Vec2)}")
             if isinstance(current_value, Vec2):
                 if group.committed_value is None:
                     group.committed_value = Vec2(0, 0)
@@ -351,8 +344,6 @@ class RigState:
                 # Reset accumulated for new builder
                 group.accumulated_value = Vec2(0, 0)
 
-                print(f"[DEBUG REPLACE] Baked to committed: committed={group.committed_value}, accumulated={group.accumulated_value}")
-
             # Set up replace_target (user's absolute target)
             if isinstance(builder.config.value, tuple):
                 group.replace_target = Vec2.from_tuple(builder.config.value)
@@ -362,8 +353,6 @@ class RigState:
             # Builder animates from 0 to full target value
             builder.base_value = Vec2(0, 0)
             builder.target_value = group.replace_target
-
-            print(f"[DEBUG REPLACE] Setup builder: base=0, target={builder.target_value}, replace_target={group.replace_target}")
 
             # Revert handling: revert back to zero (start position)
             if builder.lifecycle.revert_ms:
@@ -375,14 +364,12 @@ class RigState:
                     builder.revert_target = Vec2(0, 0)
                 else:
                     builder.revert_target = 0.0
-                print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target}")
 
         # OTHER PROPERTIES: Simple snapshot and reset
         else:
             # Snapshot current value to accumulated
             if not group.is_base:
                 group.accumulated_value = current_value
-                print(f"[DEBUG REPLACE] Snapshotted: accumulated={group.accumulated_value}")
 
             # Builder starts from current position
             # For pos.override on base layer, use actual mouse position, not group's current_value
@@ -403,8 +390,6 @@ class RigState:
                 # For override/scale mode, calculate normally
                 builder.target_value = builder._calculate_target_value()
 
-            print(f"[DEBUG REPLACE] Setup builder: base={builder.base_value}, target={builder.target_value}")
-
             # Revert for offset mode: negate the accumulated
             if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
                 accumulated = group.accumulated_value
@@ -414,7 +399,6 @@ class RigState:
                     builder.revert_target = -accumulated
                 else:
                     builder.revert_target = None
-                print(f"[DEBUG REPLACE] Set revert_target={builder.revert_target}")
 
     def _apply_stack_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup') -> bool:
         """Apply stack behavior: check if limit is reached (pure check, no side effects)
@@ -447,8 +431,6 @@ class RigState:
             True if builder was enqueued (caller should return early)
             False if builder should be executed immediately
         """
-        print(f"[DEBUG _apply_queue_behavior] Layer '{group.layer_name}': is_queue_active={group.is_queue_active}, pending_queue_len={len(group.pending_queue)}, active_builders={len(group.builders)}")
-
         # Check max
         if builder.config.behavior_args:
             max_count = builder.config.behavior_args[0]
@@ -456,23 +438,19 @@ class RigState:
             # Don't add 1 for is_queue_active - executing builder is already in group.builders
             total = len(group.builders) + len(group.pending_queue)
             if total >= max_count:
-                print(f"[DEBUG _apply_queue_behavior] At max queue limit: {total} >= {max_count}, skipping")
                 return True  # At max, skip
 
         # If queue is active or has pending, enqueue
         if group.is_queue_active or len(group.pending_queue) > 0:
             def execute_callback():
-                print(f"[DEBUG _apply_queue_behavior] Executing queued builder for layer '{group.layer_name}'")
                 group.add_builder(builder)
                 if not builder.lifecycle.is_complete():
                     self._ensure_frame_loop_running()
 
-            print(f"[DEBUG _apply_queue_behavior] Enqueueing builder (queue active or has pending)")
             group.enqueue_builder(execute_callback)
             return True  # Enqueued, caller should return
         else:
             # First in queue - execute immediately
-            print(f"[DEBUG _apply_queue_behavior] First in queue - executing immediately and marking queue active")
             group.is_queue_active = True
             return False  # Execute immediately
 
@@ -491,17 +469,13 @@ class RigState:
 
         if builder.config.is_synchronous:
             # Handle synchronous instant completion (pos.to, pos.by)
-            print(f"[DEBUG add_builder] Synchronous execution for {builder.config.property}.{builder.config.operator}()")
             builder.execute_synchronous()
             bake_result = group.on_builder_complete(builder)
-            print(f"[DEBUG add_builder] Bake result: {bake_result}")
             if bake_result == "bake_to_base":
                 self._bake_group_to_base(group)
 
             # Remove the builder immediately for synchronous operations
-            print(f"[DEBUG add_builder] Removing builder from group, group had {len(group.builders)} builders")
             group.remove_builder(builder)
-            print(f"[DEBUG add_builder] After removal, group has {len(group.builders)} builders")
 
             # Clean up empty base groups
             if group.is_base and not group.should_persist():
@@ -509,17 +483,13 @@ class RigState:
                 velocity_properties = {"speed", "direction", "vector"}
                 if builder.config.property in velocity_properties:
                     # Start frame loop for velocity-based movement
-                    print(f"[DEBUG add_builder] Starting frame loop for velocity property {builder.config.property}")
                     self._ensure_frame_loop_running()
 
                 # Clean up the empty group
-                print(f"[DEBUG add_builder] Deleting empty group {layer}")
                 del self._layer_groups[layer]
         else:
             # Handle non-synchronous instant completion (speed.to, direction.to without .over)
-            print(f"[DEBUG add_builder] Non-synchronous instant completion for {builder.config.property}.{builder.config.operator}()")
             bake_result = group.on_builder_complete(builder)
-            print(f"[DEBUG add_builder] Bake result: {bake_result}")
             if bake_result == "bake_to_base":
                 self._bake_group_to_base(group)
 
@@ -528,17 +498,13 @@ class RigState:
 
             # For velocity properties, start frame loop for movement
             if builder.config.property in {"speed", "direction", "vector"}:
-                print(f"[DEBUG add_builder] Starting frame loop for velocity property {builder.config.property}")
                 self._ensure_frame_loop_running()
 
             # Clean up empty groups
             if not group.should_persist():
-                print(f"[DEBUG add_builder] Group should NOT persist - deleting empty group {layer}")
                 del self._layer_groups[layer]
                 if layer in self._layer_orders:
                     del self._layer_orders[layer]
-            else:
-                print(f"[DEBUG add_builder] Group SHOULD persist - keeping layer {layer}")
 
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add a builder to its layer group
@@ -546,9 +512,6 @@ class RigState:
         Creates group if needed, handles behaviors, manages queue.
         """
         layer = builder.config.layer_name
-
-        print(f"[DEBUG add_builder] Adding builder: layer={layer}, property={builder.config.property}, mode={builder.config.mode}, operator={builder.config.operator}, value={builder.config.value}")
-        print(f"[DEBUG add_builder] is_base_layer={builder.config.is_base_layer()}, layer_type={builder.config.layer_type}")
 
         if builder.config.operator == "bake":
             self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
@@ -704,7 +667,6 @@ class RigState:
 
         current_value = group.get_current_value()
         prop = group.property
-        print(f"[DEBUG _bake_group_to_base] Baking {prop}: current_value={current_value}")
 
         # Apply to base state
         if prop == "pos":
@@ -1076,7 +1038,6 @@ class RigState:
                 # Use group's aggregated value (handles mode correctly)
                 has_absolute_position = True
                 absolute_target = group.get_current_value()
-                print(f"[DEBUG _process_position_builders] Layer '{layer_name}': absolute_target={absolute_target}, mode={group.mode}, builders={len(group.builders)}")
             else:
                 # pos.by() - pure relative delta
                 for builder in group.builders:
@@ -1110,24 +1071,19 @@ class RigState:
             if first_builder.config.movement_type == "relative" and group.replace_target is not None:
                 # Clamp: committed + current should not exceed replace_target
                 # For relative, we need to clamp the total accumulated movement
-                print(f"[DEBUG CLAMPING] Layer '{layer_name}': committed={group.committed_value}, replace_target={group.replace_target}")
-                print(f"[DEBUG CLAMPING] Before clamp: relative_delta={relative_delta}")
 
                 # Current total that will be accumulated: committed + what we're about to add
                 # We need to ensure that doesn't exceed replace_target
                 projected_total = group.committed_value + relative_delta
-                print(f"[DEBUG CLAMPING] projected_total={projected_total}")
 
                 # Clamp to replace_target
                 clamped_total = Vec2(
                     max(-abs(group.replace_target.x), min(abs(group.replace_target.x), projected_total.x)),
                     max(-abs(group.replace_target.y), min(abs(group.replace_target.y), projected_total.y))
                 )
-                print(f"[DEBUG CLAMPING] clamped_total={clamped_total}")
 
                 # The delta we can actually apply is: clamped_total - committed
                 clamped_delta = clamped_total - group.committed_value
-                print(f"[DEBUG CLAMPING] After clamp: clamped_delta={clamped_delta}")
 
                 # Replace relative_delta with the clamped version
                 relative_delta = clamped_delta
@@ -1329,7 +1285,6 @@ class RigState:
             if group.property == "pos" and group.replace_target is not None:
                 if group.builders and group.builders[0].config.movement_type == "relative":
                     group.committed_value += relative_delta
-                    print(f"[DEBUG COMMIT UPDATE] Updated committed_value to {group.committed_value}")
 
         # 4. Update tracking BEFORE checking for completion to avoid double-emission
         # We update unconditionally here since the deltas were already emitted
