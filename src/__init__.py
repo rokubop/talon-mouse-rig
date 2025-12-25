@@ -21,11 +21,18 @@ Example usage:
 
 from typing import Optional
 import os
+import time
 from .state import RigState
 from .builder import RigBuilder
+from .contracts import (
+    validate_timing,
+    RigAttributeError,
+    find_closest_match,
+    VALID_RIG_METHODS,
+    VALID_RIG_PROPERTIES
+)
+from .ui import show_reloading_notification
 
-
-# Global singleton state
 _global_state: Optional[RigState] = None
 
 
@@ -60,8 +67,6 @@ def reload_rig():
         _global_state = None
 
     # Show brief notification before reload
-    from .ui import show_reloading_notification
-    import time
     show_reloading_notification()
     # Small delay to ensure notification is visible before reload
     time.sleep(0.1)
@@ -228,7 +233,6 @@ class Rig:
             StopHandle: Handle that allows chaining .then(callback) to execute
                        when the system fully stops
         """
-        from .contracts import validate_timing
         ms = validate_timing(ms, 'ms', method='stop')
         self._state.stop(ms, easing)
         return StopHandle(self._state)
@@ -261,8 +265,6 @@ class Rig:
         Returns:
             RigBuilder for chaining
         """
-        from .core import Vec2
-
         if ms is None:
             # Instant: just flip direction by 180°
             return self.direction.by(180)
@@ -306,8 +308,6 @@ class Rig:
 
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
-        from .contracts import RigAttributeError, find_closest_match, VALID_RIG_METHODS, VALID_RIG_PROPERTIES
-
         # Combine all valid options
         all_valid = VALID_RIG_METHODS + VALID_RIG_PROPERTIES
 

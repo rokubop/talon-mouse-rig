@@ -7,7 +7,8 @@ import math
 import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
-from .core import Vec2, EPSILON, mouse_move, mouse_move_relative
+from .core import Vec2, mouse_move, mouse_move_relative
+from .mouse_api import MOUSE_APIS, get_mouse_move_functions
 from .contracts import (
     BuilderConfig,
     LifecyclePhase,
@@ -364,7 +365,6 @@ class RigBuilder:
             self for chaining
         """
         # Validate API name
-        from .mouse_api import MOUSE_APIS
         if api not in MOUSE_APIS:
             available = ', '.join(f"'{k}'" for k in MOUSE_APIS.keys())
             self._mark_invalid()
@@ -926,8 +926,6 @@ class ActiveBuilder:
     """
 
     def __init__(self, config: BuilderConfig, rig_state: 'RigState', is_base_layer: bool):
-        import time
-
         self.config = config
         self.rig_state = rig_state
         self.is_base_layer = is_base_layer
@@ -1032,7 +1030,6 @@ class ActiveBuilder:
     @property
     def time_alive(self) -> float:
         """Get time in seconds since this builder was created"""
-        import time
         return time.perf_counter() - self.creation_time
 
     def _get_base_value(self) -> Any:
@@ -1111,7 +1108,6 @@ class ActiveBuilder:
 
                 # Use API override if specified
                 if self.config.api_override is not None:
-                    from .mouse_api import get_mouse_move_functions
                     move_absolute, _ = get_mouse_move_functions(self.config.api_override, None)
                     move_absolute(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
                 else:
@@ -1122,7 +1118,6 @@ class ActiveBuilder:
 
                 # Use API override if specified
                 if self.config.api_override is not None:
-                    from .mouse_api import get_mouse_move_functions
                     _, move_relative = get_mouse_move_functions(None, self.config.api_override)
                     move_relative(int(delta.x), int(delta.y))
                 else:

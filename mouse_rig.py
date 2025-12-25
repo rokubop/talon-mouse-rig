@@ -1,6 +1,6 @@
 from talon import actions, Module
 from typing import Any
-from .src import rig as get_rig, reload_rig
+from .src import rig as get_rig, reload_rig, get_version
 
 mod = Module()
 
@@ -561,5 +561,4 @@ class Actions:
 
     def mouse_rig_version() -> tuple[int, int, int]:
         """Returns the package version as (major, minor, patch)"""
-        from .src import get_version
         return get_version()

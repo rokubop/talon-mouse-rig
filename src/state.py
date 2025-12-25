@@ -11,11 +11,17 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative
+from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, EPSILON
 from .layer_group import LayerGroup
-from .lifecycle import Lifecycle, LifecyclePhase, PropertyAnimator
+from .lifecycle import LifecyclePhase
 from . import mode_operations, rate_utils
-from .contracts import BuilderConfig
+from .mouse_api import get_mouse_move_functions
+from .contracts import (
+    BuilderConfig,
+    ConfigError,
+    validate_timing,
+    VALID_LAYER_STATE_ATTRS
+)
 
 if TYPE_CHECKING:
     from .builder import ActiveBuilder
@@ -226,7 +232,6 @@ class RigState:
             layer: The layer name
         """
         if not builder.config.behavior_args:
-            from .contracts import ConfigError
             raise ConfigError("debounce() requires a delay in milliseconds")
 
         delay_ms = builder.config.behavior_args[0]
@@ -320,8 +325,6 @@ class RigState:
             builder: The new builder to add
             group: The layer group to apply replace behavior to
         """
-        from .core import Vec2
-
         # Get current value (includes accumulated + active builders)
         current_value = group.get_current_value()
 
@@ -374,7 +377,6 @@ class RigState:
             # Builder starts from current position
             # For pos.override on base layer, use actual mouse position, not group's current_value
             if builder.config.property == "pos" and builder.config.mode == "override" and group.is_base:
-                from talon import ctrl
                 mouse_x, mouse_y = ctrl.mouse_pos()
                 builder.base_value = Vec2(mouse_x, mouse_y)
             else:
@@ -562,8 +564,6 @@ class RigState:
             return self._layer_groups[layer]
 
         # Create new group
-        from .layer_group import LayerGroup
-
         group = LayerGroup(
             layer_name=layer,
             property=builder.config.property,
@@ -614,8 +614,6 @@ class RigState:
 
     def _targets_match(self, target1: Any, target2: Any) -> bool:
         """Check if two target values match (with epsilon for floats)"""
-        from .core import EPSILON
-
         if isinstance(target1, (int, float)) and isinstance(target2, (int, float)):
             return abs(target1 - target2) < EPSILON
         elif isinstance(target1, tuple) and isinstance(target2, tuple):
@@ -1118,7 +1116,6 @@ class RigState:
                 if builder.config.api_override is not None:
                     api_override = builder.config.api_override
 
-        from .mouse_api import get_mouse_move_functions
         return get_mouse_move_functions(api_override, api_override)
 
     def _emit_mouse_movement(self, has_absolute_position: bool, absolute_target: Optional[Vec2], frame_delta: Vec2):
@@ -1647,7 +1644,6 @@ class RigState:
         @property
         def time_alive(self) -> float:
             """Time in seconds since this layer was created"""
-            import time
             return time.perf_counter() - self._group.creation_time
 
         @property
@@ -1676,8 +1672,6 @@ class RigState:
 
         def __getattr__(self, name: str):
             """Provide helpful error messages for invalid attributes"""
-            from .contracts import VALID_LAYER_STATE_ATTRS
-
             raise AttributeError(
                 f"LayerState has no attribute '{name}'. "
                 f"Available attributes: {', '.join(VALID_LAYER_STATE_ATTRS)}"
@@ -1972,7 +1966,6 @@ class RigState:
         3. Set speed to 0 (with optional smooth deceleration)
         """
         # Validate arguments
-        from .contracts import BuilderConfig, ConfigError, validate_timing
         transition_ms = validate_timing(transition_ms, 'transition_ms', method='stop')
 
         config = BuilderConfig()
@@ -2002,7 +1995,6 @@ class RigState:
         else:
             # Smooth deceleration - create base layer builder
             from .builder import ActiveBuilder
-            from .contracts import BuilderConfig
 
             config = BuilderConfig()
             config.property = "speed"

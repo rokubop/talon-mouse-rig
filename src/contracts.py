@@ -4,7 +4,6 @@ This is the single source of truth for all interfaces in the system.
 """
 
 from typing import Protocol, Callable, Any, Optional, TYPE_CHECKING
-from abc import ABC, abstractmethod
 
 if TYPE_CHECKING:
     from .core import Vec2
