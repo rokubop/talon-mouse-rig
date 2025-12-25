@@ -1,91 +1,58 @@
 # Talon Mouse Rig
 
-All purpose mouse rig for Talon with a fluent API for position, speed, direction, layers, callbacks, durations, easing, and reverts.
+A comprehensive mouse control system for Talon with programmatic control over position, speed, direction, vectors, interpolation, timing, and callbacks.
 
-## Examples
+## Overview
 
-### Position
+The rig gives you full control over these properties:
 
+- **Direction** - A normalized vector (x, y) indicating movement direction
+- **Speed** - Movement magnitude in pixels per frame
+- **Vector** - Direction × Speed (velocity)
+- **Position** - Absolute or relative positioning with interpolation
+
+**Compatible with games** - uses platform APIs for relative movement (beware of anti-cheat systems).
+
+## Talon Actions
+
+Convenience actions for voice commands. See [`mouse_rig_user.talon`](mouse_rig_user.talon) for examples.
+
+**Movement:**
 ```python
-rig = actions.user.mouse_rig()
-rig.pos(960, 540)
-rig.pos.to(960, 540).over(400)
-rig.pos.to(960, 540).over(400, "ease_in_out")
-rig.pos.by(10, 0)
-rig.pos.by(10, 0).over(200).then(lambda: print("Moved mouse"))
+user.mouse_rig_go_left(speed)
+user.mouse_rig_go_right(speed)
+user.mouse_rig_go_up(speed)
+user.mouse_rig_go_down(speed)
 ```
 
-### Speed
-
+**Direction:**
 ```python
-rig = actions.user.mouse_rig()
-rig.direction(1, 0)
-rig.speed(8)
-rig.speed.to(8).over(500)
-rig.speed.to(8).over(500).revert(500)
-rig.stop()
-rig.stop(1000)
+user.mouse_rig_direction_left()
+user.mouse_rig_direction_to(x, y, over_ms, easing)
+user.mouse_rig_direction_by(degrees, over_ms, easing)
 ```
 
-### Direction
-
+**Speed:**
 ```python
-rig = actions.user.mouse_rig()
-rig.direction.to(0, 1)
-rig.speed(2)
-rig.direction.by(90)
-rig.direction.by(90).over(500) # rotate
-rig.direction.by(90).over(rate=45) # rotate
+user.mouse_rig_speed_to(value, over_ms, hold_ms, revert_ms)
+user.mouse_rig_speed_add(value, over_ms, hold_ms, revert_ms)
+user.mouse_rig_speed_mul(value, over_ms, hold_ms, revert_ms)
+user.mouse_rig_stop(ms, easing)
 ```
 
-### layers
-
-layers are a namespace for temporary state you can revert later.
-layers are calculated AFTER the base values.
-
-**layers support two operation categories** (but not mixed on same layer):
-- **Additive**: `.add()`, `.by()`, `.sub()` - stack by adding/subtracting
-- **Multiplicative**: `.mul()`, `.div()` - stack by multiplying/dividing
-
-Use `.revert()` to remove a layer's effect, or anonymous builders for absolute positioning with `.to()`.
-
+**Position:**
 ```python
-rig = actions.user.mouse_rig()
-rig.layer("boost").speed.add(10).over(1000)  # Additive
-rig.layer("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
-
-# Revert effect after 1 second and remove layer operations
-rig.layer("boost").revert(1000)
-
-# Bake current state into base values and remove layer operations
-rig.layer("boost").bake()
+user.mouse_rig_pos_to(x, y, over_ms, easing)
+user.mouse_rig_pos_by(dx, dy, over_ms, easing)
+user.mouse_rig_pos_by_value(distance, over_ms, easing)
 ```
 
-#### Repeat behaviors
-```python
-rig = actions.user.mouse_rig()
-rig.layer("boost").speed.add(10)
-rig.layer("boost").stack.speed.add(10) # Default behavior stacks
-rig.layer("boost").stack(3).speed.add(10) # Max 3 stacks
-rig.layer("boost").queue.speed.add(10) # Queue instead of stack
-rig.layer("boost").queue().speed.add(10) # Queue until finished
-rig.layer("boost").reset.speed.add(10) # reset instead of stack
-rig.layer("boost").throttle.speed.add(10) # Ignore while active
-rig.layer("boost").throttle(500).speed.add(10) # Throttle calls to once per 500ms
-```
-
-### Revert and callbacks
-
-```python
-rig = actions.user.mouse_rig()
-rig.speed.add(10).over(300).hold(2000).revert(300)
-rig.layer("boost").speed.add(10).over(300).hold(2000).revert(300)
-rig.speed.add(10).over(300) \
-    .then(lambda: print("Speed boost applied")) \
-    .hold(2000) \
-    .then(lambda: print("Holding speed boost")) \
-    .revert(300) \
-    .then(lambda: print("Speed boost reverted"))
+**Example commands:**
+```talon
+rig right: user.mouse_rig_go_right(4)
+rig boost: user.mouse_rig_speed_mul(3, 800, 0, 800)
+rig stop: user.mouse_rig_stop()
+rig center: user.mouse_rig_pos_to(960, 540, 300, "ease_in_out")
 ```
 
 ## Installation
@@ -106,17 +73,96 @@ cd ~/AppData/Roaming/talon/user
 git clone https://github.com/rokubop/talon-mouse-rig.git
 ```
 
-Done! 🎉
+## Fluent API
 
-## Reference
+For full control, use `rig = actions.user.mouse_rig()`. The Talon actions are convenience wrappers around this API.
 
-### Properties
+### Position
+
+```python
+rig.pos(960, 540)
+rig.pos.to(960, 540).over(400)
+rig.pos.to(960, 540).over(400, "ease_in_out")
+rig.pos.by(10, 0)
+rig.pos.by(10, 0).over(200).then(lambda: print("Moved mouse"))
+```
+
+### Speed
+
+```python
+rig.direction(1, 0)
+rig.speed(8)
+rig.speed.to(8).over(500)
+rig.speed.to(8).over(500).revert(500)
+rig.stop()
+rig.stop(1000)
+```
+
+### Direction
+
+```python
+rig.direction.to(0, 1)
+rig.speed(2)
+rig.direction.by(90)
+rig.direction.by(90).over(500)  # rotate
+rig.direction.by(90).over(rate=45)  # rotate at rate
+```
+
+### Layers
+
+Layers provide isolated namespaces for temporary state modifications. They're composable, revertible, and calculated after base values, allowing you to build complex, layered behaviors.
+
+**Layers support two operation categories** (but not mixed on same layer):
+- **Additive**: `.add()`, `.by()`, `.sub()` - stack by adding/subtracting
+- **Multiplicative**: `.mul()`, `.div()` - stack by multiplying/dividing
+
+Use `.revert()` to remove a layer's effect, or anonymous builders for absolute positioning with `.to()`.
+
+```python
+rig.layer("boost").speed.add(10).over(1000)  # Additive
+rig.layer("slowmo").speed.mul(0.5).over(1000)  # Multiplicative
+
+# Revert effect after 1 second and remove layer operations
+rig.layer("boost").revert(1000)
+
+# Bake current state into base values and remove layer operations
+rig.layer("boost").bake()
+```
+
+#### Repeat Behaviors
+```python
+rig.layer("boost").speed.add(10)
+rig.layer("boost").stack.speed.add(10)  # Default behavior stacks
+rig.layer("boost").stack(3).speed.add(10)  # Max 3 stacks
+rig.layer("boost").queue.speed.add(10)  # Queue instead of stack
+rig.layer("boost").queue().speed.add(10)  # Queue until finished
+rig.layer("boost").reset.speed.add(10)  # Reset instead of stack
+rig.layer("boost").throttle.speed.add(10)  # Ignore while active
+rig.layer("boost").throttle(500).speed.add(10)  # Throttle to once per 500ms
+```
+
+### Revert and Callbacks
+
+```python
+rig.speed.add(10).over(300).hold(2000).revert(300)
+rig.layer("boost").speed.add(10).over(300).hold(2000).revert(300)
+rig.speed.add(10).over(300) \
+    .then(lambda: print("Speed boost applied")) \
+    .hold(2000) \
+    .then(lambda: print("Holding speed boost")) \
+    .revert(300) \
+    .then(lambda: print("Speed boost reverted"))
+```
+
+### API Reference
+
+#### Properties
 
 - `pos` - Position (x, y coordinates)
 - `speed` - Movement speed magnitude
 - `direction` - Direction vector or angle
 
-### Operators
+#### Operators
 
 - `.to(value)` - Set absolute value (anonymous builders only)
 
@@ -128,7 +174,7 @@ Done! 🎉
 - `.mul(value)` - Multiply
 - `.div(value)` - Divide
 
-### Lifecycle Methods
+#### Lifecycle Methods
 
 - `.over(ms, easing?)` - Transition duration with optional easing
 - `.over(rate=X)` - Rate-based transition (e.g., 5 units/sec)
@@ -136,19 +182,19 @@ Done! 🎉
 - `.revert(ms?, easing?)` - Fade out duration
 - `.then(callback)` - Execute callback after stage completes
 
-### Behavior Modes
+#### Behavior Modes
 
 - `.stack(max?)` - Stack effects (default: unlimited)
-- `.reset()` - reset previous effect
+- `.reset()` - Reset previous effect
 - `.queue()` - Queue until current finishes
 - `.throttle()` - Ignore while active (same as calling without args)
 - `.throttle(ms)` - Rate limit calls to once per ms
 
-### Easing Functions
+#### Easing Functions
 
 `linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_in_2`, `ease_out_2`, `ease_in_out_2`, `ease_in_3`, `ease_out_3`, `ease_in_out_3`, `ease_in_4`, `ease_out_4`, `ease_in_out_4`
 
-### Shortcuts
+#### Shortcuts
 
 ```python
 rig.stop(ms?)
@@ -156,7 +202,7 @@ rig.reverse(ms?)
 rig.bake()
 ```
 
-### State
+#### State
 
 Access current computed state (base + all active effects):
 
@@ -191,11 +237,7 @@ if sprint:
     print(sprint.operator)  # 'add', 'mul', 'sub', etc.
 ```
 
-### layers
-
-Use `.layer(name)` to create named effects that can be reverted later.
-
-### Interpolation
+#### Interpolation
 
 Interpolation modes for `.over()` and `.revert()`:
 - `interpolation='lerp'` - Linear interpolation (default for direction)
@@ -206,7 +248,7 @@ Interpolation modes for `.over()` and `.revert()`:
 rig.direction.by(90).over(500, interpolation='slerp')
 ```
 
-### Helpers
+#### Helpers
 
 Direction helpers:
 
