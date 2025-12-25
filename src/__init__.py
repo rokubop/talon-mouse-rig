@@ -249,15 +249,21 @@ class Rig:
         self._state.reset()
 
     def reverse(self, ms: Optional[float] = None) -> RigBuilder:
-        """Reverse direction (180° flip with optional smooth transition through zero)
+        """Reverse direction (180° flip with optional smooth transition)
+
+        Bakes all active layers first, then reverses. For gradual reversal,
+        the current velocity is converted to a decaying offset that fades to zero
+        while the reversed base direction takes effect. This allows new operations
+        to blend naturally during the reversal.
 
         Example:
             Moving right at speed 3, direction (1, 0)
             After reverse():
                 Instant: direction becomes (-1, 0), moving left
             After reverse(500):
-                Smooth: velocity lerps (3,0) → (0,0) → (-3,0) over 500ms
-                Effect: Decelerates to stop, then accelerates in opposite direction
+                Smooth: Current velocity fades out as offset over 500ms
+                while reversed base direction blends in
+                New operations (wind, etc.) work during transition
 
         Args:
             ms: Optional duration for smooth reversal. If None, instant flip.
@@ -265,32 +271,45 @@ class Rig:
         Returns:
             RigBuilder for chaining
         """
+        # First, bake all active layers to get clean base state
+        self._state.bake_all()
+
         if ms is None:
             # Instant: just flip direction by 180°
             return self.direction.by(180)
         else:
-            # Gradual: Animate velocity through zero, then update base direction
-            current_velocity = self._state.direction * self._state.speed
-            reversed_velocity = current_velocity * -1
+            # Gradual: Bake current velocity as decaying offset
+            # Capture current velocity from base state (everything is baked)
+            current_velocity = self._state._base_direction * self._state._base_speed
 
-            # First, animate to reversed velocity
-            # Then clear the override and update the base direction
-            def commit_reverse():
-                # Update base direction to reversed
-                self._state._base_direction = self._state._base_direction * -1
-                # Clear the override layer by resetting accumulated value to zero
-                if "vector.override" in self._state._layer_groups:
-                    layer_group = self._state._layer_groups["vector.override"]
-                    layer_group.accumulated_value = layer_group._zero_value()
+            # Flip base direction immediately
+            self._state._base_direction = self._state._base_direction * -1
 
-            return (self.vector.override
-                    .to(reversed_velocity.x, reversed_velocity.y)
-                    .over(ms, interpolation='linear')
-                    .then(commit_reverse))
+            # The offset is (current_velocity - new_base_velocity)
+            # which equals (current_velocity - (-current_velocity)) = 2 * current_velocity
+            # This offset fades to zero, revealing the reversed base
+            offset_vector = current_velocity * 2
+
+            # Fade the offset from current to zero over duration
+            return self.layer("reverse_fade").vector.offset.to(offset_vector.x, offset_vector.y).to(0, 0).over(ms)
 
     def bake(self):
         """Bake all active builders to base state"""
         self._state.bake_all()
+
+    def emit(self, ms: float = 1000):
+        """Bake all layers, convert current velocity to autonomous decaying offset
+
+        Args:
+            ms: Fade duration (default: 1000ms)
+        """
+        # Bake all active layers to get clean state
+        self._state.bake_all()
+        current_velocity = self._state._base_direction * self._state._base_speed
+        self._state._base_speed = 0.0
+
+        layer_name = f"_emit_{int(time.perf_counter() * 1000000)}"
+        self.layer(layer_name).vector.offset.to(current_velocity.x, current_velocity.y).revert(ms)
 
     # ========================================================================
     # STATE ACCESS

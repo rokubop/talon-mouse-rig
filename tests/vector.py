@@ -435,6 +435,107 @@ def test_layer_vector_revert(on_success, on_failure):
     cron.after("400ms", check_during_boost)
 
 
+def test_layer_vector_emit(on_success, on_failure):
+    """Test: layer().vector.offset emit() converts to decaying offset"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Create wind layer with velocity offset
+        rig.layer("wind").vector.offset.add(3, 0)
+
+        cron.after("300ms", check_during_wind)
+
+    def check_during_wind():
+        rig_check = actions.user.mouse_rig()
+        # Should be moving: speed ~3
+        if abs(rig_check.state.speed - 3) > 1:
+            on_failure(f"Speed during wind is {rig_check.state.speed}, expected ~3")
+            return
+        if "wind" not in rig_check.state.layers:
+            on_failure(f"Wind layer not found: {rig_check.state.layers}")
+            return
+
+        # Emit the wind - converts to autonomous decaying offset
+        rig.layer("wind").emit(300)
+
+        def check_after_emit():
+            rig_mid = actions.user.mouse_rig()
+            # Wind layer should be gone, replaced by anonymous emit layer
+            if "wind" in rig_mid.state.layers:
+                on_failure(f"Wind layer still exists after emit: {rig_mid.state.layers}")
+                return
+            # Should still be moving (offset fading)
+            if rig_mid.state.speed < 1:
+                on_failure(f"Speed after emit is {rig_mid.state.speed}, expected > 1")
+                return
+
+            def check_after_fade():
+                rig_final = actions.user.mouse_rig()
+                # Offset should have faded to zero
+                if abs(rig_final.state.speed) > 0.5:
+                    on_failure(f"Speed after fade is {rig_final.state.speed}, expected ~0")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("400ms", check_after_fade)
+
+        cron.after("100ms", check_after_emit)
+
+    cron.after("100ms", start_test)
+
+
+def test_rig_emit_with_new_operation(on_success, on_failure):
+    """Test: rig.emit() with new operation blending"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set base velocity
+        rig.vector.to(4, 0)
+
+        cron.after("300ms", check_initial)
+
+    def check_initial():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - 4) > 1:
+            on_failure(f"Initial speed is {rig_check.state.speed}, expected ~4")
+            return
+
+        # Emit the velocity and immediately add new operation
+        rig_check.emit(300)
+        rig_check.vector.to(0, 3)  # New operation: move down
+
+        def check_blending():
+            rig_mid = actions.user.mouse_rig()
+            # Should have both emitted offset and new velocity
+            # Base speed should be ~3 (from new operation)
+            # But total movement is affected by fading offset
+            if rig_mid.state.speed < 2:
+                on_failure(f"Speed during blend is {rig_mid.state.speed}, expected > 2")
+                return
+
+            def check_final():
+                rig_final = actions.user.mouse_rig()
+                # After emit fades, should be at new velocity: (0, 3)
+                if abs(rig_final.state.speed - 3) > 1:
+                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("400ms", check_final)
+
+        cron.after("150ms", check_blending)
+
+    cron.after("100ms", start_test)
+
+
 # ============================================================================
 # TEST SUITE
 # ============================================================================
@@ -449,4 +550,6 @@ VECTOR_TESTS = [
     ("layer().vector.offset.add() multiple", test_layer_vector_offset_multiple),
     ("layer().vector.override.to()", test_layer_vector_override),
     ("layer().vector.revert()", test_layer_vector_revert),
+    ("layer().vector.emit()", test_layer_vector_emit),
+    ("rig.emit() + new operation", test_rig_emit_with_new_operation),
 ]

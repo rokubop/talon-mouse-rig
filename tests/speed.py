@@ -478,6 +478,115 @@ def test_layer_speed_offset_from_stopped(on_success, on_failure):
     cron.after("400ms", check_movement)
 
 
+def test_speed_offset_emit(on_success, on_failure):
+    """Test: layer().speed.offset emit() converts to vector offset"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set base velocity
+        rig.speed.to(3)
+        rig.direction.to(1, 0)
+
+        # Add speed boost via offset
+        rig.layer("boost").speed.offset.add(2)
+
+        cron.after("300ms", check_during_boost)
+
+    def check_during_boost():
+        rig_check = actions.user.mouse_rig()
+        # Should have combined speed: 3 + 2 = 5
+        if abs(rig_check.state.speed - 5) > 1:
+            on_failure(f"Speed during boost is {rig_check.state.speed}, expected ~5")
+            return
+        if "boost" not in rig_check.state.layers:
+            on_failure(f"Boost layer not found: {rig_check.state.layers}")
+            return
+
+        # Emit the boost - converts to vector offset using current direction
+        rig_check.layer("boost").emit(300)
+
+        def check_after_emit():
+            rig_mid = actions.user.mouse_rig()
+            # Boost layer should be gone
+            if "boost" in rig_mid.state.layers:
+                on_failure(f"Boost layer still exists after emit: {rig_mid.state.layers}")
+                return
+            # Should still have elevated speed (from emitted offset)
+            if rig_mid.state.speed < 4:
+                on_failure(f"Speed after emit is {rig_mid.state.speed}, expected > 4")
+                return
+
+            def check_after_fade():
+                rig_final = actions.user.mouse_rig()
+                # Should be back to base speed: 3
+                if abs(rig_final.state.speed - 3) > 1:
+                    on_failure(f"Speed after fade is {rig_final.state.speed}, expected ~3")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("400ms", check_after_fade)
+
+        cron.after("100ms", check_after_emit)
+
+    cron.after("100ms", start_test)
+
+
+def test_base_emit_no_layers(on_success, on_failure):
+    """Test: rig.emit() on base speed (no layers) converts to decaying offset"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set base speed and direction
+        rig.direction.to(1, 0)  # Right
+        rig.speed.to(5)
+
+        cron.after("300ms", check_initial)
+
+    def check_initial():
+        rig_check = actions.user.mouse_rig()
+        # Should be moving at speed 5
+        if abs(rig_check.state.speed - 5) > 1:
+            on_failure(f"Initial speed is {rig_check.state.speed}, expected ~5")
+            return
+        
+        # No layers should exist
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers, got: {rig_check.state.layers}")
+            return
+
+        # Emit the base movement - converts to decaying offset
+        rig_check.emit(300)
+
+        def check_after_emit():
+            rig_mid = actions.user.mouse_rig()
+            # Should still be moving (offset decaying)
+            if rig_mid.state.speed < 2:
+                on_failure(f"Speed after emit is {rig_mid.state.speed}, expected > 2")
+                return
+
+            def check_after_fade():
+                rig_final = actions.user.mouse_rig()
+                # Speed should have decayed to ~0
+                if abs(rig_final.state.speed) > 0.5:
+                    on_failure(f"Speed after fade is {rig_final.state.speed}, expected ~0")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("400ms", check_after_fade)
+
+        cron.after("100ms", check_after_emit)
+
+    cron.after("100ms", start_test)
+
+
 # ============================================================================
 # TEST LIST
 # ============================================================================
@@ -496,4 +605,6 @@ SPEED_TESTS = [
     ("stop().over().then()", test_stop_over_then_callback),
     ("stop() callback not fired on interrupt", test_stop_callback_not_fired_on_interrupt),
     ("layer().speed.offset.add() from stopped", test_layer_speed_offset_from_stopped),
+    ("layer().speed.offset.emit()", test_speed_offset_emit),
+    ("rig.emit() base (no layers)", test_base_emit_no_layers),
 ]

@@ -276,6 +276,81 @@ class RigBuilder:
         self.config.then_callbacks.append((stage, callback))
         return self
 
+    def emit(self, ms: float = 1000):
+        """Convert layer to autonomous decaying vector offset
+
+        Works for: vector.offset, vector.override, speed.offset
+
+        Args:
+            ms: Fade duration (default: 1000ms)
+        """
+        # Mark as invalid to prevent further chaining
+        self._mark_invalid()
+
+        layer_name = self.config.layer_name
+
+        if layer_name not in self.rig_state._layer_groups:
+            return
+
+        group = self.rig_state._layer_groups[layer_name]
+
+        if group.property == "vector" and group.mode in ("offset", "override"):
+            # Valid: vector layers can be emitted
+            pass
+        elif group.property == "speed" and group.mode == "offset":
+            # Valid: speed offset can be converted to vector
+            pass
+        else:
+            # Invalid combination - provide helpful error
+            if group.property == "direction":
+                raise ValueError(
+                    f"emit() cannot be used on direction layers.\n"
+                    f"Direction (angular) changes don't have momentum semantics.\n"
+                    f"Layer: '{layer_name}' ({group.property}.{group.mode})"
+                )
+            elif group.property == "pos":
+                raise ValueError(
+                    f"emit() cannot be used on position layers.\n"
+                    f"Position offsets don't have momentum semantics.\n"
+                    f"Layer: '{layer_name}' ({group.property}.{group.mode})"
+                )
+            elif group.property == "speed" and group.mode != "offset":
+                raise ValueError(
+                    f"emit() can only be used on speed.offset layers.\n"
+                    f"speed.override/scale don't have momentum semantics.\n"
+                    f"Layer: '{layer_name}' ({group.property}.{group.mode})\n"
+                    f"Hint: Use speed.offset for additive speed contributions."
+                )
+            elif group.property == "vector" and group.mode not in ("offset", "override"):
+                raise ValueError(
+                    f"emit() can only be used on vector.offset or vector.override layers.\n"
+                    f"Layer: '{layer_name}' ({group.property}.{group.mode})"
+                )
+            else:
+                raise ValueError(
+                    f"emit() cannot be used on '{layer_name}' ({group.property}.{group.mode}).\n"
+                    f"emit() only works for: vector.offset, vector.override, speed.offset"
+                )
+
+        # Capture velocity contribution based on property/mode
+        if group.property == "vector":
+            # Get velocity from vector layer's current value (includes active builders)
+            current_value = group.get_current_value()
+            velocity = current_value if isinstance(current_value, Vec2) else Vec2(0, 0)
+        elif group.property == "speed" and group.mode == "offset":
+            # Convert speed offset to vector using current direction
+            current_direction = self.rig_state.direction
+            speed_contrib = group.get_current_value()
+            velocity = current_direction * speed_contrib
+        else:
+            return  # Shouldn't reach here due to validation above
+
+        # Remove the layer immediately
+        self.rig_state.remove_builder(layer_name, bake=False)
+
+        emit_layer = f"_emit_{layer_name}_{int(time.perf_counter() * 1000000)}"
+        RigBuilder(self.rig_state, layer=emit_layer).vector.offset.to(velocity.x, velocity.y).revert(ms)
+
     # ========================================================================
     # BEHAVIOR METHODS
     # ========================================================================

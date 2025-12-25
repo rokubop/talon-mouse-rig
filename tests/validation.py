@@ -90,6 +90,71 @@ def test_layer_operation_without_mode(on_success, on_failure):
             on_failure(f"Error occurred but message unclear: {e}")
 
 
+def test_emit_on_direction_layer_errors(on_success, on_failure):
+    """Test: emit() on direction layer should error"""
+    rig = actions.user.mouse_rig()
+    rig.layer("turn").direction.offset.by(45)
+
+    def try_emit():
+        try:
+            rig_check = actions.user.mouse_rig()
+            rig_check.layer("turn").emit(500)
+            on_failure("Expected error for emit on direction layer but operation succeeded")
+        except Exception as e:
+            print(f"  Error message: {e}")
+            error_msg = str(e).lower()
+            if "emit" in error_msg and "direction" in error_msg:
+                on_success()
+            else:
+                on_failure(f"Error occurred but message unclear: {e}")
+
+    cron.after("100ms", try_emit)
+
+
+def test_emit_on_position_layer_errors(on_success, on_failure):
+    """Test: emit() on position layer should error"""
+    rig = actions.user.mouse_rig()
+    rig.layer("drift").pos.offset.by(10, 0)
+
+    def try_emit():
+        try:
+            rig_check = actions.user.mouse_rig()
+            rig_check.layer("drift").emit(500)
+            on_failure("Expected error for emit on position layer but operation succeeded")
+        except Exception as e:
+            print(f"  Error message: {e}")
+            error_msg = str(e).lower()
+            if "emit" in error_msg and ("position" in error_msg or "pos" in error_msg):
+                on_success()
+            else:
+                on_failure(f"Error occurred but message unclear: {e}")
+
+    cron.after("100ms", try_emit)
+
+
+def test_emit_on_speed_override_errors(on_success, on_failure):
+    """Test: emit() on speed.override should error"""
+    rig = actions.user.mouse_rig()
+    rig.speed.to(5)
+    rig.direction.to(1, 0)
+    rig.layer("boost").speed.override.to(10)
+
+    def try_emit():
+        try:
+            rig_check = actions.user.mouse_rig()
+            rig_check.layer("boost").emit(500)
+            on_failure("Expected error for emit on speed.override but operation succeeded")
+        except Exception as e:
+            print(f"  Error message: {e}")
+            error_msg = str(e).lower()
+            if "emit" in error_msg and "override" in error_msg:
+                on_success()
+            else:
+                on_failure(f"Error occurred but message unclear: {e}")
+
+    cron.after("100ms", try_emit)
+
+
 def test_invalid_direction_vector_zero(on_success, on_failure):
     """Test: direction.to(0, 0) should error - invalid zero vector"""
     try:
@@ -470,4 +535,7 @@ VALIDATION_TESTS = [
     ("duplicate mode specification", test_duplicate_mode_specification),
     ("accessing property as value", test_accessing_property_as_value),
     ("api without operation", test_api_without_operation),
+    ("emit on direction layer errors", test_emit_on_direction_layer_errors),
+    ("emit on position layer errors", test_emit_on_position_layer_errors),
+    ("emit on speed.override errors", test_emit_on_speed_override_errors),
 ]
