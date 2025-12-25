@@ -1,8 +1,8 @@
-from talon import settings, actions, ctrl, actions, cron
+from talon import actions, Module
 from typing import Any
-from .settings import mod
 from .src import rig as get_rig, reload_rig
-from .src.mouse_api import MOUSE_APIS
+
+mod = Module()
 
 @mod.action_class
 class Actions:
@@ -558,3 +558,8 @@ class Actions:
         """Show the QA UI for mouse rig development"""
         from .tests.main import toggle_test_ui
         toggle_test_ui()
+
+    def mouse_rig_version() -> tuple[int, int, int]:
+        """Returns the package version as (major, minor, patch)"""
+        from .src import get_version
+        return get_version()
