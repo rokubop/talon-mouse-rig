@@ -1,6 +1,6 @@
 # Talon Mouse Rig
 
-A comprehensive mouse control system for Talon with programmatic control over position, speed, direction, vectors, interpolation, timing, and callbacks.
+All purpose mouse rig for Talon with control over position, speed, direction, vectors, interpolation, timing, stacking, callbacks, and behaviors, favoring OS-level APIs for game compatibility.
 
 ## Overview
 
@@ -11,18 +11,18 @@ The rig gives you full control over these properties:
 - **Vector** - Direction × Speed (velocity)
 - **Position** - Absolute or relative positioning with interpolation
 
-**Compatible with games** - uses platform APIs for relative movement (beware of anti-cheat systems).
-
 ## Talon Actions
 
 Convenience actions for voice commands. See [`mouse_rig_user.talon`](mouse_rig_user.talon) for examples.
 
-**Movement:**
+**Direction + Speed**
 ```python
+user.mouse_rig_go_left(3.2)
 user.mouse_rig_go_left(speed)
 user.mouse_rig_go_right(speed)
 user.mouse_rig_go_up(speed)
 user.mouse_rig_go_down(speed)
+user.mouse_rig_go_left(initial_speed, target_speed, over_ms, easing)
 ```
 
 **Direction:**
@@ -34,26 +34,36 @@ user.mouse_rig_direction_by(degrees, over_ms, easing)
 
 **Speed:**
 ```python
+user.mouse_rig_speed_to(5)
+user.mouse_rig_speed_to(5, 1000)
 user.mouse_rig_speed_to(value, over_ms, hold_ms, revert_ms)
 user.mouse_rig_speed_add(value, over_ms, hold_ms, revert_ms)
 user.mouse_rig_speed_mul(value, over_ms, hold_ms, revert_ms)
-user.mouse_rig_stop(ms, easing)
+```
+
+**Stop:**
+```python
+user.mouse_rig_stop()
+user.mouse_rig_stop(1000)
+user.mouse_rig_stop(over_ms, easing)
 ```
 
 **Position:**
 ```python
+user.mouse_rig_pos_to(500, 500)
+user.mouse_rig_pos_to(500, 500, 1000, "ease_in_out")
 user.mouse_rig_pos_to(x, y, over_ms, easing)
 user.mouse_rig_pos_by(dx, dy, over_ms, easing)
 user.mouse_rig_pos_by_value(distance, over_ms, easing)
 ```
 
-**Example commands:**
-```talon
-rig right: user.mouse_rig_go_right(4)
-rig boost: user.mouse_rig_speed_mul(3, 800, 0, 800)
-rig stop: user.mouse_rig_stop()
-rig center: user.mouse_rig_pos_to(960, 540, 300, "ease_in_out")
-```
+**Ready to use example talon commands:**
+
+[mouse_rig_user.talon](mouse_rig_user.talon)
+
+**Advanced:**
+
+For full control, use the fluent API with `rig = actions.user.mouse_rig()`. See the [Fluent API](#fluent-api) section below for details.
 
 ## Installation
 
