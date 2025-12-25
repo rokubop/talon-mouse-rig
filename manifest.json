@@ -1,0 +1,74 @@
+{
+  "name": "mouse_rig",
+  "title": "Mouse Rig",
+  "description": "Control your mouse with position, speed, direction, and vector commands, over time and with advanced behaviors",
+  "version": "0.5.0",
+  "namespace": "user.mouse_rig",
+  "github": "https://github.com/rokubop/mouse_rig",
+  "preview": "",
+  "author": "Rokubop",
+  "tags": [
+    "mouse",
+    "movement"
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "ui_elements": "0.10.0"
+  },
+  "contributes": {
+    "settings": [
+      "user.mouse_rig_api",
+      "user.mouse_rig_frame_interval",
+      "user.mouse_rig_manual_movement_timeout_ms",
+      "user.mouse_rig_pause_on_manual_movement",
+      "user.mouse_rig_scale"
+    ],
+    "actions": [
+      "user.mouse_rig",
+      "user.mouse_rig_direction_by",
+      "user.mouse_rig_direction_down",
+      "user.mouse_rig_direction_left",
+      "user.mouse_rig_direction_right",
+      "user.mouse_rig_direction_to",
+      "user.mouse_rig_direction_up",
+      "user.mouse_rig_go_direction",
+      "user.mouse_rig_go_down",
+      "user.mouse_rig_go_left",
+      "user.mouse_rig_go_right",
+      "user.mouse_rig_go_up",
+      "user.mouse_rig_pos_by",
+      "user.mouse_rig_pos_by_value",
+      "user.mouse_rig_pos_to",
+      "user.mouse_rig_reload",
+      "user.mouse_rig_reset",
+      "user.mouse_rig_reverse",
+      "user.mouse_rig_speed_add",
+      "user.mouse_rig_speed_mul",
+      "user.mouse_rig_speed_to",
+      "user.mouse_rig_state_direction",
+      "user.mouse_rig_state_direction_cardinal",
+      "user.mouse_rig_state_direction_x",
+      "user.mouse_rig_state_direction_y",
+      "user.mouse_rig_state_is_moving",
+      "user.mouse_rig_state_pos",
+      "user.mouse_rig_state_speed",
+      "user.mouse_rig_stop",
+      "user.mouse_rig_test_toggle_ui",
+      "user.mouse_rig_version"
+    ]
+  },
+  "depends": {
+    "actions": [
+      "user.ui_elements",
+      "user.ui_elements_get_state",
+      "user.ui_elements_get_trees",
+      "user.ui_elements_hide",
+      "user.ui_elements_highlight",
+      "user.ui_elements_set_state",
+      "user.ui_elements_show",
+      "user.ui_elements_unhighlight"
+    ]
+  },
+  "_generator": "manifest_builder",
+  "_generatorVersion": "1.0.0"
+}

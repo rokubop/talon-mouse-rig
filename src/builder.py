@@ -1183,9 +1183,6 @@ class ActiveBuilder:
         phase, progress = self.lifecycle.advance(current_time)
         mode = self.config.mode
 
-        if self.config.property == "pos" and phase is None and self.lifecycle.has_reverted():
-            print(f"[DEBUG _get_own_value] REVERT COMPLETE: base_value={self.base_value}, target_value={self.target_value}, has_reverted={self.lifecycle.has_reverted()}")
-
         if self.config.property == "speed":
             # Get neutral value based on mode
             if mode == "scale":

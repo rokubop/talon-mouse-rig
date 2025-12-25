@@ -267,13 +267,24 @@ class Rig:
             # Instant: just flip direction by 180°
             return self.direction.by(180)
         else:
-            # Gradual: use vector to preserve magnitude during transition
-            # Get current velocity and reverse it
+            # Gradual: Animate velocity through zero, then update base direction
             current_velocity = self._state.direction * self._state.speed
             reversed_velocity = current_velocity * -1
 
-            # Use vector override with linear interpolation for smooth zero transition
-            return self.vector.override.to(reversed_velocity.x, reversed_velocity.y).over(ms, interpolation='linear')
+            # First, animate to reversed velocity
+            # Then clear the override and update the base direction
+            def commit_reverse():
+                # Update base direction to reversed
+                self._state._base_direction = self._state._base_direction * -1
+                # Clear the override layer by resetting accumulated value to zero
+                if "vector.override" in self._state._layer_groups:
+                    layer_group = self._state._layer_groups["vector.override"]
+                    layer_group.accumulated_value = layer_group._zero_value()
+
+            return (self.vector.override
+                    .to(reversed_velocity.x, reversed_velocity.y)
+                    .over(ms, interpolation='linear')
+                    .then(commit_reverse))
 
     def bake(self):
         """Bake all active builders to base state"""

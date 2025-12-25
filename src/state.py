@@ -486,7 +486,8 @@ class RigState:
                     self._ensure_frame_loop_running()
 
                 # Clean up the empty group
-                del self._layer_groups[layer]
+                if layer in self._layer_groups:
+                    del self._layer_groups[layer]
         else:
             # Handle non-synchronous instant completion (speed.to, direction.to without .over)
             bake_result = group.on_builder_complete(builder)
@@ -502,7 +503,8 @@ class RigState:
 
             # Clean up empty groups
             if not group.should_persist():
-                del self._layer_groups[layer]
+                if layer in self._layer_groups:
+                    del self._layer_groups[layer]
                 if layer in self._layer_orders:
                     del self._layer_orders[layer]
 
@@ -717,7 +719,8 @@ class RigState:
                 del self._throttle_times[throttle_key]
 
         # Remove group
-        del self._layer_groups[layer]
+        if layer in self._layer_groups:
+            del self._layer_groups[layer]
 
         # Remove order tracking
         if layer in self._layer_orders:
@@ -831,7 +834,8 @@ class RigState:
                     if group.is_base:
                         self._bake_group_to_base(group)
                     # Remove the group
-                    del self._layer_groups[layer]
+                    if layer in self._layer_groups:
+                        del self._layer_groups[layer]
         else:
             # Bake current computed value for this property
             current_value = getattr(self, property_name)
@@ -1361,7 +1365,6 @@ class RigState:
                 completed_phase, _ = builder.advance(current_time)
 
                 if completed_phase is not None:
-                    print(f"[DEBUG _remove_completed_builders] Builder completing phase '{completed_phase}'")
                     # For relative position builders, emit any remaining delta
                     if (builder.config.property == "pos" and
                         builder.config.movement_type == "relative" and
@@ -1371,10 +1374,7 @@ class RigState:
                         final_target_int = Vec2(round(final_value.x), round(final_value.y))
                         final_delta_int = final_target_int - builder._total_emitted_int
 
-                        print(f"[DEBUG _remove_completed_builders] Relative position: final_value={final_value}, final_target_int={final_target_int}, total_emitted={builder._total_emitted_int}, final_delta_int={final_delta_int}")
-
                         if final_delta_int.x != 0 or final_delta_int.y != 0:
-                            print(f"[DEBUG _remove_completed_builders] Emitting final delta: ({int(final_delta_int.x)}, {int(final_delta_int.y)})")
                             _, move_relative_override = self._get_override_functions()
                             if move_relative_override is not None:
                                 move_relative_override(int(final_delta_int.x), int(final_delta_int.y))
@@ -1385,7 +1385,6 @@ class RigState:
                 elif builder.lifecycle.should_be_garbage_collected():
                     # Builder is complete/reverted but didn't have a phase transition this frame
                     # (revert completed in a previous frame, or instant completion)
-                    print(f"[DEBUG _remove_completed_builders] Builder ready for cleanup: layer={layer}, has_reverted={builder.lifecycle.has_reverted()}, is_complete={builder.lifecycle.is_complete()}")
                     builders_to_remove.append(builder)
 
             # Process pending bake results (from advance())
@@ -1398,14 +1397,14 @@ class RigState:
 
             # Remove completed builders from group
             for builder in builders_to_remove:
-                print(f"[DEBUG _remove_completed_builders] Removing completed builder from layer '{layer}', behavior={builder.config.behavior}")
                 # Don't call on_builder_complete again - already called in advance()
                 # Actually remove the builder from the group
                 group.remove_builder(builder)
 
             # Check if group should be removed
             if not group.should_persist():
-                del self._layer_groups[layer]
+                if layer in self._layer_groups:
+                    del self._layer_groups[layer]
                 if layer in self._layer_orders:
                     del self._layer_orders[layer]
                 completed_layers.add(layer)
@@ -1926,6 +1925,14 @@ class RigState:
         def __bool__(self):
             return bool(self._computed_value)
 
+        def __getattr__(self, name):
+            """Delegate attribute/method access to the underlying computed value
+
+            This allows Vec2 methods like .to_cardinal(), .normalized(), etc. to work
+            on SmartPropertyState objects transparently.
+            """
+            return getattr(self._computed_value, name)
+
     # Override property getters to return smart accessors
     @property
     def pos(self) -> 'RigState.SmartPropertyState':
@@ -2067,23 +2074,18 @@ class RigState:
         """
         if layer in self._layer_groups:
             group = self._layer_groups[layer]
-            print(f"[DEBUG trigger_revert] Layer '{layer}': {len(group.builders)} builders, accumulated_value={group.accumulated_value}")
 
             if current_time is None:
                 current_time = time.perf_counter()
 
             if group.builders:
-                print(f"[DEBUG trigger_revert] Triggering revert on {len(group.builders)} active builders")
                 # Trigger revert on all active builders in the group
                 for builder in group.builders:
                     builder.lifecycle.trigger_revert(current_time, revert_ms, easing)
             else:
-                print(f"[DEBUG trigger_revert] No active builders, checking accumulated value")
-                print(f"[DEBUG trigger_revert] is_base={group.is_base}, is_zero={group._is_reverted_to_zero()}")
                 # No active builders, but group has accumulated_value
                 # Create a revert builder to transition accumulated_value to zero
                 if not group.is_base and not group._is_reverted_to_zero():
-                    print(f"[DEBUG trigger_revert] Creating revert builder for accumulated_value={group.accumulated_value}")
                     from .builder import BuilderConfig, ActiveBuilder
                     from .contracts import LayerType
 
@@ -2101,8 +2103,6 @@ class RigState:
                     else:
                         config.value = group.accumulated_value
 
-                    print(f"[DEBUG trigger_revert] Config: property={config.property}, mode={config.mode}, value={config.value}, revert_ms={revert_ms}")
-
                     # No over phase, immediately start reverting
                     config.over_ms = 0
                     config.revert_ms = revert_ms if revert_ms is not None else 0
@@ -2111,7 +2111,6 @@ class RigState:
 
                     # Create the builder
                     builder = ActiveBuilder(config, self, is_base_layer=False)
-                    print(f"[DEBUG trigger_revert] Created builder, setting up lifecycle for immediate revert")
 
                     # Configure lifecycle to start directly in REVERT phase
                     # Skip over phase by setting over_ms to 0, force revert phase
@@ -2119,12 +2118,7 @@ class RigState:
                     builder.lifecycle.phase = LifecyclePhase.REVERT
                     builder.lifecycle.phase_start_time = current_time
 
-                    print(f"[DEBUG trigger_revert] Adding builder to group")
-
                     # Now add it to the group
                     self.add_builder(builder)
-                    print(f"[DEBUG trigger_revert] Builder added, group now has {len(group.builders)} builders")
-                else:
-                    print(f"[DEBUG trigger_revert] Skipping revert builder creation (is_base={group.is_base}, is_zero={group._is_reverted_to_zero()})")
 
             self._ensure_frame_loop_running()
