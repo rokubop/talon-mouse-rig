@@ -550,6 +550,4 @@ VECTOR_TESTS = [
     ("layer().vector.offset.add() multiple", test_layer_vector_offset_multiple),
     ("layer().vector.override.to()", test_layer_vector_override),
     ("layer().vector.revert()", test_layer_vector_revert),
-    ("layer().vector.emit()", test_layer_vector_emit),
-    ("rig.emit() + new operation", test_rig_emit_with_new_operation),
 ]

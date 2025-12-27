@@ -77,21 +77,46 @@ class RigState:
         pos = self.pos
         speed = self.speed
         direction = self.direction
+        vector = self.vector
         layers = self.layers
+        try:
+            cardinal = self.direction_cardinal
+        except Exception as e:
+            cardinal = None
+            print(f"Error getting direction_cardinal: {e}")
+            import traceback
+            traceback.print_exc()
 
         lines = [
             "RigState:",
-            f"  .pos = ({pos.x:.1f}, {pos.y:.1f})",
-            f"  .speed = {speed.value:.1f}",
-            f"  .direction = ({direction.x:.2f}, {direction.y:.2f})",
-            f"  .direction_cardinal = {self.direction_cardinal or 'None'}",
-            f"  .layers = {layers}",
-            f"  .base = <BaseState>",
-            f"  .layer(name) = <LayerState | None>",
-            "",
-            "Methods:",
-            "  .time_alive(layer) -> float | None",
+            f"  pos = ({pos.x:.1f}, {pos.y:.1f})",
+            f"  pos.value = ({pos.value.x:.1f}, {pos.value.y:.1f}), pos.target = {pos.target}",
+            f"  pos.x = {pos.x:.1f}, pos.y = {pos.y:.1f}",
+            f"  speed = {speed.value:.1f}",
+            f"  speed.value = {speed.value:.1f}, speed.target = {speed.target}",
+            f"  direction = ({direction.x:.2f}, {direction.y:.2f})",
+            f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
         ]
+        
+        if cardinal:
+            lines.extend([
+                f"  direction_cardinal = {cardinal.value or 'None'}",
+                f"  direction_cardinal.value = {cardinal.value or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
+            ])
+        else:
+            lines.extend([
+                f"  direction_cardinal = None",
+                f"  direction_cardinal.value = None, direction_cardinal.target = None",
+            ])
+        
+        lines.extend([
+            f"  vector = ({vector.x:.2f}, {vector.y:.2f})",
+            f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
+            f"  layers = {layers}",
+            f"  base = <BaseState>",
+            f"  layer(name) = <LayerState | None>",
+            f"  frame_loop_active = {self._frame_loop_job is not None}",
+        ])
         return "\n".join(lines)
 
     def __str__(self) -> str:
@@ -1545,8 +1570,52 @@ class RigState:
         return "right"
 
     # Public API for reading state
+    class CardinalPropertyState:
+        """Smart accessor for direction_cardinal with .value and .target"""
+        def __init__(self, rig_state: 'RigState', current_cardinal: Optional[str]):
+            self._rig_state = rig_state
+            self._current_cardinal = current_cardinal
+
+        @property
+        def value(self) -> Optional[str]:
+            """Current cardinal direction"""
+            return self._current_cardinal
+
+        @property
+        def target(self) -> Optional[str]:
+            """Target cardinal direction from base.direction animation"""
+            # Find base.direction layer group
+            layer_name = "base.direction"
+            if layer_name in self._rig_state._layer_groups:
+                group = self._rig_state._layer_groups[layer_name]
+                if len(group.builders) > 0:
+                    for builder in group.builders:
+                        if not builder.lifecycle.is_complete():
+                            # Get target direction and convert to cardinal
+                            target_dir = builder.target_value
+                            if isinstance(target_dir, Vec2):
+                                return self._rig_state._get_cardinal_direction(target_dir)
+            return None
+
+        def __repr__(self):
+            return f"CardinalPropertyState(value={self._current_cardinal}, target={self.target})"
+
+        def __str__(self):
+            return str(self._current_cardinal)
+
+        def __eq__(self, other):
+            if isinstance(other, RigState.CardinalPropertyState):
+                return self._current_cardinal == other._current_cardinal
+            return self._current_cardinal == other
+
+        def __ne__(self, other):
+            return not self.__eq__(other)
+
+        def __bool__(self):
+            return self._current_cardinal is not None
+
     @property
-    def direction_cardinal(self) -> Optional[str]:
+    def direction_cardinal(self) -> 'RigState.CardinalPropertyState':
         """Current direction as cardinal/intercardinal string
 
         Returns one of: "right", "left", "up", "down",
@@ -1554,7 +1623,9 @@ class RigState:
         or None if direction is zero vector.
         """
         direction_vec = self._compute_current_state()[2]
-        return self._get_cardinal_direction(direction_vec)
+        cardinal = self._get_cardinal_direction(direction_vec)
+        # Use RigState prefix to access nested class
+        return RigState.CardinalPropertyState(self, cardinal)
 
     @property
     def layers(self) -> list[str]:
@@ -1579,37 +1650,46 @@ class RigState:
             # Format values based on type
             def format_value(val):
                 if isinstance(val, Vec2):
-                    return f"Vec2({val.x:.1f}, {val.y:.1f})"
+                    return f"({val.x:.1f}, {val.y:.1f})"
                 elif isinstance(val, float):
                     return f"{val:.1f}"
+                elif val is None:
+                    return "None"
                 else:
                     return str(val)
 
-            # Build parts list
-            parts = [
-                f"prop={self._group.property}",
-                f"mode={self._group.mode}",
-                f"value={format_value(self._group.get_current_value())}",
-                f"builders={len(self._group.builders)}",
+            current_value = self._group.get_current_value()
+            target_value = self._group.target
+
+            lines = [
+                f"LayerState('{self._group.layer_name}'):",
+                f"  property = {self._group.property}",
+                f"  mode = {self._group.mode}",
+                f"  layer_type = {self._group.layer_type}",
+                f"  order = {self._group.order}",
+                f"  is_emit_layer = {self._group.is_emit_layer}",
+                f"  source_layer = {self._group.source_layer}",
+                f"  value = {format_value(current_value)}",
+                f"  target = {format_value(target_value)}",
+                f"  accumulated = {format_value(self._group.accumulated_value)}",
+                f"  active_builders = {len(self._group.builders)}",
             ]
 
             # Add timing info from first builder if available
             if self._group.builders:
                 builder = self._group.builders[0]
                 lifecycle = builder.lifecycle
-                parts.append(f"time_alive={builder.time_alive:.2f}s")
-
+                lines.append(f"  time_alive = {builder.time_alive:.2f}s")
+                lines.append(f"  operator = {builder.config.operator}")
+                
                 if lifecycle.over_ms:
-                    parts.append(f"over_ms={lifecycle.over_ms}")
+                    lines.append(f"  over_ms = {lifecycle.over_ms}")
                 if lifecycle.hold_ms:
-                    parts.append(f"hold_ms={lifecycle.hold_ms}")
+                    lines.append(f"  hold_ms = {lifecycle.hold_ms}")
                 if lifecycle.revert_ms:
-                    parts.append(f"revert_ms={lifecycle.revert_ms}")
-            else:
-                # No active builders, show accumulated state
-                parts.append(f"accumulated={format_value(self._group.accumulated_value)}")
+                    lines.append(f"  revert_ms = {lifecycle.revert_ms}")
 
-            return f"LayerState('{self._group.layer_name}', {', '.join(parts)})"
+            return "\n".join(lines)
 
         def __str__(self) -> str:
             return self.__repr__()
@@ -1694,6 +1774,104 @@ class RigState:
         return RigState.LayerState(self._layer_groups[layer_name])
 
     # Base state access
+    class BasePropertyState:
+        """Smart accessor for base state properties with .value and .target"""
+        def __init__(self, rig_state: 'RigState', property_name: str, base_value):
+            self._rig_state = rig_state
+            self._property_name = property_name
+            self._base_value = base_value
+
+        @property
+        def value(self):
+            """Current baked base value"""
+            return self._base_value
+
+        @property
+        def target(self):
+            """Target value from base layer animation (None if no base animation)"""
+            # Find base.{property} layer group
+            layer_name = f"base.{self._property_name}"
+            if layer_name in self._rig_state._layer_groups:
+                group = self._rig_state._layer_groups[layer_name]
+                if len(group.builders) > 0:
+                    # Return target of first active builder
+                    for builder in group.builders:
+                        if not builder.lifecycle.is_complete():
+                            return builder.target_value
+            return None
+
+        def __repr__(self):
+            return f"BasePropertyState('{self._property_name}', value={self._base_value}, target={self.target})"
+
+        def __str__(self):
+            return str(self._base_value)
+
+        # Magic methods to make BasePropertyState behave like the underlying value
+        def __add__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value + other_val
+
+        def __radd__(self, other):
+            return other + self._base_value
+
+        def __sub__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value - other_val
+
+        def __rsub__(self, other):
+            return other - self._base_value
+
+        def __mul__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value * other_val
+
+        def __rmul__(self, other):
+            return other * self._base_value
+
+        def __truediv__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value / other_val
+
+        def __rtruediv__(self, other):
+            return other / self._base_value
+
+        def __eq__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value == other_val
+
+        def __ne__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value != other_val
+
+        def __lt__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value < other_val
+
+        def __le__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value <= other_val
+
+        def __gt__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value > other_val
+
+        def __ge__(self, other):
+            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            return self._base_value >= other_val
+
+        def __float__(self):
+            return float(self._base_value)
+
+        def __int__(self):
+            return int(self._base_value)
+
+        def __bool__(self):
+            return bool(self._base_value)
+
+        def __getattr__(self, name):
+            """Delegate attribute/method access to the underlying value (e.g., Vec2 methods)"""
+            return getattr(self._base_value, name)
+
     class BaseState:
         def __init__(self, rig_state: 'RigState'):
             self._rig_state = rig_state
@@ -1702,12 +1880,19 @@ class RigState:
             pos = self.pos
             speed = self.speed
             direction = self.direction
+            vector = self.vector
 
             lines = [
                 "BaseState:",
-                f"  .pos = ({pos.x:.1f}, {pos.y:.1f})",
-                f"  .speed = {speed:.1f}",
-                f"  .direction = ({direction.x:.2f}, {direction.y:.2f})",
+                f"  pos = ({pos.value.x:.1f}, {pos.value.y:.1f})",
+                f"  pos.value = ({pos.value.x:.1f}, {pos.value.y:.1f}), pos.target = {pos.target}",
+                f"  pos.x = {pos.x:.1f}, pos.y = {pos.y:.1f}",
+                f"  speed = {speed.value:.1f}",
+                f"  speed.value = {speed.value:.1f}, speed.target = {speed.target}",
+                f"  direction = ({direction.value.x:.2f}, {direction.value.y:.2f})",
+                f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
+                f"  vector = ({vector.value.x:.2f}, {vector.value.y:.2f})",
+                f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
             ]
             return "\n".join(lines)
 
@@ -1715,21 +1900,23 @@ class RigState:
             return self.__repr__()
 
         @property
-        def pos(self) -> Vec2:
-            return self._rig_state._absolute_base_pos if self._rig_state._absolute_base_pos else Vec2(0, 0)
+        def pos(self) -> 'RigState.BasePropertyState':
+            base_pos = self._rig_state._absolute_base_pos if self._rig_state._absolute_base_pos else Vec2(0, 0)
+            return RigState.BasePropertyState(self._rig_state, "pos", base_pos)
 
         @property
-        def speed(self) -> float:
-            return self._rig_state._base_speed
+        def speed(self) -> 'RigState.BasePropertyState':
+            return RigState.BasePropertyState(self._rig_state, "speed", self._rig_state._base_speed)
 
         @property
-        def direction(self) -> Vec2:
-            return self._rig_state._base_direction
+        def direction(self) -> 'RigState.BasePropertyState':
+            return RigState.BasePropertyState(self._rig_state, "direction", self._rig_state._base_direction)
 
         @property
-        def vector(self) -> Vec2:
+        def vector(self) -> 'RigState.BasePropertyState':
             """Base velocity vector (speed * direction)"""
-            return self._rig_state._base_direction * self._rig_state._base_speed
+            base_vector = self._rig_state._base_direction * self._rig_state._base_speed
+            return RigState.BasePropertyState(self._rig_state, "vector", base_vector)
 
     @property
     def base(self) -> 'RigState.BaseState':

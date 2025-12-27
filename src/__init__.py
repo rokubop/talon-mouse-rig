@@ -248,68 +248,77 @@ class Rig:
         """
         self._state.reset()
 
-    def reverse(self, ms: Optional[float] = None) -> RigBuilder:
-        """Reverse direction (180° flip with optional smooth transition)
+    def reverse(self, ms: Optional[float] = None, easing: str = "linear") -> RigBuilder:
+        if ms is not None:
+            self._emit_reverse_copies(ms, easing)
+        return RigBuilder(self._state)
 
-        Bakes all active layers first, then reverses. For gradual reversal,
-        the current velocity is converted to a decaying offset that fades to zero
-        while the reversed base direction takes effect. This allows new operations
-        to blend naturally during the reversal.
+    def _emit_reverse_copies(self, ms: float, easing: str = "linear"):
+        """Helper: Emit copies of all layers and base velocity for gradual reverse transitions
 
-        Example:
-            Moving right at speed 3, direction (1, 0)
-            After reverse():
-                Instant: direction becomes (-1, 0), moving left
-            After reverse(500):
-                Smooth: Current velocity fades out as offset over 500ms
-                while reversed base direction blends in
-                New operations (wind, etc.) work during transition
-
-        Args:
-            ms: Optional duration for smooth reversal. If None, instant flip.
-
-        Returns:
-            RigBuilder for chaining
+        Copies each layer twice to provide 2x contribution that fades out,
+        which bridges from current velocity to reversed velocity smoothly.
         """
-        # First, bake all active layers to get clean base state
-        self._state.bake_all()
+        for layer_name in list(self._state._layer_groups.keys()):
+            try:
+                # Intentional - 2 copies
+                self.layer(layer_name).copy().emit(ms, easing)
+                self.layer(layer_name).copy().emit(ms, easing)
+            except:
+                pass
 
-        if ms is None:
-            # Instant: just flip direction by 180°
-            return self.direction.by(180)
-        else:
-            # Gradual: Bake current velocity as decaying offset
-            # Capture current velocity from base state (everything is baked)
-            current_velocity = self._state._base_direction * self._state._base_speed
+        # Emit 2x base velocity as decaying offset
+        current_base_velocity = self._state._base_direction * self._state._base_speed
+        offset_velocity = current_base_velocity * 2
 
-            # Flip base direction immediately
-            self._state._base_direction = self._state._base_direction * -1
+        layer_name = f"copy.base.{int(time.perf_counter() * 1000000)}"
+        self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).emit(ms, easing)
 
-            # The offset is (current_velocity - new_base_velocity)
-            # which equals (current_velocity - (-current_velocity)) = 2 * current_velocity
-            # This offset fades to zero, revealing the reversed base
-            offset_vector = current_velocity * 2
+    def _reverse_all_directions(self):
+        """Helper: Reverse base direction, all layer accumulated values, and active builders
 
-            # Fade the offset from current to zero over duration
-            return self.layer("reverse_fade").vector.offset.to(offset_vector.x, offset_vector.y).to(0, 0).over(ms)
+        Only reverses user-named layers, not emit layers (which should fade in their original direction).
+        """
+        self._state._base_direction = self._state._base_direction * -1
+
+        for layer_group in self._state._layer_groups.values():
+            # Skip emit/copy layers - they should fade in their original direction
+            if layer_group.is_emit_layer:
+                continue
+
+            if layer_group.property in ("direction", "vector") and layer_group.accumulated_value is not None:
+                layer_group.accumulated_value = layer_group.accumulated_value * -1
+
+            for builder in layer_group.builders:
+                if builder.config.property in ("direction", "vector") and builder.target_value is not None:
+                    builder.target_value = builder.target_value * -1
+                    if builder.base_value is not None:
+                        builder.base_value = builder.base_value * -1
 
     def bake(self):
         """Bake all active builders to base state"""
         self._state.bake_all()
 
-    def emit(self, ms: float = 1000):
-        """Bake all layers, convert current velocity to autonomous decaying offset
+    def emit(self, ms: float = 1000, easing: str = "linear") -> RigBuilder:
+        """Convert current total velocity to autonomous decaying offset
 
         Args:
             ms: Fade duration (default: 1000ms)
+            easing: Easing function for the decay (default: "linear")
+
+        Example:
+            rig.emit(500, "ease_out").then(lambda: print("Momentum faded"))
         """
-        # Bake all active layers to get clean state
+        # Get total current velocity (includes all layers)
+        speed, direction = self._state._compute_velocity()
+        current_velocity = direction * speed
+
+        # Bake everything and zero out base speed
         self._state.bake_all()
-        current_velocity = self._state._base_direction * self._state._base_speed
         self._state._base_speed = 0.0
 
-        layer_name = f"_emit_{int(time.perf_counter() * 1000000)}"
-        self.layer(layer_name).vector.offset.to(current_velocity.x, current_velocity.y).revert(ms)
+        layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
+        return self.layer(layer_name).vector.offset.to(current_velocity.x, current_velocity.y).revert(ms, easing)
 
     # ========================================================================
     # STATE ACCESS

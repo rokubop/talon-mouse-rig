@@ -520,7 +520,9 @@ class Actions:
                  "down_right", "down_left", or None if no direction
         """
         rig = actions.user.mouse_rig()
-        return rig.state.direction_cardinal
+        cardinal = rig.state.direction_cardinal
+        # Auto-converts to string via __str__, or returns the .value directly
+        return str(cardinal) if cardinal.value else None
 
     def mouse_rig_stop(stop_ms: float = None, easing: str = None, callback: callable = None) -> None:
         """Stop the mouse rig and remove all layers, optionally over time.

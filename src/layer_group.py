@@ -33,7 +33,9 @@ class LayerGroup:
         property: str,
         mode: Optional[str],
         layer_type: str,
-        order: Optional[int] = None
+        order: Optional[int] = None,
+        is_emit_layer: bool = False,
+        source_layer: Optional[str] = None
     ):
         from .contracts import LayerType
 
@@ -44,8 +46,8 @@ class LayerGroup:
         self.is_base = (layer_type == LayerType.BASE)
         self.order = order
         self.creation_time = time.perf_counter()
-
-        # Active builders in this group
+        self.is_emit_layer = is_emit_layer
+        self.source_layer = source_layer
         self.builders: list['ActiveBuilder'] = []
 
         # Accumulated state (for modifier layers - persists after builders complete)
@@ -99,6 +101,30 @@ class LayerGroup:
         if builder in self.builders:
             self.builders.remove(builder)
             self._recalculate_final_target()
+
+    def copy(self, new_name: str) -> 'LayerGroup':
+        """Create a copy of this layer group
+
+        Args:
+            new_name: Name for the new layer copy
+
+        Returns:
+            New LayerGroup with copied state
+        """
+        copy_group = LayerGroup(
+            layer_name=new_name,
+            property=self.property,
+            mode=self.mode,
+            layer_type=self.layer_type,
+            order=self.order,
+            source_layer=self.layer_name
+        )
+        copy_group.builders = self.builders.copy()
+        copy_group.accumulated_value = self.accumulated_value
+        copy_group.committed_value = self.committed_value
+        copy_group.replace_target = self.replace_target
+        copy_group.final_target = self.final_target
+        return copy_group
 
     def clear_builders(self):
         """Remove all active builders (used by replace behavior)"""

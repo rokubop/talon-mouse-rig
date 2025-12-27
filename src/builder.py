@@ -276,21 +276,71 @@ class RigBuilder:
         self.config.then_callbacks.append((stage, callback))
         return self
 
-    def emit(self, ms: float = 1000):
+    def copy(self, name: Optional[str] = None) -> 'RigBuilder':
+        """Create a copy of the current layer
+
+        Args:
+            name: Optional name for the copy. If None, auto-generates copy.layername.timestamp
+
+        Returns:
+            RigBuilder pointing to the copy layer
+
+        Examples:
+            rig.layer("boost").copy().emit(500)      # Auto-named copy, then emit
+            rig.layer("boost").copy().speed.bake()  # Auto-named copy, then bake
+            rig.layer("boost").copy("boost2")       # Named copy, can reference later
+        """
+        layer_name = self.config.layer_name
+
+        # Validate: can only copy user-named layers
+        if not self.config.is_user_named:
+            self._mark_invalid()
+            raise ValueError(
+                f"copy() can only be used on user-named layers.\n"
+                f"Use rig.layer('name') to create a named layer before copying."
+            )
+
+        # Validate: layer must exist
+        if layer_name not in self.rig_state._layer_groups:
+            self._mark_invalid()
+            raise ValueError(
+                f"Cannot copy layer '{layer_name}' - layer does not exist.\n"
+                f"Hint: Create the layer first before copying it."
+            )
+
+        # Generate copy name
+        if name is None:
+            copy_name = f"copy.{layer_name}.{int(time.perf_counter() * 1000000)}"
+        else:
+            copy_name = name
+
+        # Create the copy immediately using LayerGroup.copy()
+        original_group = self.rig_state._layer_groups[layer_name]
+        copy_group = original_group.copy(copy_name)
+        self.rig_state._layer_groups[copy_name] = copy_group
+
+        # Mark current builder as invalid and return new builder for the copy
+        self._mark_invalid()
+        return RigBuilder(self.rig_state, layer=copy_name)
+
+    def emit(self, ms: float = 1000, easing: str = "linear") -> 'RigBuilder':
         """Convert layer to autonomous decaying vector offset
 
         Works for: vector.offset, vector.override, speed.offset
 
-        Args:
-            ms: Fade duration (default: 1000ms)
+        Example:
+            rig.layer("wind").vector.offset.add(5, 0)
+            rig.layer("wind").emit(500, "ease_out").then(lambda: print("Wind faded"))
+            rig.layer("wind").copy().emit(500)  # Keep wind layer active
         """
-        # Mark as invalid to prevent further chaining
-        self._mark_invalid()
+        # Validate easing
+        self.config.validate_easing(easing, context='emit', mark_invalid=self._mark_invalid)
 
         layer_name = self.config.layer_name
 
         if layer_name not in self.rig_state._layer_groups:
-            return
+            self._mark_invalid()
+            return self
 
         group = self.rig_state._layer_groups[layer_name]
 
@@ -343,13 +393,22 @@ class RigBuilder:
             speed_contrib = group.get_current_value()
             velocity = current_direction * speed_contrib
         else:
-            return  # Shouldn't reach here due to validation above
+            self._mark_invalid()
+            return self  # Shouldn't reach here due to validation above
 
-        # Remove the layer immediately
+        # Remove the layer (emit consumes the original)
         self.rig_state.remove_builder(layer_name, bake=False)
 
-        emit_layer = f"_emit_{layer_name}_{int(time.perf_counter() * 1000000)}"
-        RigBuilder(self.rig_state, layer=emit_layer).vector.offset.to(velocity.x, velocity.y).revert(ms)
+        # Create emit layer with decaying offset and mark it as an emit layer
+        emit_layer = f"emit.{layer_name}.{int(time.perf_counter() * 1000000)}"
+        self._mark_invalid()
+        builder = RigBuilder(self.rig_state, layer=emit_layer).vector.offset.to(velocity.x, velocity.y).revert(ms, easing)
+
+        # Mark the layer group as an emit layer
+        if emit_layer in self.rig_state._layer_groups:
+            self.rig_state._layer_groups[emit_layer].is_emit_layer = True
+
+        return builder
 
     # ========================================================================
     # BEHAVIOR METHODS
@@ -489,24 +548,19 @@ class RigBuilder:
         """Validate and execute the builder"""
         self._executed = True
 
-        # Special case: revert-only call (no property/operator set)
+        # Special case: revert-only call
         if self.config.property is None and self.config.operator is None:
             if self.config.revert_ms is not None:
-                # This is a revert() call on an existing is_named_layer builder
                 self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return
 
             validate_api_has_operation(self.config, self._mark_invalid)
             return
 
-        # self._detect_and_apply_special_cases()
-
+        # Normal execution: validate, calculate, and add builder
         self.config.validate_mode(self._mark_invalid)
-
         self._calculate_rate_durations()
 
-        # Queue behavior is now handled by RigState.add_builder() and LayerGroup
-        # Just create the ActiveBuilder and add it - the queue logic is in state.py
         active = ActiveBuilder(self.config, self.rig_state, self.is_base_layer)
         self.rig_state.add_builder(active)
 

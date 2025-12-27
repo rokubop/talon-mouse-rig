@@ -32,6 +32,8 @@ def toggle_test_ui(show: bool = None):
         from .contracts import CONTRACTS_TESTS
         from .behaviors import BEHAVIOR_TESTS
         from .actions import ACTIONS_TESTS
+        from .special import SPECIAL_TESTS
+        from .state_repr import STATE_REPR_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
@@ -41,7 +43,9 @@ def toggle_test_ui(show: bool = None):
             ("Validation", VALIDATION_TESTS),
             ("Contracts", CONTRACTS_TESTS),
             ("Behaviors", BEHAVIOR_TESTS),
-            ("Actions", ACTIONS_TESTS)
+            ("Special", SPECIAL_TESTS),
+            ("Actions", ACTIONS_TESTS),
+            ("State Repr", STATE_REPR_TESTS)
         ]
 
         show = show if show is not None else not actions.user.ui_elements_get_trees()
