@@ -2,7 +2,7 @@
 from talon import actions
 import time
 
-def test_rig_state_repr_empty():
+def test_rig_state_empty():
     """Test RigState repr with no animations"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -32,7 +32,7 @@ def test_rig_state_repr_empty():
 
     return True, "RigState repr shown"
 
-def test_base_state_repr_empty():
+def test_base_state_empty():
     """Test BaseState repr with no animations"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -51,13 +51,16 @@ def test_base_state_repr_empty():
     print(f"rig.state.base.direction = {rig.state.base.direction}")
     print(f"rig.state.base.direction.value = {rig.state.base.direction.value}")
     print(f"rig.state.base.direction.target = {rig.state.base.direction.target}")
+    print(f"rig.state.base.direction_cardinal = {rig.state.base.direction_cardinal}")
+    print(f"rig.state.base.direction_cardinal.value = {rig.state.base.direction_cardinal.value}")
+    print(f"rig.state.base.direction_cardinal.target = {rig.state.base.direction_cardinal.target}")
     print(f"rig.state.base.vector = {rig.state.base.vector}")
     print(f"rig.state.base.vector.value = {rig.state.base.vector.value}")
     print(f"rig.state.base.vector.target = {rig.state.base.vector.target}")
 
     return True, "BaseState repr shown"
 
-def test_rig_state_repr_with_animations():
+def test_rig_state_with_animations():
     """Test RigState repr with active animations"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -75,7 +78,7 @@ def test_rig_state_repr_with_animations():
     rig.stop()
     return True, "RigState with animations shown"
 
-def test_base_state_repr_with_animations():
+def test_base_state_with_animations():
     """Test BaseState repr with active animations"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -91,7 +94,7 @@ def test_base_state_repr_with_animations():
     rig.stop()
     return True, "BaseState with animations shown"
 
-def test_layer_state_repr_base_speed():
+def test_layer_state_base_speed():
     """Test LayerState repr for base.speed"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -117,7 +120,7 @@ def test_layer_state_repr_base_speed():
     rig.stop()
     return True, "base.speed layer shown"
 
-def test_layer_state_repr_offset():
+def test_layer_state_offset():
     """Test LayerState repr for speed.offset"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -135,7 +138,7 @@ def test_layer_state_repr_offset():
     rig.stop()
     return True, "speed.offset layer shown"
 
-def test_layer_state_repr_custom_named():
+def test_layer_state_custom_named():
     """Test LayerState repr for custom named layer"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -153,7 +156,7 @@ def test_layer_state_repr_custom_named():
     rig.stop()
     return True, "Custom named layer shown"
 
-def test_layer_state_repr_pos_offset():
+def test_layer_state_pos_offset():
     """Test LayerState repr for pos.offset"""
     rig = actions.user.mouse_rig()
     rig.stop()
@@ -188,14 +191,14 @@ def test_frame_loop_status():
     rig.stop()
     return True, "Frame loop status shown"
 
-STATE_REPR_TESTS = [
-    ("RigState repr (empty)", test_rig_state_repr_empty),
-    ("BaseState repr (empty)", test_base_state_repr_empty),
-    ("RigState repr (with animations)", test_rig_state_repr_with_animations),
-    ("BaseState repr (with animations)", test_base_state_repr_with_animations),
-    ("LayerState repr - base.speed", test_layer_state_repr_base_speed),
-    ("LayerState repr - speed.offset", test_layer_state_repr_offset),
-    ("LayerState repr - pos.offset", test_layer_state_repr_pos_offset),
-    ("LayerState repr - custom named", test_layer_state_repr_custom_named),
+STATE_TESTS = [
+    ("RigState (empty)", test_rig_state_empty),
+    ("BaseState (empty)", test_base_state_empty),
+    ("RigState (with animations)", test_rig_state_with_animations),
+    ("BaseState (with animations)", test_base_state_with_animations),
+    ("LayerState - base.speed", test_layer_state_base_speed),
+    ("LayerState - speed.offset", test_layer_state_offset),
+    ("LayerState - pos.offset", test_layer_state_pos_offset),
+    ("LayerState - custom named", test_layer_state_custom_named),
     ("Frame loop status", test_frame_loop_status),
 ]

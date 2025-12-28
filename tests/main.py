@@ -33,7 +33,7 @@ def toggle_test_ui(show: bool = None):
         from .behaviors import BEHAVIOR_TESTS
         from .actions import ACTIONS_TESTS
         from .special import SPECIAL_TESTS
-        from .state_repr import STATE_REPR_TESTS
+        from .state import STATE_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
@@ -45,7 +45,7 @@ def toggle_test_ui(show: bool = None):
             ("Behaviors", BEHAVIOR_TESTS),
             ("Special", SPECIAL_TESTS),
             ("Actions", ACTIONS_TESTS),
-            ("State Repr", STATE_REPR_TESTS)
+            ("State", STATE_TESTS)
         ]
 
         show = show if show is not None else not actions.user.ui_elements_get_trees()

@@ -97,7 +97,7 @@ class RigState:
             f"  direction = ({direction.x:.2f}, {direction.y:.2f})",
             f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
         ]
-        
+
         if cardinal:
             lines.extend([
                 f"  direction_cardinal = {cardinal.value or 'None'}",
@@ -108,7 +108,7 @@ class RigState:
                 f"  direction_cardinal = None",
                 f"  direction_cardinal.value = None, direction_cardinal.target = None",
             ])
-        
+
         lines.extend([
             f"  vector = ({vector.x:.2f}, {vector.y:.2f})",
             f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
@@ -1681,7 +1681,7 @@ class RigState:
                 lifecycle = builder.lifecycle
                 lines.append(f"  time_alive = {builder.time_alive:.2f}s")
                 lines.append(f"  operator = {builder.config.operator}")
-                
+
                 if lifecycle.over_ms:
                     lines.append(f"  over_ms = {lifecycle.over_ms}")
                 if lifecycle.hold_ms:
@@ -1881,6 +1881,7 @@ class RigState:
             speed = self.speed
             direction = self.direction
             vector = self.vector
+            cardinal = self.direction_cardinal
 
             lines = [
                 "BaseState:",
@@ -1891,6 +1892,8 @@ class RigState:
                 f"  speed.value = {speed.value:.1f}, speed.target = {speed.target}",
                 f"  direction = ({direction.value.x:.2f}, {direction.value.y:.2f})",
                 f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
+                f"  direction_cardinal = {cardinal.value or 'None'}",
+                f"  direction_cardinal.value = {cardinal.value or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
                 f"  vector = ({vector.value.x:.2f}, {vector.value.y:.2f})",
                 f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
             ]
@@ -1910,7 +1913,13 @@ class RigState:
 
         @property
         def direction(self) -> 'RigState.BasePropertyState':
-            return RigState.BasePropertyState(self._rig_state, "direction", self._rig_state._base_direction)
+            direction_cardinal(self) -> 'RigState.CardinalPropertyState':
+            """Base direction as cardinal/intercardinal string"""
+            cardinal = self._rig_state._get_cardinal_direction(self._rig_state._base_direction)
+            return RigState.CardinalPropertyState(self._rig_state, cardinal)
+
+        @property
+        def return RigState.BasePropertyState(self._rig_state, "direction", self._rig_state._base_direction)
 
         @property
         def vector(self) -> 'RigState.BasePropertyState':
