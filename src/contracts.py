@@ -181,6 +181,7 @@ VALID_RIG_PROPERTIES = [
 VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake', 'api',
     'stack', 'replace', 'queue', 'throttle', 'debounce',
+    'reverse', 'copy', 'emit',
 ]
 
 # Valid LayerState attributes (properties and methods)

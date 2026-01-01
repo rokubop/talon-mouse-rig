@@ -229,9 +229,12 @@ def test_emit_on_direction_layer_errors(on_success, on_failure):
         try:
             rig_check = actions.user.mouse_rig()
             rig_check.layer("turn").emit(500)
+            rig_check.stop()
             on_failure("Expected error for emit on direction layer but operation succeeded")
         except Exception as e:
             print(f"  Error message: {e}")
+            rig_final = actions.user.mouse_rig()
+            rig_final.stop()
             error_msg = str(e).lower()
             if "emit" in error_msg and "direction" in error_msg:
                 on_success()
@@ -250,9 +253,12 @@ def test_emit_on_position_layer_errors(on_success, on_failure):
         try:
             rig_check = actions.user.mouse_rig()
             rig_check.layer("drift").emit(500)
+            rig_check.stop()
             on_failure("Expected error for emit on position layer but operation succeeded")
         except Exception as e:
             print(f"  Error message: {e}")
+            rig_final = actions.user.mouse_rig()
+            rig_final.stop()
             error_msg = str(e).lower()
             if "emit" in error_msg and ("position" in error_msg or "pos" in error_msg):
                 on_success()
@@ -273,9 +279,12 @@ def test_emit_on_speed_override_errors(on_success, on_failure):
         try:
             rig_check = actions.user.mouse_rig()
             rig_check.layer("boost").emit(500)
+            rig_check.stop()
             on_failure("Expected error for emit on speed.override but operation succeeded")
         except Exception as e:
             print(f"  Error message: {e}")
+            rig_final = actions.user.mouse_rig()
+            rig_final.stop()
             error_msg = str(e).lower()
             if "emit" in error_msg and "override" in error_msg:
                 on_success()
@@ -342,9 +351,11 @@ def test_validate_nonexistent_layer_copy_errors(on_success, on_failure):
     rig = actions.user.mouse_rig()
     try:
         rig.layer("nonexistent").copy()
+        rig.stop()
         on_failure("Expected error for copy on non-existent layer but operation succeeded")
     except Exception as e:
         print(f"  Error message: {e}")
+        rig.stop()
         error_msg = str(e).lower()
         if "copy" in error_msg and ("does not exist" in error_msg or "not found" in error_msg):
             on_success()
@@ -356,8 +367,8 @@ def test_validate_nonexistent_layer_copy_errors(on_success, on_failure):
 # REVERSE TESTS
 # ============================================================================
 
-def test_reverse_preserves_layers(on_success, on_failure):
-    """Test: rig.reverse() flips direction but preserves layer animations"""
+def test_reverse_preserves_layers_instant(on_success, on_failure):
+    """Test: rig.reverse() instant - flips direction but preserves layer animations"""
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
@@ -389,8 +400,82 @@ def test_reverse_preserves_layers(on_success, on_failure):
             on_failure(f"Boost layer not found before reverse: {rig_check.state.layers}")
             return
 
-        # Reverse everything
+        # Reverse everything - instant
         rig_check.reverse()
+
+        def check_after_reverse():
+            rig_mid = actions.user.mouse_rig()
+            # Direction should be flipped (moving left now)
+            if rig_mid.state.direction.x >= 0:
+                on_failure(f"Direction after reverse should be left (negative x), got ({rig_mid.state.direction.x}, {rig_mid.state.direction.y})")
+                return
+
+            # Boost layer should still exist (preserved)
+            if "boost" not in rig_mid.state.layers:
+                on_failure(f"Boost layer lost after reverse: {rig_mid.state.layers}")
+                return
+
+            # Should still be moving (speed preserved, direction flipped)
+            if rig_mid.state.speed < 5:
+                on_failure(f"Speed after reverse is {rig_mid.state.speed}, expected > 5")
+                return
+
+            def check_animations_complete():
+                rig_final = actions.user.mouse_rig()
+                # Animations should have completed naturally
+                # Back to base speed 10, but moving left
+                if abs(rig_final.state.speed - 10) > 2:
+                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~10")
+                    return
+                if rig_final.state.direction.x >= 0:
+                    on_failure(f"Final direction should still be left, got ({rig_final.state.direction.x}, {rig_final.state.direction.y})")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("500ms", check_animations_complete)
+
+        cron.after("100ms", check_after_reverse)
+
+    cron.after("100ms", start_test)
+
+
+def test_reverse_preserves_layers_gradual(on_success, on_failure):
+    """Test: rig.reverse(ms) gradual - smooth turn preserving layer animations"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Base: speed 10 moving right
+        rig.speed.to(10)
+        rig.direction.to(1, 0)
+
+        # Layer with over/revert: boost that ramps up and down
+        rig.layer("boost").speed.offset.add(5).over(300).revert(300)
+
+        # Base speed add with over/revert
+        rig.speed.add(3).over(200).revert(200)
+
+        cron.after("150ms", check_before_reverse)
+
+    def check_before_reverse():
+        rig_check = actions.user.mouse_rig()
+        # Should be moving right with elevated speed (animations in progress)
+        initial_speed = rig_check.state.speed
+        initial_direction = rig_check.state.direction
+
+        if initial_direction.x <= 0:
+            on_failure(f"Direction before reverse should be right (positive x), got ({initial_direction.x}, {initial_direction.y})")
+            return
+
+        if "boost" not in rig_check.state.layers:
+            on_failure(f"Boost layer not found before reverse: {rig_check.state.layers}")
+            return
+
+        # Reverse everything - gradual transition over 800ms
+        rig_check.reverse(800)
 
         def check_after_reverse():
             rig_mid = actions.user.mouse_rig()
@@ -435,37 +520,42 @@ def test_reverse_instant(on_success, on_failure):
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
-    actions.sleep("100ms")
 
-    # Start moving right
-    rig.speed.to(3)
-    rig.direction.to(1, 0)
-    actions.sleep("200ms")
-    start_pos = ctrl.mouse_pos()
+    def start_movement():
+        # Start moving right
+        rig.speed.to(3)
+        rig.direction.to(1, 0)
 
-    # Instant reverse
-    rig.reverse()
+        cron.after("200ms", do_reverse)
 
-    def check_reversed():
-        rig_check = actions.user.mouse_rig()
-        end_pos = ctrl.mouse_pos()
+    def do_reverse():
+        start_pos = ctrl.mouse_pos()
 
-        # Direction should be reversed (left)
-        dir_x, dir_y = rig_check.state.direction.x, rig_check.state.direction.y
-        if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
-            on_failure(f"Direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
-            return
+        # Instant reverse
+        rig.reverse()
 
-        # Should be moving left
-        dx = end_pos[0] - start_pos[0]
-        if dx > -10:
-            on_failure(f"Expected leftward movement, got dx={dx}")
-            return
+        def check_reversed():
+            rig_check = actions.user.mouse_rig()
+            end_pos = ctrl.mouse_pos()
 
-        rig_check.stop()
-        on_success()
+            # Direction should be reversed (left)
+            dir_x, dir_y = rig_check.state.direction.x, rig_check.state.direction.y
+            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                on_failure(f"Direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                return
 
-    cron.after("400ms", check_reversed)
+            # Should be moving left
+            dx = end_pos[0] - start_pos[0]
+            if dx > -10:
+                on_failure(f"Expected leftward movement, got dx={dx}")
+                return
+
+            rig_check.stop()
+            on_success()
+
+        cron.after("400ms", check_reversed)
+
+    cron.after("100ms", start_movement)
 
 
 def test_reverse_gradual(on_success, on_failure):
@@ -473,57 +563,62 @@ def test_reverse_gradual(on_success, on_failure):
     rig = actions.user.mouse_rig()
     rig.pos.to(CENTER_X, CENTER_Y)
     rig.stop()
-    actions.sleep("100ms")
 
-    # Start moving right at speed 3
-    rig.speed.to(3)
-    rig.direction.to(1, 0)
-    actions.sleep("200ms")
-    start_pos = ctrl.mouse_pos()
+    def start_movement():
+        # Start moving right at speed 3
+        rig.speed.to(3)
+        rig.direction.to(1, 0)
 
-    # Gradual reverse - smooth transition through zero
-    # Direction lerps: (1,0) → (0,0) → (-1,0)
-    # Velocity: slows down → stops → speeds up in opposite direction
-    rig.reverse(1000)
+        cron.after("200ms", do_reverse)
 
-    def check_midpoint():
-        """At midpoint - should be near stop or moving slowly"""
-        mid_pos = ctrl.mouse_pos()
+    def do_reverse():
+        start_pos = ctrl.mouse_pos()
 
-        # Should have moved right initially, but be slowing down
-        dx = mid_pos[0] - start_pos[0]
-        if dx < 5:
-            on_failure(f"Expected some rightward movement before stopping, got dx={dx}")
-            return
+        # Gradual reverse - smooth transition through zero
+        # Direction lerps: (1,0) → (0,0) → (-1,0)
+        # Velocity: slows down → stops → speeds up in opposite direction
+        rig.reverse(1000)
 
-        def check_final():
-            """After reversal completes - should be moving left"""
-            rig_final = actions.user.mouse_rig()
-            end_pos = ctrl.mouse_pos()
+        def check_midpoint():
+            """At midpoint - should be near stop or moving slowly"""
+            mid_pos = ctrl.mouse_pos()
 
-            # Direction should be reversed (left)
-            dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
-            if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
-                on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+            # Should have moved right initially, but be slowing down
+            dx = mid_pos[0] - start_pos[0]
+            if dx < 5:
+                on_failure(f"Expected some rightward movement before stopping, got dx={dx}")
                 return
 
-            # Should be moving left now
-            dx_final = end_pos[0] - mid_pos[0]
-            if dx_final > -5:
-                on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
-                return
+            def check_final():
+                """After reversal completes - should be moving left"""
+                rig_final = actions.user.mouse_rig()
+                end_pos = ctrl.mouse_pos()
 
-            # Check final speed is back to original
-            if rig_final.state.speed < 2:
-                on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
-                return
+                # Direction should be reversed (left)
+                dir_x, dir_y = rig_final.state.direction.x, rig_final.state.direction.y
+                if abs(dir_x - (-1.0)) > 0.1 or abs(dir_y) > 0.1:
+                    on_failure(f"Final direction wrong: expected (-1, 0), got ({dir_x:.2f}, {dir_y:.2f})")
+                    return
 
-            rig_final.stop()
-            on_success()
+                # Should be moving left now
+                dx_final = end_pos[0] - mid_pos[0]
+                if dx_final > -5:
+                    on_failure(f"Expected leftward movement after reversal, got dx={dx_final}")
+                    return
 
-        cron.after("1200ms", check_final)
+                # Check final speed is back to original
+                if rig_final.state.speed < 2:
+                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~3")
+                    return
 
-    cron.after("500ms", check_midpoint)
+                rig_final.stop()
+                on_success()
+
+            cron.after("1200ms", check_final)
+
+        cron.after("500ms", check_midpoint)
+
+    cron.after("100ms", start_movement)
 
 
 # ============================================================================
@@ -540,7 +635,8 @@ SPECIAL_TESTS = [
     ("validate layer().speed.override.emit()", test_emit_on_speed_override_errors),
     ("layer().copy()", test_layer_copy_doubles),
     ("validate layer('nonexistent').copy()", test_validate_nonexistent_layer_copy_errors),
-    ("rig.reverse() preserves layers", test_reverse_preserves_layers),
+    ("rig.reverse() preserves layers - instant", test_reverse_preserves_layers_instant),
+    ("rig.reverse() preserves layers - gradual", test_reverse_preserves_layers_gradual),
     ("rig.reverse()", test_reverse_instant),
     ("rig.reverse(ms)", test_reverse_gradual),
 ]

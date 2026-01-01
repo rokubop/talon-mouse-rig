@@ -1913,16 +1913,19 @@ class RigState:
 
         @property
         def direction(self) -> 'RigState.BasePropertyState':
-            direction_cardinal(self) -> 'RigState.CardinalPropertyState':
+            return RigState.BasePropertyState(self._rig_state, "direction", self._rig_state._base_direction)
+
+        @property
+        def direction_cardinal(self) -> 'RigState.CardinalPropertyState':
             """Base direction as cardinal/intercardinal string"""
             cardinal = self._rig_state._get_cardinal_direction(self._rig_state._base_direction)
             return RigState.CardinalPropertyState(self._rig_state, cardinal)
 
         @property
-        def return RigState.BasePropertyState(self._rig_state, "direction", self._rig_state._base_direction)
-
-        @property
         def vector(self) -> 'RigState.BasePropertyState':
+            """Base velocity vector (speed * direction)"""
+            base_vector = self._rig_state._base_direction * self._rig_state._base_speed
+            return RigState.BasePropertyState(self._rig_state, "vector", base_vector)
             """Base velocity vector (speed * direction)"""
             base_vector = self._rig_state._base_direction * self._rig_state._base_speed
             return RigState.BasePropertyState(self._rig_state, "vector", base_vector)

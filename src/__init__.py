@@ -248,10 +248,26 @@ class Rig:
         """
         self._state.reset()
 
-    def reverse(self, ms: Optional[float] = None, easing: str = "linear") -> RigBuilder:
+    def reverse(self, ms: Optional[float] = None, easing: str = "linear"):
+        """Reverse direction of all movement (base + layers)
+
+        Args:
+            ms: Optional transition duration. If None, reverses instantly.
+                If provided, creates smooth transition through zero.
+            easing: Easing function for gradual reversal
+
+        Examples:
+            rig.reverse()         # Instant 180° turn
+            rig.reverse(1000)     # Smooth turn over 1 second
+        """
+        ms = validate_timing(ms, 'ms', method='reverse') if ms is not None else None
+
         if ms is not None:
+            # Gradual reverse: emit copies to bridge transition
             self._emit_reverse_copies(ms, easing)
-        return RigBuilder(self._state)
+
+        # Always reverse all directions (instant or gradual)
+        self._reverse_all_directions()
 
     def _emit_reverse_copies(self, ms: float, easing: str = "linear"):
         """Helper: Emit copies of all layers and base velocity for gradual reverse transitions
@@ -259,38 +275,61 @@ class Rig:
         Copies each layer twice to provide 2x contribution that fades out,
         which bridges from current velocity to reversed velocity smoothly.
         """
+        print(f"\n=== _emit_reverse_copies ===")
+        print(f"Active layers: {list(self._state._layer_groups.keys())}")
+        print(f"Base velocity: {self._state._base_direction} * {self._state._base_speed}")
+
         for layer_name in list(self._state._layer_groups.keys()):
             try:
                 # Intentional - 2 copies
+                print(f"Copying and emitting layer: {layer_name}")
                 self.layer(layer_name).copy().emit(ms, easing)
                 self.layer(layer_name).copy().emit(ms, easing)
-            except:
-                pass
+            except Exception as e:
+                print(f"Failed to copy/emit layer {layer_name}: {e}")
 
-        # Emit 2x base velocity as decaying offset
+        # Create 2x base velocity as decaying offset
         current_base_velocity = self._state._base_direction * self._state._base_speed
         offset_velocity = current_base_velocity * 2
 
-        layer_name = f"copy.base.{int(time.perf_counter() * 1000000)}"
-        self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).emit(ms, easing)
+        print(f"Creating base emit layer with offset: ({offset_velocity.x}, {offset_velocity.y})")
+
+        layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
+        self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).revert(ms, easing)
+
+        # Mark as emit layer so it won't be reversed
+        if layer_name in self._state._layer_groups:
+            self._state._layer_groups[layer_name].is_emit_layer = True
+            print(f"Marked {layer_name} as emit layer")
+
+        print(f"After creating layer, layers: {list(self._state._layer_groups.keys())}")
 
     def _reverse_all_directions(self):
         """Helper: Reverse base direction, all layer accumulated values, and active builders
 
         Only reverses user-named layers, not emit layers (which should fade in their original direction).
         """
+        print(f"\n=== _reverse_all_directions ===")
+        print(f"Base direction before: {self._state._base_direction}")
+
         self._state._base_direction = self._state._base_direction * -1
+
+        print(f"Base direction after: {self._state._base_direction}")
+        print(f"Reversing {len(self._state._layer_groups)} layer groups")
 
         for layer_group in self._state._layer_groups.values():
             # Skip emit/copy layers - they should fade in their original direction
             if layer_group.is_emit_layer:
+                print(f"  Skipping emit layer: {layer_group.layer_name}")
                 continue
 
             if layer_group.property in ("direction", "vector") and layer_group.accumulated_value is not None:
+                print(f"  Reversing {layer_group.layer_name} accumulated value: {layer_group.accumulated_value} -> {layer_group.accumulated_value * -1}")
                 layer_group.accumulated_value = layer_group.accumulated_value * -1
 
             for builder in layer_group.builders:
                 if builder.config.property in ("direction", "vector") and builder.target_value is not None:
+                    print(f"  Reversing {layer_group.layer_name} builder target: {builder.target_value} -> {builder.target_value * -1}")
                     builder.target_value = builder.target_value * -1
                     if builder.base_value is not None:
                         builder.base_value = builder.base_value * -1

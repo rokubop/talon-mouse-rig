@@ -276,6 +276,63 @@ class RigBuilder:
         self.config.then_callbacks.append((stage, callback))
         return self
 
+    def reverse(self, ms: Optional[float] = None, easing: str = "linear") -> 'RigBuilder':
+        """Reverse direction of this layer's movement
+
+        Args:
+            ms: Optional transition duration. If None, reverses instantly.
+                If provided, creates smooth transition through zero.
+            easing: Easing function for gradual reversal
+
+        Examples:
+            rig.layer("drift").reverse()         # Instant reverse
+            rig.layer("wind").reverse(500)       # Smooth reverse over 500ms
+        """
+        from .contracts import validate_timing
+
+        ms = validate_timing(ms, 'ms', method='reverse', mark_invalid=self._mark_invalid) if ms is not None else None
+
+        layer_name = self.config.layer_name
+
+        # Validate: can only reverse user-named layers
+        if not self.config.is_user_named:
+            self._mark_invalid()
+            raise ValueError(
+                f"reverse() can only be used on user-named layers.\n"
+                f"Use rig.layer('name') to create a named layer before reversing."
+            )
+
+        # Validate: layer must exist
+        if layer_name not in self.rig_state._layer_groups:
+            self._mark_invalid()
+            raise ValueError(
+                f"Cannot reverse layer '{layer_name}' - layer does not exist.\n"
+                f"Hint: Create the layer first before reversing it."
+            )
+
+        group = self.rig_state._layer_groups[layer_name]
+
+        if ms is not None:
+            # Gradual reverse: emit 2 copies to bridge transition
+            try:
+                self.copy().emit(ms, easing)
+                self.copy().emit(ms, easing)
+            except:
+                pass
+
+        # Reverse direction for this layer's accumulated values and builders
+        if group.property in ("direction", "vector") and group.accumulated_value is not None:
+            group.accumulated_value = group.accumulated_value * -1
+
+        for builder in group.builders:
+            if builder.config.property in ("direction", "vector") and builder.target_value is not None:
+                builder.target_value = builder.target_value * -1
+                if builder.base_value is not None:
+                    builder.base_value = builder.base_value * -1
+
+        self._mark_invalid()
+        return RigBuilder(self.rig_state, layer=layer_name)
+
     def copy(self, name: Optional[str] = None) -> 'RigBuilder':
         """Create a copy of the current layer
 
