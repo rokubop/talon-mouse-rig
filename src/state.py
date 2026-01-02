@@ -35,6 +35,8 @@ class RigState:
         self._absolute_base_pos: Optional[Vec2] = None  # Baked screen position (lazy init - only for pos.to)
         self._base_speed: float = 0.0
         self._base_direction: Vec2 = Vec2(1, 0)
+        self._base_scroll_speed: float = 0.0  # Scroll speed (magnitude)
+        self._base_scroll_direction: Vec2 = Vec2(0, 1)  # Scroll direction (default: down)
 
         # Layer groups (layer_name -> LayerGroup)
         # Each group contains multiple builders and manages their lifecycle
@@ -78,6 +80,9 @@ class RigState:
         speed = self.speed
         direction = self.direction
         vector = self.vector
+        scroll_speed = self.scroll_speed
+        scroll_direction = self.scroll_direction
+        scroll_vector = self.scroll_vector
         layers = self.layers
         try:
             cardinal = self.direction_cardinal
@@ -112,6 +117,9 @@ class RigState:
         lines.extend([
             f"  vector = ({vector.x:.2f}, {vector.y:.2f})",
             f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
+            f"  scroll_speed = {scroll_speed.value:.2f}",
+            f"  scroll_direction = ({scroll_direction.x:.2f}, {scroll_direction.y:.2f})",
+            f"  scroll_vector = ({scroll_vector.x:.2f}, {scroll_vector.y:.2f})",
             f"  layers = {layers}",
             f"  base = <BaseState>",
             f"  layer(name) = <LayerState | None>",
@@ -622,7 +630,7 @@ class RigState:
                 group.accumulated_value = direction * speed
             elif builder.config.property == "pos":
                 # Get current computed position
-                pos, _, _, _ = self._compute_current_state()
+                pos, _, _, _, _, _ = self._compute_current_state()
                 group.accumulated_value = pos
 
         # Track order
@@ -693,23 +701,49 @@ class RigState:
         current_value = group.get_current_value()
         prop = group.property
 
-        # Apply to base state
-        if prop == "pos":
-            if isinstance(current_value, tuple):
-                self._absolute_base_pos = Vec2.from_tuple(current_value)
-            else:
-                self._absolute_base_pos = current_value
-        elif prop == "speed":
-            self._base_speed = float(current_value)
-        elif prop == "direction":
-            if isinstance(current_value, tuple):
-                self._base_direction = Vec2.from_tuple(current_value).normalized()
-            else:
-                self._base_direction = current_value.normalized() if hasattr(current_value, 'normalized') else current_value
-        elif prop == "vector":
-            if isinstance(current_value, tuple):
-                self._base_direction = Vec2.from_tuple(current_value).normalized()
-                self._base_speed = Vec2.from_tuple(current_value).magnitude()
+        # Get mechanism from first builder in group
+        mechanism = getattr(group.builders[0].config, 'mechanism', 'move') if group.builders else 'move'
+
+        # Route to correct base state based on mechanism
+        if mechanism == "scroll":
+            # Apply to scroll base state
+            if prop == "speed":
+                self._base_scroll_speed = float(current_value)
+            elif prop == "direction":
+                print(f"DEBUG _bake_group_to_base: Baking scroll direction. current_value={current_value}, type={type(current_value)}")
+                if isinstance(current_value, tuple):
+                    self._base_scroll_direction = Vec2.from_tuple(current_value).normalized()
+                else:
+                    self._base_scroll_direction = current_value.normalized() if hasattr(current_value, 'normalized') else current_value
+                print(f"DEBUG _bake_group_to_base: After baking, _base_scroll_direction={self._base_scroll_direction}")
+            elif prop == "vector":
+                if isinstance(current_value, tuple):
+                    self._base_scroll_direction = Vec2.from_tuple(current_value).normalized()
+                    self._base_scroll_speed = Vec2.from_tuple(current_value).magnitude()
+                else:
+                    self._base_scroll_direction = current_value.normalized()
+                    self._base_scroll_speed = current_value.magnitude()
+        else:
+            # Apply to mouse movement base state (default mechanism)
+            if prop == "pos":
+                if isinstance(current_value, tuple):
+                    self._absolute_base_pos = Vec2.from_tuple(current_value)
+                else:
+                    self._absolute_base_pos = current_value
+            elif prop == "speed":
+                self._base_speed = float(current_value)
+            elif prop == "direction":
+                if isinstance(current_value, tuple):
+                    self._base_direction = Vec2.from_tuple(current_value).normalized()
+                else:
+                    self._base_direction = current_value.normalized() if hasattr(current_value, 'normalized') else current_value
+            elif prop == "vector":
+                if isinstance(current_value, tuple):
+                    self._base_direction = Vec2.from_tuple(current_value).normalized()
+                    self._base_speed = Vec2.from_tuple(current_value).magnitude()
+                else:
+                    self._base_direction = current_value.normalized()
+                    self._base_speed = current_value.magnitude()
             else:
                 self._base_direction = current_value.normalized()
                 self._base_speed = current_value.magnitude()
@@ -774,20 +808,35 @@ class RigState:
         # Get property and mode from builder config
         prop = builder.config.property
         mode = builder.config.mode
+        mechanism = getattr(builder.config, 'mechanism', 'move')
 
-        if prop == "vector":
-            # Decompose vector into speed and direction
-            self._base_speed, self._base_direction = mode_operations.apply_vector_mode(
-                mode, current_value, self._base_speed, self._base_direction
-            )
+        # Route to correct base state based on mechanism
+        if mechanism == "scroll":
+            # Bake to scroll base state
+            if prop == "vector":
+                self._base_scroll_speed, self._base_scroll_direction = mode_operations.apply_vector_mode(
+                    mode, current_value, self._base_scroll_speed, self._base_scroll_direction
+                )
+            elif prop == "speed":
+                self._base_scroll_speed = mode_operations.apply_scalar_mode(mode, current_value, self._base_scroll_speed)
+            elif prop == "direction":
+                self._base_scroll_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_scroll_direction)
+        else:
+            # Bake to mouse movement base state (default mechanism)
+            if prop == "vector":
+                # Decompose vector into speed and direction
+                self._base_speed, self._base_direction = mode_operations.apply_vector_mode(
+                    mode, current_value, self._base_speed, self._base_direction
+                )
 
-        elif prop == "speed":
-            self._base_speed = mode_operations.apply_scalar_mode(mode, current_value, self._base_speed)
+            elif prop == "speed":
+                self._base_speed = mode_operations.apply_scalar_mode(mode, current_value, self._base_speed)
 
-        elif prop == "direction":
-            self._base_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_direction)
+            elif prop == "direction":
+                self._base_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_direction)
 
-        elif prop == "pos":
+        # Position is mechanism-agnostic (only used for mouse currently)
+        if prop == "pos":
             if mode == "offset":
                 # Offset mode: current_value is an offset vector
                 # For relative movement (pos.by), we don't track absolute position
@@ -881,7 +930,7 @@ class RigState:
                 if l in self._layer_orders:
                     del self._layer_orders[l]
 
-    def _compute_current_state(self) -> tuple[Vec2, float, Vec2, bool]:
+    def _compute_current_state(self) -> tuple[Vec2, float, Vec2, float, Vec2, bool]:
         """Compute current state by applying all active layers to base.
 
         Computation order:
@@ -890,13 +939,15 @@ class RigState:
         3. Process user layers (in order)
 
         Returns:
-            (position, speed, direction, pos_is_override)
+            (position, speed, direction, scroll_speed, scroll_direction, pos_is_override)
             pos_is_override is True if any position builder used override mode
         """
         # Start with base
         pos = Vec2(self._absolute_base_pos.x, self._absolute_base_pos.y) if self._absolute_base_pos else Vec2(0, 0)
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
+        scroll_speed = self._base_scroll_speed
+        scroll_direction = Vec2(self._base_scroll_direction.x, self._base_scroll_direction.y)
         pos_is_override = False
 
         # Separate groups by layer type
@@ -917,30 +968,33 @@ class RigState:
 
         # Process in layer order: base → user layers
         for group in base_groups:
-            pos, speed, direction, override = self._apply_group(group, pos, speed, direction)
+            pos, speed, direction, scroll_speed, scroll_direction, override = self._apply_group(group, pos, speed, direction, scroll_speed, scroll_direction)
             pos_is_override = pos_is_override or override
 
         for group in user_groups:
-            pos, speed, direction, override = self._apply_group(group, pos, speed, direction)
+            pos, speed, direction, scroll_speed, scroll_direction, override = self._apply_group(group, pos, speed, direction, scroll_speed, scroll_direction)
             pos_is_override = pos_is_override or override
 
-        return (pos, speed, direction, pos_is_override)
+        return (pos, speed, direction, scroll_speed, scroll_direction, pos_is_override)
 
     def _apply_group(
         self,
         group: 'LayerGroup',
         pos: Vec2,
         speed: float,
-        direction: Vec2
-    ) -> tuple[Vec2, float, Vec2, bool]:
+        direction: Vec2,
+        scroll_speed: float,
+        scroll_direction: Vec2
+    ) -> tuple[Vec2, float, Vec2, float, Vec2, bool]:
         """Apply a layer group's aggregated value
 
         Args:
             group: The layer group to apply
             pos, speed, direction: Current accumulated state values
+            scroll_speed, scroll_direction: Current scroll state values
 
         Returns:
-            Updated (pos, speed, direction, pos_is_override)
+            Updated (pos, speed, direction, scroll_speed, scroll_direction, pos_is_override)
             pos_is_override is True if this layer used override mode for position
 
         Mode behavior:
@@ -953,26 +1007,38 @@ class RigState:
         current_value = group.get_current_value()
         pos_is_override = False
 
-        if prop == "speed":
-            speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
+        # Check mechanism first to route properly
+        mechanism = getattr(group.builders[0].config, 'mechanism', 'move') if group.builders else 'move'
 
-        elif prop == "direction":
-            direction = mode_operations.apply_direction_mode(mode, current_value, direction)
+        if mechanism == "scroll":
+            # Apply to scroll state only
+            if prop == "speed":
+                scroll_speed = mode_operations.apply_scalar_mode(mode, current_value, scroll_speed)
+            elif prop == "direction":
+                scroll_direction = mode_operations.apply_direction_mode(mode, current_value, scroll_direction)
+            elif prop == "vector":
+                scroll_speed, scroll_direction = mode_operations.apply_vector_mode(mode, current_value, scroll_speed, scroll_direction)
+        else:
+            # Apply to mouse movement state (default 'move' mechanism)
+            if prop == "speed":
+                speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
+            elif prop == "direction":
+                direction = mode_operations.apply_direction_mode(mode, current_value, direction)
+            elif prop == "vector":
+                speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
 
-        elif prop == "vector":
-            speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
-
-        elif prop == "pos":
+        # Position is mechanism-agnostic (only used for mouse currently)
+        if prop == "pos":
             pos = mode_operations.apply_position_mode(mode, current_value, pos)
             pos_is_override = (mode == "override")
 
-        return pos, speed, direction, pos_is_override
+        return pos, speed, direction, scroll_speed, scroll_direction, pos_is_override
 
     def _compute_velocity(self) -> tuple[float, Vec2]:
         """Compute current velocity from speed and direction builders.
 
         Returns:
-            (speed, direction) tuple
+            (speed, direction) tuple for mouse movement mechanism only
         """
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
@@ -983,7 +1049,14 @@ class RigState:
         emit_groups = []
 
         for layer_name, group in self._layer_groups.items():
+            # Only process velocity for 'move' mechanism (mouse movement)
             if group.property in ("speed", "direction", "vector"):
+                # Check mechanism - default to 'move' if not set
+                if group.builders:
+                    mechanism = getattr(group.builders[0].config, 'mechanism', 'move')
+                    if mechanism != 'move':
+                        continue  # Skip scroll and other mechanisms
+
                 if group.is_emit_layer:
                     # Emit layers are pure additive offsets processed separately
                     emit_groups.append(group)
@@ -1190,6 +1263,43 @@ class RigState:
                     mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
                 self._expected_mouse_pos = ctrl.mouse_pos()
 
+    def _emit_scroll(self):
+        """Emit scroll events based on current scroll velocity (speed * direction)"""
+        from talon import actions
+
+        scroll_speed = self.scroll_speed.value
+        scroll_direction = self.scroll_direction.value
+
+        # Skip if no scroll speed
+        if abs(scroll_speed) < 0.01:
+            return
+
+        # Compute scroll velocity vector
+        scroll_velocity = scroll_direction * scroll_speed
+
+        # Find by_lines setting from first active scroll builder
+        by_lines = True  # Default
+        for group in self._layer_groups.values():
+            if group.builders:
+                mechanism = getattr(group.builders[0].config, 'mechanism', 'move')
+                if mechanism == "scroll" and group.property in ("speed", "direction", "vector"):
+                    # Use by_lines from first active scroll builder
+                    by_lines = group.builders[0].config.by_lines
+                    break
+
+        # Use floats directly - no rounding needed for scroll
+        x = scroll_velocity.x
+        y = scroll_velocity.y
+
+        # Only emit if we have non-zero scroll values
+        if abs(x) > 0.01 or abs(y) > 0.01:
+            if abs(x) > 0.01 and abs(y) > 0.01:
+                actions.mouse_scroll(x=x, y=y, by_lines=by_lines)
+            elif abs(y) > 0.01:
+                actions.mouse_scroll(y, by_lines=by_lines)
+            elif abs(x) > 0.01:
+                actions.mouse_scroll(x=x, y=0, by_lines=by_lines)
+
     def _update_relative_position_tracking(self, relative_position_updates: list, completed_layers: set):
         """Update tracking for relative position builders after removal
 
@@ -1321,6 +1431,9 @@ class RigState:
 
         # 3. Emit mouse movement (absolute or relative mode)
         self._emit_mouse_movement(has_absolute_position, absolute_target, frame_delta)
+
+        # 3.1. Emit scroll events
+        self._emit_scroll()
 
         # 3.5. Update committed_value for pos.offset groups with replace_target
         for group in self._layer_groups.values():
@@ -1510,8 +1623,12 @@ class RigState:
 
     def _has_movement(self) -> bool:
         """Check if there's any movement happening (base speed or velocity layers)"""
-        # Fast path: base speed is non-zero
+        # Fast path: mouse movement speed is non-zero
         if self._base_speed != 0:
+            return True
+
+        # Fast path: scroll speed is non-zero
+        if self._base_scroll_speed != 0:
             return True
 
         # Check if any velocity-affecting groups exist
@@ -2167,6 +2284,32 @@ class RigState:
         direction = self._compute_current_state()[2]
         return RigState.SmartPropertyState(self, "vector", direction * speed)
 
+    @property
+    def scroll_speed(self) -> 'RigState.SmartPropertyState':
+        """Current computed scroll speed (with .offset, .override, .scale layer access)"""
+        scroll_speed_val = self._compute_current_state()[3]
+        return RigState.SmartPropertyState(self, "speed", scroll_speed_val)
+
+    @property
+    def scroll_direction(self) -> 'RigState.SmartPropertyState':
+        """Current computed scroll direction (with .offset, .override, .scale layer access)"""
+        scroll_direction_vec = self._compute_current_state()[4]
+        return RigState.SmartPropertyState(self, "direction", scroll_direction_vec)
+
+    @property
+    def scroll_vector(self) -> 'RigState.SmartPropertyState':
+        """Current computed scroll vector (with .offset, .override, .scale layer access)"""
+        scroll_speed = self._compute_current_state()[3]
+        scroll_direction = self._compute_current_state()[4]
+        return RigState.SmartPropertyState(self, "vector", scroll_direction * scroll_speed)
+
+    @property
+    def scroll(self) -> 'RigState.SmartPropertyState':
+        """Alias for scroll_vector (with .offset, .override, .scale layer access)"""
+        scroll_speed = self._compute_current_state()[3]
+        scroll_direction = self._compute_current_state()[4]
+        return RigState.SmartPropertyState(self, "vector", scroll_direction * scroll_speed)
+
     def add_stop_callback(self, callback):
         """Add a callback to fire when the frame loop stops"""
         self._stop_callbacks.append(callback)
@@ -2277,6 +2420,8 @@ class RigState:
         # Reset base state to defaults
         self._base_speed = 0.0
         self._base_direction = Vec2(1, 0)
+        self._base_scroll_speed = 0.0
+        self._base_scroll_direction = Vec2(0, 1)
         self._absolute_base_pos = None
         self._absolute_current_pos = None
 

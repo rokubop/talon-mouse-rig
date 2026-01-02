@@ -10,6 +10,7 @@ The rig gives you full control over these properties:
 - **Speed** - Movement magnitude in pixels per frame
 - **Vector** - Direction × Speed (velocity)
 - **Position** - Absolute or relative positioning with interpolation
+- **Scroll** - Continuous scrolling with independent speed, direction, and vector control (just like mouse movement)
 
 ## Talon Actions
 
@@ -118,6 +119,44 @@ rig.direction.by(90).over(500)  # rotate
 rig.direction.by(90).over(rate=45)  # rotate at rate
 ```
 
+### Scroll
+
+Scroll works just like mouse movement with speed, direction, and vector control:
+
+```python
+# Set scroll speed and direction
+rig.scroll.speed.to(5)
+rig.scroll.direction.to(0, 1)  # scroll down
+rig.scroll.direction.to(0, -1)  # scroll up
+rig.scroll.direction.to(1, 0)  # scroll right
+
+# Set scroll vector (combines speed and direction)
+rig.scroll.vector.to(0, 5)  # scroll down at speed 5
+rig.scroll.vector.to(3, 5)  # diagonal scroll
+
+# Smooth transitions
+rig.scroll.speed.to(10).over(1000)
+rig.scroll.direction.by(90).over(500)  # rotate scroll direction
+
+# Add to current values
+rig.scroll.speed.add(5)
+rig.scroll.vector.add(0, 2)
+
+# Offset layers for temporary boosts
+rig.scroll.speed.offset.add(10).over(1000)
+rig.scroll.speed.offset.revert()
+rig.layer("boost").scroll.speed.offset.add(10).over(1000)
+
+# Control scroll units (default is by_lines)
+rig.scroll.speed.by_lines.to(5)
+rig.scroll.speed.by_pixels.to(100)
+
+# Stop scrolling
+rig.scroll.speed.to(0)
+rig.stop()  # stops all movement including scroll
+rig.stop(1000)  # smooth stop
+```
+
 ### Layers
 
 Layers provide isolated namespaces for temporary state modifications. They're composable, revertible, and calculated after base values, allowing you to build complex, layered behaviors.
@@ -171,6 +210,9 @@ rig.speed.add(10).over(300) \
 - `pos` - Position (x, y coordinates)
 - `speed` - Movement speed magnitude
 - `direction` - Direction vector or angle
+- `scroll.speed` - Scroll speed magnitude
+- `scroll.direction` - Scroll direction vector
+- `scroll.vector` - Scroll velocity (speed × direction)
 
 #### Operators
 

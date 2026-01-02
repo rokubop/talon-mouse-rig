@@ -258,11 +258,18 @@ class LayerGroup:
                 return self.accumulated_value  # Should be 0
             # For base layers, return the LAST builder's value (most recent operation)
             # Multiple builders shouldn't normally exist, but can occur with instant operations
+            if self.property == "direction":
+                mechanism = getattr(self.builders[0].config, 'mechanism', 'move') if self.builders else 'move'
+                print(f"DEBUG get_aggregated_value: Base layer direction, mechanism={mechanism}, {len(self.builders)} builders")
             last_value = self.accumulated_value
             for builder in self.builders:
                 builder_value = builder.get_interpolated_value()
                 if builder_value is not None:
                     last_value = builder_value
+            if self.property == "direction":
+                mechanism = getattr(self.builders[-1].config, 'mechanism', 'move') if self.builders else 'move'
+                last_builder = self.builders[-1]
+                print(f"DEBUG get_aggregated_value: mechanism={mechanism}, last_value={last_value}, lifecycle.phase={last_builder.lifecycle.phase}, over_ms={last_builder.lifecycle.over_ms}")
             return last_value
 
         # Modifier layers: start with accumulated value and apply modes

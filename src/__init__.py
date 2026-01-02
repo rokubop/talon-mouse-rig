@@ -162,6 +162,11 @@ class Rig:
         """Vector property accessor (base layer)"""
         return RigBuilder(self._state).vector
 
+    @property
+    def scroll(self):
+        """Scroll property accessor (base layer)"""
+        return RigBuilder(self._state).scroll
+
     # ========================================================================
     # LAYER METHOD
     # ========================================================================

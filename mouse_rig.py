@@ -19,6 +19,12 @@ class Actions:
         rig.speed.to(5)
         rig.speed.add(2)
         rig.pos.to(500, 300).over(200, easing="ease_in_out")
+        rig.scroll.speed.to(5)
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.vector.to(0, 10).over(1000)
+        rig.scroll.speed.offset.add(5).over(500)
+        rig.scroll.speed.by_lines  # default
+        rig.scroll.speed.by_pixels
         rig.layer("my_layer").speed.offset.by(10).over(500)
         rig.layer("my_layer").speed.override.to(10).over(500)
         rig.layer("my_layer").revert()

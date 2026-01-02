@@ -14,7 +14,7 @@ VALID_OPERATORS = {
     'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'pos': ['to', 'add', 'by', 'sub', 'bake'],
-    'vector': ['to', 'add', 'by', 'sub', 'bake']
+    'vector': ['to', 'add', 'by', 'sub', 'bake'],
 }
 
 VALID_MODES = ['offset', 'override', 'scale']
@@ -39,51 +39,11 @@ VALID_MODES = ['offset', 'override', 'scale']
 #         - User provides explicit name with mode
 #         - User has full lifecycle control
 #
+# Layer type is determined by BuilderConfig.layer_type attribute, not by parsing
+# the layer name string. Use config.is_base_layer() and config.is_modifier_layer()
+# methods instead of parsing names.
+#
 RESERVED_LAYERS = {}
-
-def is_base_layer(layer_name: str) -> bool:
-    """Check if layer is a base layer (transient, auto-bakes)
-
-    Base layers are auto-generated for operations without modes.
-    Pattern: 'base.{property}' (e.g., 'base.speed', 'base.direction')
-    """
-    return layer_name is not None and layer_name.startswith("base.")
-
-def is_modifier_layer(layer_name: str) -> bool:
-    """Check if layer is a modifier layer (uses mode, persistent)
-
-    Modifier layers use modes (.offset/.override/.scale) and can be
-    either auto-named or user-named.
-    """
-    if layer_name is None:
-        return False
-    # Auto-named modifier: property.mode pattern
-    parts = layer_name.split(".")
-    if len(parts) == 2:
-        prop, mode = parts
-        if prop in ["pos", "speed", "direction", "vector"] and mode in ["offset", "override", "scale"]:
-            return True
-    # User-named modifiers are detected by having a mode in config
-    # (checked elsewhere via BuilderConfig.mode)
-    return False
-
-def is_auto_named_modifier(layer_name: str) -> bool:
-    """Check if layer is an auto-named modifier (e.g., 'speed.offset')
-
-    Auto-named modifiers are generated when using modes without explicit names.
-    They persist until explicitly removed.
-    """
-    if layer_name is None:
-        return False
-    parts = layer_name.split(".")
-    if len(parts) == 2:
-        prop, mode = parts
-        return prop in ["pos", "speed", "direction", "vector"] and mode in ["offset", "override", "scale"]
-    return False
-
-def is_implicit_layer(layer_name: str) -> bool:
-    """Alias for is_auto_named_modifier() for backwards compatibility"""
-    return is_auto_named_modifier(layer_name)
 
 VALID_EASINGS = [
     'linear',
@@ -174,6 +134,7 @@ VALID_RIG_METHODS = [
 
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction', 'vector',
+    'scroll',
     'state', 'base',
     'stack', 'replace', 'queue', 'throttle', 'debounce',
 ]
@@ -406,6 +367,10 @@ class LayerType:
 class BuilderConfig:
     """Configuration collected by RigBuilder during fluent API calls"""
     def __init__(self):
+        # Device and mechanism
+        self.device: str = "mouse"  # 'mouse', 'gamepad' (future)
+        self.mechanism: str = "move"  # 'move', 'scroll', 'left_stick' (future), etc.
+
         # Property and operator
         self.property: Optional[str] = None  # pos, speed, direction
         self.operator: Optional[str] = None  # to, by, add, sub, mul, div
@@ -416,6 +381,9 @@ class BuilderConfig:
         # Movement type (absolute vs relative positioning)
         self.movement_type: str = "relative"  # 'relative' or 'absolute'
         self._movement_type_explicit: bool = False  # True if user explicitly set via .absolute or .relative
+
+        # Scroll options
+        self.by_lines: bool = True  # For scroll operations - scroll by lines (True) or pixels (False)
 
         # Identity
         self.layer_name: Optional[str] = None  # Layer name (base.{property}, {property}.{mode}, or user name)

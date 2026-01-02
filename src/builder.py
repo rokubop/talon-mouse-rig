@@ -87,6 +87,54 @@ class ModeProxy:
         self._set_implicit_layer("vector")
         return PropertyBuilder(self.builder, "vector")
 
+    @property
+    def scroll(self) -> 'ScrollPropertyProxy':
+        """Access scroll subproperties with mode"""
+        return ScrollPropertyProxy(self.builder, self.mode)
+
+
+class ScrollPropertyProxy:
+    """Proxy for scroll mechanism - sets mechanism then returns normal property builders"""
+
+    def __init__(self, builder: 'RigBuilder', mode: str = None):
+        self.builder = builder
+        self.mode = mode
+        # Set mechanism to scroll
+        self.builder.config.mechanism = "scroll"
+
+    @property
+    def speed(self) -> 'PropertyBuilder':
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "speed")
+
+    @property
+    def direction(self) -> 'PropertyBuilder':
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "direction")
+
+    @property
+    def vector(self) -> 'PropertyBuilder':
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "vector")
+
+    @property
+    def offset(self) -> 'ScrollPropertyProxy':
+        self.mode = "offset"
+        return self
+
+    @property
+    def override(self) -> 'ScrollPropertyProxy':
+        self.mode = "override"
+        return self
+
+    @property
+    def scale(self) -> 'ScrollPropertyProxy':
+        self.mode = "scale"
+        return self
+
 
 class RigBuilder:
     """Universal builder for all mouse rig operations
@@ -163,6 +211,10 @@ class RigBuilder:
     def vector(self) -> 'PropertyBuilder':
         return PropertyBuilder(self, "vector")
 
+    @property
+    def scroll(self) -> 'ScrollPropertyProxy':
+        return ScrollPropertyProxy(self)
+
     def __getattr__(self, name: str):
         """Handle unknown attributes with helpful error messages"""
         if self.config.operator is not None and any(name in ops for ops in VALID_OPERATORS.values()):
@@ -173,7 +225,7 @@ class RigBuilder:
                 f"Either use one operator or use separate commands."
             )
 
-        valid_properties = ['pos', 'speed', 'direction', 'vector']
+        valid_properties = ['pos', 'speed', 'direction', 'vector', 'scroll']
         all_valid = valid_properties + VALID_BUILDER_METHODS
 
         suggestion = find_closest_match(name, all_valid)
@@ -706,15 +758,27 @@ class RigBuilder:
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
-        if self.config.property == "speed":
-            return self.rig_state.base.speed
-        elif self.config.property == "direction":
-            return self.rig_state.base.direction
-        elif self.config.property == "pos":
-            return self.rig_state.base.pos
-        elif self.config.property == "vector":
-            # Return velocity vector (direction * speed)
-            return self.rig_state.base.direction * self.rig_state.base.speed
+        mechanism = getattr(self.config, 'mechanism', 'move')
+
+        if mechanism == "scroll":
+            # Scroll mechanism - use scroll-specific base state
+            if self.config.property == "speed":
+                return self.rig_state._base_scroll_speed
+            elif self.config.property == "direction":
+                return self.rig_state._base_scroll_direction
+            elif self.config.property == "vector":
+                return self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
+        else:
+            # Default mouse movement mechanism
+            if self.config.property == "speed":
+                return self.rig_state.base.speed
+            elif self.config.property == "direction":
+                return self.rig_state.base.direction
+            elif self.config.property == "pos":
+                return self.rig_state.base.pos
+            elif self.config.property == "vector":
+                # Return velocity vector (direction * speed)
+                return self.rig_state.base.direction * self.rig_state.base.speed
         return 0
 
     def _calculate_target_value(self, current: Any) -> Any:
@@ -776,13 +840,24 @@ class PropertyBuilder:
 
         # Set base layer name if this is a base operation (layer is still pending)
         if self.rig_builder.config.layer_name == "__base_pending__":
-            self.rig_builder.config.layer_name = f"base.{property_name}"
+            # Add mechanism prefix if not default 'move'
+            mechanism = self.rig_builder.config.mechanism
+            if mechanism == "move":
+                self.rig_builder.config.layer_name = f"base.{property_name}"
+            else:
+                # For scroll and other mechanisms, prefix with mechanism name
+                self.rig_builder.config.layer_name = f"{mechanism}:base.{property_name}"
             self.rig_builder.config.layer_type = LayerType.BASE
 
     def _set_implicit_layer_if_needed(self, mode: str) -> None:
         """Convert from base layer to auto-named modifier if mode is added without explicit layer name"""
         if not self.rig_builder.config.is_user_named:
-            implicit_name = f"{self.property_name}.{mode}"
+            # Add mechanism prefix for non-default mechanisms
+            mechanism = self.rig_builder.config.mechanism
+            if mechanism == "move":
+                implicit_name = f"{self.property_name}.{mode}"
+            else:
+                implicit_name = f"{mechanism}:{self.property_name}.{mode}"
             self.rig_builder.config.layer_name = implicit_name
             self.rig_builder.config.layer_type = LayerType.AUTO_NAMED_MODIFIER
         else:
@@ -822,6 +897,18 @@ class PropertyBuilder:
         """Explicitly use relative positioning (deltas) for this operation."""
         self.rig_builder.config.movement_type = "relative"
         self.rig_builder.config._movement_type_explicit = True
+        return self
+
+    @property
+    def by_lines(self) -> 'PropertyBuilder':
+        """For scroll operations - scroll by lines (default for scroll)"""
+        self.rig_builder.config.by_lines = True
+        return self
+
+    @property
+    def by_pixels(self) -> 'PropertyBuilder':
+        """For scroll operations - scroll by pixels"""
+        self.rig_builder.config.by_lines = False
         return self
 
     def api(self, api: str) -> 'PropertyBuilder':
@@ -1124,6 +1211,10 @@ class ActiveBuilder:
         # For base layers, always use override mode to store absolute result values
         # Modes (offset/scale) are only meaningful for modifier layers
         if config.mode is None and is_base_layer:
+            print(f"DEBUG: Setting mode to override for base layer. layer={config.layer_name}, property={config.property}, mechanism={config.mechanism}")
+            config.mode = "override"
+        else:
+            print(f"DEBUG: NOT setting mode. mode={config.mode}, is_base_layer={is_base_layer}, layer={config.layer_name}, property={config.property}, mechanism={config.mechanism}")
             config.mode = "override"
 
         self.group_lifecycle: Optional[Lifecycle] = None
@@ -1154,10 +1245,9 @@ class ActiveBuilder:
                     # Shouldn't happen (pos.to is always absolute), but handle gracefully
                     self.base_value = Vec2(0, 0)
             else:
-                # speed.to(), direction.to() - use computed state (relative)
-                prop_state = getattr(rig_state, config.property)
-                # SmartPropertyState wrapper - extract the actual value
-                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
+                # speed.to(), direction.to() - use base state (not computed)
+                # This ensures animations start from the actual base state
+                self.base_value = self._get_base_value()
         elif config.operator in ("by", "add"):
             # For relative operations
             if config.property == "pos" and config.movement_type == "relative":
@@ -1165,18 +1255,16 @@ class ActiveBuilder:
                 # Queue accumulated state is tracked separately by the queue system
                 self.base_value = Vec2(0, 0)
             elif is_base_layer:
-                # For base layer operations, use computed value (includes pending builders)
-                prop_state = getattr(rig_state, config.property)
-                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
+                # For base layer operations, use base state (not computed)
+                self.base_value = self._get_base_value()
             else:
                 # For modifier layers: speed.by(), direction.by() - use base state
                 self.base_value = self._get_base_value()
         else:
             # For all other operations (sub, mul, div)
             if is_base_layer:
-                # For base layer operations, use computed value (includes pending builders)
-                prop_state = getattr(rig_state, config.property)
-                self.base_value = prop_state.value if hasattr(prop_state, 'value') else prop_state
+                # For base layer operations, use base state (not computed)
+                self.base_value = self._get_base_value()
             else:
                 # For modifier layers, use base state
                 self.base_value = self._get_base_value()
@@ -1420,7 +1508,10 @@ class ActiveBuilder:
                 )
             else:  # override
                 # Override: animate from base to absolute target
-                return PropertyAnimator.animate_direction(
+                mechanism = getattr(self.config, 'mechanism', 'move')
+                if mechanism == "scroll":
+                    print(f"DEBUG _get_own_value: scroll direction override, base_value={self.base_value}, target_value={self.target_value}, phase={phase}, progress={progress}")
+                result = PropertyAnimator.animate_direction(
                     self.base_value,
                     self.target_value,
                     phase,
@@ -1428,6 +1519,9 @@ class ActiveBuilder:
                     self.lifecycle.has_reverted(),
                     interpolation
                 )
+                if mechanism == "scroll":
+                    print(f"DEBUG _get_own_value: scroll direction result={result}")
+                return result
         elif self.config.property == "pos":
             # For position, neutral depends on mode
             if mode == "scale":
