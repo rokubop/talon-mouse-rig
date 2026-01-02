@@ -304,6 +304,9 @@ def stop_all_tests():
     actions.user.ui_elements_set_state("run_all_Validation", False)
     actions.user.ui_elements_set_state("run_all_Contracts", False)
     actions.user.ui_elements_set_state("run_all_Behaviors", False)
+    actions.user.ui_elements_set_state("run_all_Special", False)
+    actions.user.ui_elements_set_state("run_all_Actions", False)
+    actions.user.ui_elements_set_state("run_all_State", False)
     actions.user.ui_elements_set_state("run_all_tests_global", False)
     actions.user.ui_elements_set_state("current_test", None)
 

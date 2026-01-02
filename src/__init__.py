@@ -280,9 +280,7 @@ class Rig:
         - Can't be copied/emitted like offset layers
         - Instead, calculate their velocity contribution and emit as vector offset
         """
-        print(f"\n=== _emit_reverse_copies ===")
-        print(f"Active layers: {list(self._state._layer_groups.keys())}")
-        print(f"Base velocity: {self._state._base_direction} * {self._state._base_speed}")
+        emitted_base_layer = False
 
         for layer_name in list(self._state._layer_groups.keys()):
             group = self._state._layer_groups[layer_name]
@@ -292,17 +290,17 @@ class Rig:
                 # Base layers with add/by operators are semantically additive
                 # (even though stored as override), so we can emit their contribution
                 if group.builders and group.builders[0].config.operator in ("by", "add"):
-                    # Calculate the additive contribution (target - base)
-                    builder = group.builders[0]
-                    base_value = builder.base_value if hasattr(builder, 'base_value') else self._state._base_speed
-                    contribution = builder.config.value  # The amount being added
+                    # Get the CURRENT animated contribution from the layer
+                    current_value = group.get_current_value()
+                    base_value = self._state._base_speed if layer_name == "base.speed" else 0
+
+                    # Calculate current contribution (how much it's adding right now)
+                    contribution = current_value - base_value
 
                     # Emit as vector offset (2x copies like other layers)
                     try:
                         current_direction = self._state._base_direction
                         offset_vec = current_direction * contribution
-
-                        print(f"Emitting base layer {layer_name} contribution: {contribution} as vector offset")
 
                         # Create 2 emit layers with the contribution
                         for i in range(2):
@@ -310,66 +308,51 @@ class Rig:
                             self.layer(emit_name).vector.offset.to(offset_vec.x, offset_vec.y).revert(ms, easing)
                             if emit_name in self._state._layer_groups:
                                 self._state._layer_groups[emit_name].is_emit_layer = True
+
+                        emitted_base_layer = True
                     except Exception as e:
-                        print(f"Failed to emit base layer {layer_name} contribution: {e}")
-                else:
-                    print(f"Skipping base layer {layer_name} (not additive operator)")
+                        pass
                 continue
 
             try:
                 # Intentional - 2 copies for non-base layers
-                print(f"Copying and emitting layer: {layer_name}")
                 self.layer(layer_name).copy().emit(ms, easing)
                 self.layer(layer_name).copy().emit(ms, easing)
             except Exception as e:
-                print(f"Failed to copy/emit layer {layer_name}: {e}")
+                pass
 
         # Create 2x base velocity as decaying offset
-        current_base_velocity = self._state._base_direction * self._state._base_speed
-        offset_velocity = current_base_velocity * 2
+        # Skip if we already emitted base layer contributions (to avoid double-counting)
+        if not emitted_base_layer:
+            current_base_velocity = self._state._base_direction * self._state._base_speed
+            offset_velocity = current_base_velocity * 2
 
-        # Only create base emit layer if there's actual velocity to emit
-        if abs(offset_velocity.x) > 0.001 or abs(offset_velocity.y) > 0.001:
-            print(f"Creating base emit layer with offset: ({offset_velocity.x}, {offset_velocity.y})")
+            # Only create base emit layer if there's actual velocity to emit
+            if abs(offset_velocity.x) > 0.001 or abs(offset_velocity.y) > 0.001:
+                layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
+                self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).revert(ms, easing)
 
-            layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
-            self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).revert(ms, easing)
-
-            # Mark as emit layer so it won't be reversed
-            if layer_name in self._state._layer_groups:
-                self._state._layer_groups[layer_name].is_emit_layer = True
-                print(f"Marked {layer_name} as emit layer")
-        else:
-            print(f"Skipping base emit layer - base velocity is zero")
-
-        print(f"After creating layer, layers: {list(self._state._layer_groups.keys())}")
+                # Mark as emit layer so it won't be reversed
+                if layer_name in self._state._layer_groups:
+                    self._state._layer_groups[layer_name].is_emit_layer = True
 
     def _reverse_all_directions(self):
         """Helper: Reverse base direction, all layer accumulated values, and active builders
 
         Only reverses user-named layers, not emit layers (which should fade in their original direction).
         """
-        print(f"\n=== _reverse_all_directions ===")
-        print(f"Base direction before: {self._state._base_direction}")
-
         self._state._base_direction = self._state._base_direction * -1
-
-        print(f"Base direction after: {self._state._base_direction}")
-        print(f"Reversing {len(self._state._layer_groups)} layer groups")
 
         for layer_group in self._state._layer_groups.values():
             # Skip emit/copy layers - they should fade in their original direction
             if layer_group.is_emit_layer:
-                print(f"  Skipping emit layer: {layer_group.layer_name}")
                 continue
 
             if layer_group.property in ("direction", "vector") and layer_group.accumulated_value is not None:
-                print(f"  Reversing {layer_group.layer_name} accumulated value: {layer_group.accumulated_value} -> {layer_group.accumulated_value * -1}")
                 layer_group.accumulated_value = layer_group.accumulated_value * -1
 
             for builder in layer_group.builders:
                 if builder.config.property in ("direction", "vector") and builder.target_value is not None:
-                    print(f"  Reversing {layer_group.layer_name} builder target: {builder.target_value} -> {builder.target_value * -1}")
                     builder.target_value = builder.target_value * -1
                     if builder.base_value is not None:
                         builder.base_value = builder.base_value * -1

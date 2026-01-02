@@ -401,8 +401,21 @@ def test_reverse_preserves_layers_instant(on_success, on_failure):
             on_failure(f"Boost layer not found before reverse: {rig_check.state.layers}")
             return
 
+        speed_before_reverse = rig_check.state.speed
+
         # Reverse everything - instant
         rig_check.reverse()
+
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            # Speed should not suddenly spike up
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_after_reverse():
             rig_mid = actions.user.mouse_rig()
@@ -508,8 +521,21 @@ def test_reverse_preserves_layers_gradual(on_success, on_failure):
             on_failure(f"Boost layer not found before reverse: {rig_check.state.layers}")
             return
 
+        speed_before_reverse = rig_check.state.speed
+
         # Reverse everything - gradual transition over 400ms
         rig_check.reverse(400)
+
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            # Speed should not suddenly spike up
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_during_reverse():
             """Check state during the gradual reverse process"""
@@ -623,9 +649,22 @@ def test_reverse_instant(on_success, on_failure):
 
     def do_reverse():
         start_pos = ctrl.mouse_pos()
+        rig_check = actions.user.mouse_rig()
+        speed_before_reverse = rig_check.state.speed
 
         # Instant reverse
         rig.reverse()
+
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            # Speed should not suddenly spike up
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_reversed():
             rig_check = actions.user.mouse_rig()
@@ -666,11 +705,24 @@ def test_reverse_gradual(on_success, on_failure):
 
     def do_reverse():
         start_pos = ctrl.mouse_pos()
+        rig_check = actions.user.mouse_rig()
+        speed_before_reverse = rig_check.state.speed
 
         # Gradual reverse - smooth transition through zero
         # Direction lerps: (1,0) → (0,0) → (-1,0)
         # Velocity: slows down → stops → speeds up in opposite direction
         rig.reverse(1000)
+
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            # Speed should not suddenly spike up
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_midpoint():
             """At midpoint - should be near stop or moving slowly"""
@@ -744,11 +796,29 @@ def test_reverse_with_speed_add_animation(on_success, on_failure):
             on_failure(f"Direction should be right before reverse, got ({rig_check.state.direction.x}, {rig_check.state.direction.y})")
             return
 
+        # Capture speed before reverse for comparison
+        speed_before_reverse = rig_check.state.speed
         print(f"  Before reverse - Layers: {rig_check.state.layers}")
-        print(f"  Before reverse - Speed: {rig_check.state.speed}")
+        print(f"  Before reverse - Speed: {speed_before_reverse}")
 
         # Gradual reverse
         rig_check.reverse(1000)
+
+        # Immediately check speed after calling reverse
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            print(f"  Immediately after reverse() - Speed: {speed_immediate}")
+
+            # Speed should not suddenly spike up
+            # Emit layers should smooth transition, not cause spikes
+            # Allow modest increase (up to 1.5x) for emit layer dynamics
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_during_reverse():
             """Check state during the gradual reverse process"""
@@ -756,13 +826,23 @@ def test_reverse_with_speed_add_animation(on_success, on_failure):
 
             layer_count = len(rig_during.state.layers)
             emit_layer_count = sum(1 for name in rig_during.state.layers if "emit" in name.lower())
+            speed_during = rig_during.state.speed
 
             print(f"  During reverse - Layers: {rig_during.state.layers}")
             print(f"  During reverse - {layer_count} total layers, {emit_layer_count} emit layers")
+            print(f"  During reverse - Speed: {speed_during}")
 
             # Should have emit layers during gradual reverse
             if emit_layer_count == 0:
                 on_failure(f"Expected emit layers during reverse, got 0. Layers: {rig_during.state.layers}")
+                return
+
+            # Speed should be reasonable - emit creates 2x base contribution
+            # With base speed 5 + add(5) animation, at 300ms we're around 6-7
+            # Emit creates 2x base (10), so total could be up to ~17, but should fade
+            # At 500ms into reverse (halfway), emit should be fading
+            if speed_during > 20:
+                on_failure(f"Speed during reverse is too high: {speed_during}, expected < 20")
                 return
 
             def check_after_reverse():
@@ -829,8 +909,21 @@ def test_reverse_with_speed_add_animation_from_zero(on_success, on_failure):
         print(f"  Before reverse - Layers: {rig_check.state.layers}")
         print(f"  Before reverse - Speed: {rig_check.state.speed}")
 
+        speed_before_reverse = rig_check.state.speed
+
         # Gradual reverse
         rig_check.reverse(1000)
+
+        def check_immediate():
+            rig_immediate = actions.user.mouse_rig()
+            speed_immediate = rig_immediate.state.speed
+
+            # Speed should not suddenly spike up
+            if speed_immediate > speed_before_reverse * 1.5:
+                on_failure(f"Speed spiked immediately after reverse: {speed_immediate} (was {speed_before_reverse}, ratio: {speed_immediate/speed_before_reverse:.2f}x)")
+                return
+
+        cron.after("50ms", check_immediate)
 
         def check_during_reverse():
             """Check state during the gradual reverse process"""

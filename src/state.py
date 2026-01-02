@@ -846,33 +846,30 @@ class RigState:
 
         Args:
             property_name: The property to bake ("speed", "direction", "pos")
-            layer: Optional layer to bake from a specific builder. If None, bakes computed state.
+            layer: Optional layer to bake. If specified, bakes computed state and removes that layer.
+                   If None, bakes computed state and removes all base layers for this property.
         """
+        # Always bake the current computed value (base + all modifiers)
+        current_value = getattr(self, property_name)
+
+        if property_name == "vector":
+            self._base_speed = current_value.magnitude()
+            self._base_direction = current_value.normalized() if current_value.magnitude() > EPSILON else Vec2(1, 0)
+        elif property_name == "speed":
+            self._base_speed = float(current_value)
+        elif property_name == "direction":
+            self._base_direction = Vec2(current_value.x, current_value.y)
+        elif property_name == "pos":
+            self._absolute_base_pos = Vec2(current_value.x, current_value.y) if hasattr(current_value, 'x') else current_value
+
+        # Remove the specified layer or all base layers for this property
         if layer:
-            # Bake from a specific layer - remove it and bake its value
+            # Remove specific layer
             if layer in self._layer_groups:
-                group = self._layer_groups[layer]
-                if group.property == property_name:
-                    # Bake the group's current value
-                    if group.is_base:
-                        self._bake_group_to_base(group)
-                    # Remove the group
-                    if layer in self._layer_groups:
-                        del self._layer_groups[layer]
+                del self._layer_groups[layer]
+            if layer in self._layer_orders:
+                del self._layer_orders[layer]
         else:
-            # Bake current computed value for this property
-            current_value = getattr(self, property_name)
-
-            if property_name == "vector":
-                self._base_speed = current_value.magnitude()
-                self._base_direction = current_value.normalized()
-            elif property_name == "speed":
-                self._base_speed = current_value
-            elif property_name == "direction":
-                self._base_direction = current_value
-            elif property_name == "pos":
-                self._absolute_base_pos = current_value
-
             # Remove all base layer groups affecting this property
             layers_to_remove = [
                 l for l, g in self._layer_groups.items()
@@ -881,6 +878,8 @@ class RigState:
             for l in layers_to_remove:
                 if l in self._layer_groups:
                     del self._layer_groups[l]
+                if l in self._layer_orders:
+                    del self._layer_orders[l]
 
     def _compute_current_state(self) -> tuple[Vec2, float, Vec2, bool]:
         """Compute current state by applying all active layers to base.
@@ -981,10 +980,14 @@ class RigState:
         # Separate groups by layer type
         base_groups = []
         user_groups = []
+        emit_groups = []
 
         for layer_name, group in self._layer_groups.items():
             if group.property in ("speed", "direction", "vector"):
-                if group.is_base:
+                if group.is_emit_layer:
+                    # Emit layers are pure additive offsets processed separately
+                    emit_groups.append(group)
+                elif group.is_base:
                     base_groups.append(group)
                 else:
                     user_groups.append(group)
@@ -995,7 +998,7 @@ class RigState:
 
         user_groups = sorted(user_groups, key=get_layer_order)
 
-        # Apply all velocity groups
+        # Apply all velocity groups (excluding emit layers)
         for group in base_groups + user_groups:
             prop = group.property
             mode = group.mode
@@ -1007,6 +1010,19 @@ class RigState:
                 direction = mode_operations.apply_direction_mode(mode, current_value, direction)
             elif prop == "vector":
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
+
+        # Add emit layer contributions as pure vector offsets (after base velocity computed)
+        if emit_groups:
+            base_velocity = direction * speed
+            for group in emit_groups:
+                if group.property == "vector" and group.mode == "offset":
+                    emit_offset = group.get_current_value()
+                    base_velocity = base_velocity + emit_offset
+
+            # Recompute speed and direction from combined velocity
+            speed = base_velocity.magnitude()
+            if speed > EPSILON:
+                direction = base_velocity.normalized()
 
         return speed, direction
 
@@ -1764,8 +1780,8 @@ class RigState:
         Example:
             sprint = rig.state.layer("sprint")
             if sprint:
-                print(f"Sprint speed: {sprint.speed}")
-                print(f"Phase: {sprint.phase}")
+                # Access sprint.speed, sprint.phase, etc.
+                pass
         """
         if layer_name not in self._layer_groups:
             return None
@@ -2212,8 +2228,32 @@ class RigState:
 
     def bake_all(self):
         """Bake all active builders immediately"""
+        # Compute final values for all properties that have active layers
+        properties_to_bake = set()
+        for group in self._layer_groups.values():
+            properties_to_bake.add(group.property)
+
+        # Bake computed values into base state
+        for prop in properties_to_bake:
+            if prop == "pos":
+                current_pos = self.pos
+                self._absolute_base_pos = Vec2(current_pos.x, current_pos.y) if hasattr(current_pos, 'x') else current_pos
+                if self._absolute_current_pos is not None:
+                    self._absolute_current_pos = Vec2(self._absolute_base_pos.x, self._absolute_base_pos.y)
+            elif prop == "speed":
+                current_speed = self.speed
+                self._base_speed = float(current_speed)
+            elif prop == "direction":
+                current_direction = self.direction
+                self._base_direction = Vec2(current_direction.x, current_direction.y)
+            elif prop == "vector":
+                current_vector = self.vector
+                self._base_speed = current_vector.magnitude()
+                self._base_direction = current_vector.normalized() if self._base_speed > EPSILON else Vec2(1, 0)
+
+        # Remove all layers (without trying to bake them individually)
         for layer in list(self._layer_groups.keys()):
-            self.remove_builder(layer, bake=True)
+            self.remove_builder(layer, bake=False)
 
     def reset(self):
         """Reset everything to default state

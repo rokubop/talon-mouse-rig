@@ -143,7 +143,7 @@ def test_layer_state_custom_named():
     rig = actions.user.mouse_rig()
     rig.stop()
 
-    rig.speed.offset.to(10).over(1000).on("boost")
+    rig.layer("boost").speed.offset.to(10).over(1000)
     time.sleep(0.1)
 
     layer = rig.state.layer("boost")
