@@ -8,7 +8,7 @@ mod = Module()
 class Actions:
     def mouse_rig() -> Any:
         """
-        Get mouse rig directly for advanced usage.
+        Get rig directly for advanced usage.
 
         ```python
         rig = actions.user.mouse_rig()
@@ -37,7 +37,7 @@ class Actions:
             easing: str = None,
             callback: callable = None
         ) -> None:
-        """Move mouse to absolute position, optionally over time.
+        """Move mouse to absolute position, optionally over time. Uses Talon mouse API.
 
         Equivalent to:
         ```
@@ -68,7 +68,8 @@ class Actions:
             callback: callable = None,
             api: str = None
         ) -> None:
-        """Move mouse by relative offset, optionally over time.
+        """Move mouse by relative offset, optionally over time. Uses platform api by default.
+        If you need screen coordinates precision, use "talon" api instead.
 
         Equivalent to:
         ```
