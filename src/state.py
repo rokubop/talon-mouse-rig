@@ -1629,16 +1629,15 @@ class RigState:
 
     @property
     def layers(self) -> list[str]:
-        """List of active user layers (excludes anonymous)
+        """List of active layers (including base layers)
 
-        Returns a list of layer names for currently active user layers.
-        Anonymous (base) layers are excluded.
+        Returns a list of layer names for all currently active layers,
+        including base layers created by base operations with animations.
 
         Example:
-            rig.state.layers  # ["sprint", "drift"]
+            rig.state.layers  # ["base.speed", "sprint", "drift"]
         """
-        return [layer for layer, group in self._layer_groups.items()
-                if not group.is_base]
+        return list(self._layer_groups.keys())
 
     # Layer state access
     class LayerState:

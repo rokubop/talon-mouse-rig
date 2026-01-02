@@ -374,15 +374,16 @@ def test_reverse_preserves_layers_instant(on_success, on_failure):
     rig.stop()
 
     def start_test():
-        # Base: speed 10 moving right
-        rig.speed.to(10)
+        # Base: speed 5 moving right
+        rig.speed.to(5)
         rig.direction.to(1, 0)
 
         # Layer with over/revert: boost that ramps up and down
-        rig.layer("boost").speed.offset.add(5).over(300).revert(300)
+        # Use longer durations so animations are still active during checks
+        rig.layer("boost").speed.offset.add(3).over(500).revert(500)
 
         # Base speed add with over/revert
-        rig.speed.add(3).over(200).revert(200)
+        rig.speed.add(3).over(400).revert(400)
 
         cron.after("150ms", check_before_reverse)
 
@@ -405,9 +406,11 @@ def test_reverse_preserves_layers_instant(on_success, on_failure):
 
         def check_after_reverse():
             rig_mid = actions.user.mouse_rig()
-            # Direction should be flipped (moving left now)
-            if rig_mid.state.direction.x >= 0:
-                on_failure(f"Direction after reverse should be left (negative x), got ({rig_mid.state.direction.x}, {rig_mid.state.direction.y})")
+
+            # Verify layer counts: boost + base.speed
+            layer_count = len(rig_mid.state.layers)
+            if layer_count != 2:
+                on_failure(f"Expected 2 layers after reverse (boost + base.speed), got {layer_count}: {rig_mid.state.layers}")
                 return
 
             # Boost layer should still exist (preserved)
@@ -415,17 +418,47 @@ def test_reverse_preserves_layers_instant(on_success, on_failure):
                 on_failure(f"Boost layer lost after reverse: {rig_mid.state.layers}")
                 return
 
-            # Should still be moving (speed preserved, direction flipped)
-            if rig_mid.state.speed < 5:
-                on_failure(f"Speed after reverse is {rig_mid.state.speed}, expected > 5")
+            # Base.speed layer should exist (from speed.add with over/revert)
+            if "base.speed" not in rig_mid.state.layers:
+                on_failure(f"base.speed layer lost after reverse: {rig_mid.state.layers}")
                 return
+
+            # Check for emit layers (should be 0 for instant reverse)
+            emit_layer_count = sum(1 for name in rig_mid.state.layers if "emit" in name.lower())
+            if emit_layer_count != 0:
+                on_failure(f"Expected 0 emit layers after instant reverse, got {emit_layer_count}")
+                return
+
+            # Net state: direction should be flipped (moving left now)
+            if rig_mid.state.direction.x >= 0:
+                on_failure(f"Net direction should be left (negative x), got ({rig_mid.state.direction.x}, {rig_mid.state.direction.y})")
+                return
+
+            # Net base state: base speed should be animating (from speed.add with over/revert)
+            base_speed = rig_mid.state.base.speed
+            if base_speed < 5 or base_speed > 10:
+                on_failure(f"Base speed should be animating between 5-10, got {base_speed}")
+                return
+
+            # Base direction should be reversed
+            if rig_mid.state.base.direction.x >= 0:
+                on_failure(f"Base direction should be left, got ({rig_mid.state.base.direction.x}, {rig_mid.state.base.direction.y})")
+                return
+
+            # Net layer state: boost layer contributing to speed
+            if len(rig_mid.state.layers) > 0:
+                # Should have boost layer contribution
+                net_speed = rig_mid.state.speed
+                if net_speed < 5:
+                    on_failure(f"Net speed after reverse is {net_speed}, expected > 5")
+                    return
 
             def check_animations_complete():
                 rig_final = actions.user.mouse_rig()
                 # Animations should have completed naturally
-                # Back to base speed 10, but moving left
-                if abs(rig_final.state.speed - 10) > 2:
-                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~10")
+                # Back to base speed 5, but moving left
+                if abs(rig_final.state.speed - 5) > 2:
+                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~5")
                     return
                 if rig_final.state.direction.x >= 0:
                     on_failure(f"Final direction should still be left, got ({rig_final.state.direction.x}, {rig_final.state.direction.y})")
@@ -436,7 +469,7 @@ def test_reverse_preserves_layers_instant(on_success, on_failure):
 
             cron.after("500ms", check_animations_complete)
 
-        cron.after("100ms", check_after_reverse)
+        cron.after("500ms", check_after_reverse)
 
     cron.after("100ms", start_test)
 
@@ -448,15 +481,16 @@ def test_reverse_preserves_layers_gradual(on_success, on_failure):
     rig.stop()
 
     def start_test():
-        # Base: speed 10 moving right
-        rig.speed.to(10)
+        # Base: speed 5 moving right
+        rig.speed.to(5)
         rig.direction.to(1, 0)
 
         # Layer with over/revert: boost that ramps up and down
-        rig.layer("boost").speed.offset.add(5).over(300).revert(300)
+        # Use longer durations so animations are still active during checks
+        rig.layer("boost").speed.offset.add(3).over(500).revert(500)
 
         # Base speed add with over/revert
-        rig.speed.add(3).over(200).revert(200)
+        rig.speed.add(3).over(400).revert(400)
 
         cron.after("150ms", check_before_reverse)
 
@@ -474,14 +508,41 @@ def test_reverse_preserves_layers_gradual(on_success, on_failure):
             on_failure(f"Boost layer not found before reverse: {rig_check.state.layers}")
             return
 
-        # Reverse everything - gradual transition over 800ms
-        rig_check.reverse(800)
+        # Reverse everything - gradual transition over 400ms
+        rig_check.reverse(400)
+
+        def check_during_reverse():
+            """Check state during the gradual reverse process"""
+            rig_during = actions.user.mouse_rig()
+
+            # During gradual reverse: should have emit layers + original layers
+            # Expected: boost layer + base animation layer + emit layers from reverse
+            layer_count = len(rig_during.state.layers)
+
+            # Count emit layers (created by gradual reverse)
+            emit_layer_count = sum(1 for name in rig_during.state.layers if "emit" in name.lower())
+
+            # Should have emit layers during gradual reverse
+            if emit_layer_count == 0:
+                on_failure(f"Expected emit layers during gradual reverse, got 0. Layers: {rig_during.state.layers}")
+                return
+
+            # Original boost layer should still exist
+            if "boost" not in rig_during.state.layers:
+                on_failure(f"Boost layer lost during reverse: {rig_during.state.layers}")
+                return
+
+            print(f"  During reverse: {layer_count} total layers, {emit_layer_count} emit layers")
+            print(f"  Layers: {rig_during.state.layers}")
 
         def check_after_reverse():
             rig_mid = actions.user.mouse_rig()
-            # Direction should be flipped (moving left now)
-            if rig_mid.state.direction.x >= 0:
-                on_failure(f"Direction after reverse should be left (negative x), got ({rig_mid.state.direction.x}, {rig_mid.state.direction.y})")
+
+            # Verify layer counts: boost + base.speed (no copy/emit layers should remain)
+            layer_count = len(rig_mid.state.layers)
+            non_emit_layers = [name for name in rig_mid.state.layers if "emit" not in name.lower() and "copy" not in name.lower()]
+            if len(non_emit_layers) != 2:
+                on_failure(f"Expected 2 preserved layers (boost + base.speed), got {len(non_emit_layers)}: {rig_mid.state.layers}")
                 return
 
             # Boost layer should still exist (preserved)
@@ -489,17 +550,45 @@ def test_reverse_preserves_layers_gradual(on_success, on_failure):
                 on_failure(f"Boost layer lost after reverse: {rig_mid.state.layers}")
                 return
 
-            # Should still be moving (speed preserved, direction flipped)
-            if rig_mid.state.speed < 5:
-                on_failure(f"Speed after reverse is {rig_mid.state.speed}, expected > 5")
+            # Base.speed layer should exist (from speed.add with over/revert)
+            if "base.speed" not in rig_mid.state.layers:
+                on_failure(f"base.speed layer lost after reverse: {rig_mid.state.layers}")
+                return
+
+            # Check for emit/copy layers (should be 0 after gradual reverse completes)
+            temp_layer_count = sum(1 for name in rig_mid.state.layers if "emit" in name.lower() or "copy" in name.lower())
+            if temp_layer_count != 0:
+                on_failure(f"Expected 0 temporary emit/copy layers after gradual reverse, got {temp_layer_count}: {rig_mid.state.layers}")
+                return
+
+            # Net state: direction should be flipped (moving left now) after 400ms reverse + 500ms wait
+            if rig_mid.state.direction.x >= 0:
+                on_failure(f"Net direction should be left (negative x), got ({rig_mid.state.direction.x}, {rig_mid.state.direction.y})")
+                return
+
+            # Net base state: base speed should be animating (from speed.add with over/revert)
+            base_speed = rig_mid.state.base.speed
+            if base_speed < 5 or base_speed > 10:
+                on_failure(f"Base speed should be animating between 5-10, got {base_speed}")
+                return
+
+            # Base direction should be reversed
+            if rig_mid.state.base.direction.x >= 0:
+                on_failure(f"Base direction should be left, got ({rig_mid.state.base.direction.x}, {rig_mid.state.base.direction.y})")
+                return
+
+            # Net layer state: boost layer contributing to speed
+            net_speed = rig_mid.state.speed
+            if net_speed < 5:
+                on_failure(f"Net speed after reverse is {net_speed}, expected > 5")
                 return
 
             def check_animations_complete():
                 rig_final = actions.user.mouse_rig()
                 # Animations should have completed naturally
-                # Back to base speed 10, but moving left
-                if abs(rig_final.state.speed - 10) > 2:
-                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~10")
+                # Back to base speed 5, but moving left
+                if abs(rig_final.state.speed - 5) > 2:
+                    on_failure(f"Final speed is {rig_final.state.speed}, expected ~5")
                     return
                 if rig_final.state.direction.x >= 0:
                     on_failure(f"Final direction should still be left, got ({rig_final.state.direction.x}, {rig_final.state.direction.y})")
@@ -510,7 +599,11 @@ def test_reverse_preserves_layers_gradual(on_success, on_failure):
 
             cron.after("500ms", check_animations_complete)
 
-        cron.after("100ms", check_after_reverse)
+        # Check during the reverse (200ms into the 400ms reverse)
+        cron.after("200ms", check_during_reverse)
+
+        # Check after reverse completes (500ms = after 400ms reverse finishes)
+        cron.after("500ms", check_after_reverse)
 
     cron.after("100ms", start_test)
 
@@ -621,6 +714,166 @@ def test_reverse_gradual(on_success, on_failure):
     cron.after("100ms", start_movement)
 
 
+def test_reverse_with_speed_add_animation(on_success, on_failure):
+    """Test: rig.reverse() with speed.add().over() - should emit base animation layer"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Base speed with direction
+        rig.speed.to(5)
+        rig.direction.to(1, 0)
+
+        # Add speed with animation - creates a base layer (ephemeral)
+        rig.speed.add(5).over(1000)
+
+        cron.after("300ms", check_before_reverse)
+
+    def check_before_reverse():
+        rig_check = actions.user.mouse_rig()
+
+        # Should have 1 layer from speed.add()
+        layer_count = len(rig_check.state.layers)
+        if layer_count != 1:
+            on_failure(f"Expected 1 layer before reverse, got {layer_count}: {rig_check.state.layers}")
+            return
+
+        # Should be moving right with elevated speed
+        if rig_check.state.direction.x <= 0:
+            on_failure(f"Direction should be right before reverse, got ({rig_check.state.direction.x}, {rig_check.state.direction.y})")
+            return
+
+        print(f"  Before reverse - Layers: {rig_check.state.layers}")
+        print(f"  Before reverse - Speed: {rig_check.state.speed}")
+
+        # Gradual reverse
+        rig_check.reverse(1000)
+
+        def check_during_reverse():
+            """Check state during the gradual reverse process"""
+            rig_during = actions.user.mouse_rig()
+
+            layer_count = len(rig_during.state.layers)
+            emit_layer_count = sum(1 for name in rig_during.state.layers if "emit" in name.lower())
+
+            print(f"  During reverse - Layers: {rig_during.state.layers}")
+            print(f"  During reverse - {layer_count} total layers, {emit_layer_count} emit layers")
+
+            # Should have emit layers during gradual reverse
+            if emit_layer_count == 0:
+                on_failure(f"Expected emit layers during reverse, got 0. Layers: {rig_during.state.layers}")
+                return
+
+            def check_after_reverse():
+                rig_final = actions.user.mouse_rig()
+
+                # Direction should be reversed (left)
+                if rig_final.state.direction.x >= 0:
+                    on_failure(f"Direction should be left after reverse, got ({rig_final.state.direction.x}, {rig_final.state.direction.y})")
+                    return
+
+                # Base layer animation has completed by now (ephemeral), so expect 0 layers
+                final_layer_count = len(rig_final.state.layers)
+                if final_layer_count != 0:
+                    on_failure(f"Expected 0 layers after animation completes, got {final_layer_count}: {rig_final.state.layers}")
+                    return
+
+                print(f"  After reverse - Layers: {rig_final.state.layers}")
+                print(f"  After reverse - Speed: {rig_final.state.speed}")
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("1100ms", check_after_reverse)
+
+        cron.after("500ms", check_during_reverse)
+
+    cron.after("100ms", start_test)
+
+
+def test_reverse_with_speed_add_animation_from_zero(on_success, on_failure):
+    """Test: rig.reverse() with speed.add().over() starting from zero base speed"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set base speed to 0 first, then add with animation
+        rig.speed.to(0)
+        rig.direction.to(1, 0)
+
+        # Add speed with animation from zero - creates a base layer (ephemeral)
+        rig.speed.add(5).over(1000)
+
+        cron.after("300ms", check_before_reverse)
+
+    def check_before_reverse():
+        rig_check = actions.user.mouse_rig()
+
+        # Should have 1 layer from speed.add()
+        layer_count = len(rig_check.state.layers)
+        if layer_count != 1:
+            on_failure(f"Expected 1 layer before reverse, got {layer_count}: {rig_check.state.layers}")
+            return
+
+        # Should be moving right with some speed
+        if rig_check.state.direction.x <= 0:
+            on_failure(f"Direction should be right before reverse, got ({rig_check.state.direction.x}, {rig_check.state.direction.y})")
+            return
+
+        if rig_check.state.speed < 1:
+            on_failure(f"Speed should be > 1 during animation, got {rig_check.state.speed}")
+            return
+
+        print(f"  Before reverse - Layers: {rig_check.state.layers}")
+        print(f"  Before reverse - Speed: {rig_check.state.speed}")
+
+        # Gradual reverse
+        rig_check.reverse(1000)
+
+        def check_during_reverse():
+            """Check state during the gradual reverse process"""
+            rig_during = actions.user.mouse_rig()
+
+            layer_count = len(rig_during.state.layers)
+            emit_layer_count = sum(1 for name in rig_during.state.layers if "emit" in name.lower())
+
+            print(f"  During reverse - Layers: {rig_during.state.layers}")
+            print(f"  During reverse - {layer_count} total layers, {emit_layer_count} emit layers")
+
+            # Should have emit layers during gradual reverse
+            if emit_layer_count == 0:
+                on_failure(f"Expected emit layers during reverse, got 0. Layers: {rig_during.state.layers}")
+                return
+
+            def check_after_reverse():
+                rig_final = actions.user.mouse_rig()
+
+                # Direction should be reversed (left)
+                if rig_final.state.direction.x >= 0:
+                    on_failure(f"Direction should be left after reverse, got ({rig_final.state.direction.x}, {rig_final.state.direction.y})")
+                    return
+
+                # Base layer animation has completed by now (ephemeral), so expect 0 layers
+                final_layer_count = len(rig_final.state.layers)
+                if final_layer_count != 0:
+                    on_failure(f"Expected 0 layers after animation completes, got {final_layer_count}: {rig_final.state.layers}")
+                    return
+
+                print(f"  After reverse - Layers: {rig_final.state.layers}")
+                print(f"  After reverse - Speed: {rig_final.state.speed}")
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("1100ms", check_after_reverse)
+
+        cron.after("500ms", check_during_reverse)
+
+    cron.after("100ms", start_test)
+
+
 # ============================================================================
 # TEST LIST
 # ============================================================================
@@ -637,6 +890,8 @@ SPECIAL_TESTS = [
     ("validate layer('nonexistent').copy()", test_validate_nonexistent_layer_copy_errors),
     ("rig.reverse() preserves layers - instant", test_reverse_preserves_layers_instant),
     ("rig.reverse() preserves layers - gradual", test_reverse_preserves_layers_gradual),
+    ("rig.reverse() with speed.add().over()", test_reverse_with_speed_add_animation),
+    ("rig.reverse() with speed.add().over() from zero", test_reverse_with_speed_add_animation_from_zero),
     ("rig.reverse()", test_reverse_instant),
     ("rig.reverse(ms)", test_reverse_gradual),
 ]

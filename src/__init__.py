@@ -274,14 +274,50 @@ class Rig:
 
         Copies each layer twice to provide 2x contribution that fades out,
         which bridges from current velocity to reversed velocity smoothly.
+
+        Special handling for base layers:
+        - Base layers use override semantics (directly set base values)
+        - Can't be copied/emitted like offset layers
+        - Instead, calculate their velocity contribution and emit as vector offset
         """
         print(f"\n=== _emit_reverse_copies ===")
         print(f"Active layers: {list(self._state._layer_groups.keys())}")
         print(f"Base velocity: {self._state._base_direction} * {self._state._base_speed}")
 
         for layer_name in list(self._state._layer_groups.keys()):
+            group = self._state._layer_groups[layer_name]
+
+            # Special handling for base layers
+            if group.is_base:
+                # Base layers with add/by operators are semantically additive
+                # (even though stored as override), so we can emit their contribution
+                if group.builders and group.builders[0].config.operator in ("by", "add"):
+                    # Calculate the additive contribution (target - base)
+                    builder = group.builders[0]
+                    base_value = builder.base_value if hasattr(builder, 'base_value') else self._state._base_speed
+                    contribution = builder.config.value  # The amount being added
+
+                    # Emit as vector offset (2x copies like other layers)
+                    try:
+                        current_direction = self._state._base_direction
+                        offset_vec = current_direction * contribution
+
+                        print(f"Emitting base layer {layer_name} contribution: {contribution} as vector offset")
+
+                        # Create 2 emit layers with the contribution
+                        for i in range(2):
+                            emit_name = f"emit.copy.{layer_name}.{int(time.perf_counter() * 1000000)}"
+                            self.layer(emit_name).vector.offset.to(offset_vec.x, offset_vec.y).revert(ms, easing)
+                            if emit_name in self._state._layer_groups:
+                                self._state._layer_groups[emit_name].is_emit_layer = True
+                    except Exception as e:
+                        print(f"Failed to emit base layer {layer_name} contribution: {e}")
+                else:
+                    print(f"Skipping base layer {layer_name} (not additive operator)")
+                continue
+
             try:
-                # Intentional - 2 copies
+                # Intentional - 2 copies for non-base layers
                 print(f"Copying and emitting layer: {layer_name}")
                 self.layer(layer_name).copy().emit(ms, easing)
                 self.layer(layer_name).copy().emit(ms, easing)
@@ -292,15 +328,19 @@ class Rig:
         current_base_velocity = self._state._base_direction * self._state._base_speed
         offset_velocity = current_base_velocity * 2
 
-        print(f"Creating base emit layer with offset: ({offset_velocity.x}, {offset_velocity.y})")
+        # Only create base emit layer if there's actual velocity to emit
+        if abs(offset_velocity.x) > 0.001 or abs(offset_velocity.y) > 0.001:
+            print(f"Creating base emit layer with offset: ({offset_velocity.x}, {offset_velocity.y})")
 
-        layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
-        self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).revert(ms, easing)
+            layer_name = f"emit.base.{int(time.perf_counter() * 1000000)}"
+            self.layer(layer_name).vector.offset.to(offset_velocity.x, offset_velocity.y).revert(ms, easing)
 
-        # Mark as emit layer so it won't be reversed
-        if layer_name in self._state._layer_groups:
-            self._state._layer_groups[layer_name].is_emit_layer = True
-            print(f"Marked {layer_name} as emit layer")
+            # Mark as emit layer so it won't be reversed
+            if layer_name in self._state._layer_groups:
+                self._state._layer_groups[layer_name].is_emit_layer = True
+                print(f"Marked {layer_name} as emit layer")
+        else:
+            print(f"Skipping base emit layer - base velocity is zero")
 
         print(f"After creating layer, layers: {list(self._state._layer_groups.keys())}")
 
