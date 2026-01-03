@@ -763,26 +763,33 @@ class RigBuilder:
         if mechanism == "scroll":
             # Scroll mechanism - use scroll-specific base state
             if self.config.property == "speed":
-                return self.rig_state._base_scroll_speed
+                result = self.rig_state._base_scroll_speed
             elif self.config.property == "direction":
-                return self.rig_state._base_scroll_direction
+                result = Vec2(self.rig_state._base_scroll_direction.x, self.rig_state._base_scroll_direction.y)
             elif self.config.property == "vector":
-                return self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
+                result = self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
+            else:
+                result = 0
         else:
             # Default mouse movement mechanism
             if self.config.property == "speed":
-                return self.rig_state.base.speed
+                result = self.rig_state.base.speed
             elif self.config.property == "direction":
-                return self.rig_state.base.direction
+                result = Vec2(self.rig_state.base.direction.x, self.rig_state.base.direction.y)
             elif self.config.property == "pos":
-                return self.rig_state.base.pos
+                result = Vec2(self.rig_state.base.pos.x, self.rig_state.base.pos.y)
             elif self.config.property == "vector":
                 # Return velocity vector (direction * speed)
-                return self.rig_state.base.direction * self.rig_state.base.speed
-        return 0
+                result = self.rig_state.base.direction * self.rig_state.base.speed
+            else:
+                result = 0
+        return result
 
-    def _calculate_target_value(self, current: Any) -> Any:
+    def _calculate_target_value(self, current: Any = None) -> Any:
         """Calculate target value after operator is applied"""
+        if current is None:
+            current = self.base_value
+
         operator = self.config.operator
         value = self.config.value
 
@@ -1211,10 +1218,8 @@ class ActiveBuilder:
         # For base layers, always use override mode to store absolute result values
         # Modes (offset/scale) are only meaningful for modifier layers
         if config.mode is None and is_base_layer:
-            print(f"DEBUG: Setting mode to override for base layer. layer={config.layer_name}, property={config.property}, mechanism={config.mechanism}")
             config.mode = "override"
         else:
-            print(f"DEBUG: NOT setting mode. mode={config.mode}, is_base_layer={is_base_layer}, layer={config.layer_name}, property={config.property}, mechanism={config.mechanism}")
             config.mode = "override"
 
         self.group_lifecycle: Optional[Lifecycle] = None
@@ -1275,6 +1280,19 @@ class ActiveBuilder:
         # When set, this overrides the normal revert behavior to cancel accumulated value
         self.revert_target: Optional[Any] = None
 
+        # Auto-detect scroll direction to use linear interpolation (more intuitive for scrolling)
+        mechanism = getattr(config, 'mechanism', 'move')
+        if (mechanism == "scroll" and
+            config.property == "direction" and
+            config.operator == "to" and
+            config.over_ms is not None and
+            config.over_ms > 0):
+            # Default to linear for scroll direction (user can override with .over(1000, interpolation="slerp"))
+            if config.over_interpolation == "lerp":  # Only override if user didn't specify
+                config.over_interpolation = 'linear'
+            if config.revert_interpolation == "lerp":
+                config.revert_interpolation = 'linear'
+
         # Auto-detect same-axis direction reversal for smooth zero-crossing
         if (config.property == "direction" and
             config.operator == "to" and
@@ -1308,16 +1326,31 @@ class ActiveBuilder:
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
-        if self.config.property == "speed":
-            return self.rig_state.base.speed
-        elif self.config.property == "direction":
-            return self.rig_state.base.direction
-        elif self.config.property == "pos":
-            return self.rig_state.base.pos
-        elif self.config.property == "vector":
-            # Return velocity vector (direction * speed)
-            return self.rig_state.base.direction * self.rig_state.base.speed
-        return 0
+        mechanism = getattr(self.config, 'mechanism', 'move')
+
+        if mechanism == "scroll":
+            # Scroll mechanism - use scroll-specific base state
+            if self.config.property == "speed":
+                return self.rig_state._base_scroll_speed
+            elif self.config.property == "direction":
+                result = Vec2(self.rig_state._base_scroll_direction.x, self.rig_state._base_scroll_direction.y)
+                return result
+            elif self.config.property == "vector":
+                return self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
+            else:
+                return 0
+        else:
+            # Default mouse movement mechanism
+            if self.config.property == "speed":
+                return self.rig_state.base.speed
+            elif self.config.property == "direction":
+                return Vec2(self.rig_state.base.direction.x, self.rig_state.base.direction.y)
+            elif self.config.property == "pos":
+                return Vec2(self.rig_state.base.pos.x, self.rig_state.base.pos.y)
+            elif self.config.property == "vector":
+                # Return velocity vector (direction * speed)
+                return self.rig_state.base.direction * self.rig_state.base.speed
+            return 0
 
     def _calculate_target_value(self) -> Any:
         """Calculate target value after operator is applied
@@ -1508,9 +1541,6 @@ class ActiveBuilder:
                 )
             else:  # override
                 # Override: animate from base to absolute target
-                mechanism = getattr(self.config, 'mechanism', 'move')
-                if mechanism == "scroll":
-                    print(f"DEBUG _get_own_value: scroll direction override, base_value={self.base_value}, target_value={self.target_value}, phase={phase}, progress={progress}")
                 result = PropertyAnimator.animate_direction(
                     self.base_value,
                     self.target_value,
@@ -1519,8 +1549,6 @@ class ActiveBuilder:
                     self.lifecycle.has_reverted(),
                     interpolation
                 )
-                if mechanism == "scroll":
-                    print(f"DEBUG _get_own_value: scroll direction result={result}")
                 return result
         elif self.config.property == "pos":
             # For position, neutral depends on mode

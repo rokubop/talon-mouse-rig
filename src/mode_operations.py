@@ -220,7 +220,6 @@ def apply_direction_mode(
     Returns:
         New accumulated direction after applying the mode operation
     """
-    print(f"DEBUG apply_direction_mode: mode={mode}, canonical_value={canonical_value}, accumulated={accumulated}")
     if mode == "offset":
         # Offset: apply rotation or delta
         if isinstance(canonical_value, (int, float)):
@@ -240,14 +239,12 @@ def apply_direction_mode(
 
     elif mode == "override":
         # Override: replace with absolute direction
-        print(f"DEBUG apply_direction_mode: Override mode, returning canonical_value={canonical_value}")
         return canonical_value
 
     elif mode == "scale":
         # Scale: multiply components
         return Vec2(accumulated.x * canonical_value, accumulated.y * canonical_value).normalized()
 
-    print(f"DEBUG apply_direction_mode: No mode matched, returning accumulated={accumulated}")
     return accumulated
 
 

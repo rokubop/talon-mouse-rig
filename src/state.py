@@ -331,8 +331,11 @@ class RigState:
                     group = self._layer_groups[layer]
                     old_current_value = group.get_current_value()
 
-                    # Update builder to start from current
-                    builder.base_value = old_current_value
+                    # Update builder to start from current (make copy if Vec2)
+                    if isinstance(old_current_value, Vec2):
+                        builder.base_value = Vec2(old_current_value.x, old_current_value.y)
+                    else:
+                        builder.base_value = old_current_value
                     builder.target_value = builder._calculate_target_value()
 
                     # Recalculate rate duration
@@ -608,13 +611,24 @@ class RigState:
         # Initialize base layer accumulated_value from actual base state
         # This ensures that when groups are recreated after deletion, they start with correct values
         if group.is_base:
-            if builder.config.property == "speed":
-                group.accumulated_value = self._base_speed
-            elif builder.config.property == "direction":
-                group.accumulated_value = self._base_direction.copy()
-            elif builder.config.property == "pos":
-                # Position uses absolute coordinates, keep at (0,0) for accumulated
-                pass
+            # Get mechanism from builder to determine which base state to use
+            mechanism = getattr(builder.config, 'mechanism', 'move')
+
+            if mechanism == "scroll":
+                # Scroll mechanism - use scroll base state
+                if builder.config.property == "speed":
+                    group.accumulated_value = self._base_scroll_speed
+                elif builder.config.property == "direction":
+                    group.accumulated_value = self._base_scroll_direction.copy()
+            else:
+                # Mouse movement mechanism (default)
+                if builder.config.property == "speed":
+                    group.accumulated_value = self._base_speed
+                elif builder.config.property == "direction":
+                    group.accumulated_value = self._base_direction.copy()
+                elif builder.config.property == "pos":
+                    # Position uses absolute coordinates, keep at (0,0) for accumulated
+                    pass
         # Initialize override mode layers with current computed value
         # so interpolation starts from current state, not zero
         elif builder.config.mode == "override":
@@ -710,12 +724,10 @@ class RigState:
             if prop == "speed":
                 self._base_scroll_speed = float(current_value)
             elif prop == "direction":
-                print(f"DEBUG _bake_group_to_base: Baking scroll direction. current_value={current_value}, type={type(current_value)}")
                 if isinstance(current_value, tuple):
                     self._base_scroll_direction = Vec2.from_tuple(current_value).normalized()
                 else:
                     self._base_scroll_direction = current_value.normalized() if hasattr(current_value, 'normalized') else current_value
-                print(f"DEBUG _bake_group_to_base: After baking, _base_scroll_direction={self._base_scroll_direction}")
             elif prop == "vector":
                 if isinstance(current_value, tuple):
                     self._base_scroll_direction = Vec2.from_tuple(current_value).normalized()
