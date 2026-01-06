@@ -405,6 +405,124 @@ def test_scroll_horizontal(on_success, on_failure):
     cron.after("100ms", check_scroll)
 
 
+def test_scroll_emit(on_success, on_failure):
+    """Test: rig.scroll.speed.offset.emit() - emit layer for scroll converts to decaying offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    base_speed = 0.5
+    emit_offset = 0.3
+
+    rig.scroll.direction.to(0, 1)
+    rig.scroll.speed.to(base_speed)
+    
+    def add_offset():
+        rig.scroll.speed.offset.add(emit_offset).emit(300)
+    
+    def check_after_emit():
+        rig_mid = actions.user.mouse_rig()
+        # Offset layer should be gone, replaced by emit layer
+        if "scroll:speed.offset" in rig_mid.state.layers:
+            on_failure(f"Offset layer still exists after emit: {rig_mid.state.layers}")
+            return
+        # Should still have elevated speed (from emitted offset)
+        if rig_mid.state.scroll_speed < base_speed + 0.2:
+            on_failure(f"Speed after emit too low: got {rig_mid.state.scroll_speed}")
+            return
+        # Check that an emit layer exists
+        has_emit_layer = any("emit" in layer for layer in rig_mid.state.layers)
+        if not has_emit_layer:
+            on_failure(f"Expected emit layer, got: {rig_mid.state.layers}")
+            return
+    
+    def check_after_fade():
+        rig_final = actions.user.mouse_rig()
+        # Should be back to base speed after decay
+        if abs(rig_final.state.scroll_speed - base_speed) > 0.1:
+            on_failure(f"Speed after fade wrong: expected {base_speed}, got {rig_final.state.scroll_speed}")
+            return
+        # Emit layer should be gone
+        has_emit_layer = any("emit" in layer for layer in rig_final.state.layers)
+        if has_emit_layer:
+            on_failure(f"Emit layer should be gone after fade, got: {rig_final.state.layers}")
+            return
+        
+        rig_final.stop()
+        on_success()
+
+    cron.after("100ms", add_offset)
+    cron.after("200ms", check_after_emit)
+    cron.after("500ms", check_after_fade)
+
+
+def test_scroll_speed_offset_add_revert(on_success, on_failure):
+    """Test: scroll.speed.offset.add().over().revert() - offset with revert"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    base_speed = 0.5
+    offset = 3
+
+    rig.scroll.direction.to(0, 1)
+    rig.scroll.speed.to(base_speed)
+    
+    def start_offset():
+        rig.scroll.speed.offset.add(offset).over(1000).revert(1000)
+    
+    def check_initial():
+        rig_check = actions.user.mouse_rig()
+        # Should have offset layer active
+        if "scroll:speed.offset" not in rig_check.state.layers:
+            on_failure(f"Expected scroll:speed.offset layer, got: {rig_check.state.layers}")
+            return
+        # Should be ramping up
+        if rig_check.state.scroll_speed <= base_speed:
+            on_failure(f"Speed should be increasing, got {rig_check.state.scroll_speed}")
+            return
+
+    def check_peak():
+        rig_mid = actions.user.mouse_rig()
+        expected_peak = base_speed + offset
+        # Should still have offset layer
+        if "scroll:speed.offset" not in rig_mid.state.layers:
+            on_failure(f"Expected scroll:speed.offset layer at peak, got: {rig_mid.state.layers}")
+            return
+        if abs(rig_mid.state.scroll_speed - expected_peak) > 0.2:
+            on_failure(f"Peak scroll speed wrong: expected {expected_peak}, got {rig_mid.state.scroll_speed}")
+            return
+
+    def check_reverting():
+        rig_rev = actions.user.mouse_rig()
+        expected_peak = base_speed + offset
+        # Should still have offset layer during revert
+        if "scroll:speed.offset" not in rig_rev.state.layers:
+            on_failure(f"Expected scroll:speed.offset layer during revert, got: {rig_rev.state.layers}")
+            return
+        # Should be between base and peak
+        if not (base_speed < rig_rev.state.scroll_speed < expected_peak):
+            on_failure(f"Speed during revert should be between {base_speed} and {expected_peak}, got {rig_rev.state.scroll_speed}")
+            return
+
+    def check_reverted():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.scroll_speed - base_speed) > 0.1:
+            on_failure(f"Reverted scroll speed wrong: expected {base_speed}, got {rig_check.state.scroll_speed}")
+            return
+        # Offset layer should be gone after revert completes
+        if "scroll:speed.offset" in rig_check.state.layers:
+            on_failure(f"scroll:speed.offset layer should be gone after revert, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_offset)
+    cron.after("300ms", check_initial)
+    cron.after("1100ms", check_peak)
+    cron.after("1600ms", check_reverting)
+    cron.after("2200ms", check_reverted)
+
+
 # Export test list
 SCROLL_TESTS = [
     ("scroll.speed.to()", test_scroll_speed_to),
@@ -420,4 +538,6 @@ SCROLL_TESTS = [
     ("scroll down", test_scroll_direction_down),
     ("scroll up", test_scroll_direction_up),
     ("scroll horizontal", test_scroll_horizontal),
+    ("scroll.emit()", test_scroll_emit),
+    ("scroll.speed.offset.add().revert()", test_scroll_speed_offset_add_revert),
 ]
