@@ -94,13 +94,13 @@ class ModeProxy:
 
 
 class ScrollPropertyProxy:
-    """Proxy for scroll mechanism - sets mechanism then returns normal property builders"""
+    """Proxy for scroll input_type - sets input_type then returns normal property builders"""
 
     def __init__(self, builder: 'RigBuilder', mode: str = None):
         self.builder = builder
         self.mode = mode
-        # Set mechanism to scroll
-        self.builder.config.mechanism = "scroll"
+        # Set input_type to scroll
+        self.builder.config.input_type = "scroll"
 
     @property
     def speed(self) -> 'PropertyBuilder':
@@ -758,10 +758,10 @@ class RigBuilder:
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
-        mechanism = getattr(self.config, 'mechanism', 'move')
+        input_type = getattr(self.config, 'input_type', 'move')
 
-        if mechanism == "scroll":
-            # Scroll mechanism - use scroll-specific base state
+        if input_type == "scroll":
+            # Scroll input_type - use scroll-specific base state
             if self.config.property == "speed":
                 result = self.rig_state._base_scroll_speed
             elif self.config.property == "direction":
@@ -771,7 +771,7 @@ class RigBuilder:
             else:
                 result = 0
         else:
-            # Default mouse movement mechanism
+            # Default mouse movement input_type
             if self.config.property == "speed":
                 result = self.rig_state.base.speed
             elif self.config.property == "direction":
@@ -847,24 +847,24 @@ class PropertyBuilder:
 
         # Set base layer name if this is a base operation (layer is still pending)
         if self.rig_builder.config.layer_name == "__base_pending__":
-            # Add mechanism prefix if not default 'move'
-            mechanism = self.rig_builder.config.mechanism
-            if mechanism == "move":
+            # Add input_type prefix if not default 'move'
+            input_type = self.rig_builder.config.input_type
+            if input_type == "move":
                 self.rig_builder.config.layer_name = f"base.{property_name}"
             else:
-                # For scroll and other mechanisms, prefix with mechanism name
-                self.rig_builder.config.layer_name = f"{mechanism}:base.{property_name}"
+                # For scroll and other input_types, prefix with input_type name
+                self.rig_builder.config.layer_name = f"{input_type}:base.{property_name}"
             self.rig_builder.config.layer_type = LayerType.BASE
 
     def _set_implicit_layer_if_needed(self, mode: str) -> None:
         """Convert from base layer to auto-named modifier if mode is added without explicit layer name"""
         if not self.rig_builder.config.is_user_named:
-            # Add mechanism prefix for non-default mechanisms
-            mechanism = self.rig_builder.config.mechanism
-            if mechanism == "move":
+            # Add input_type prefix for non-default input_types
+            input_type = self.rig_builder.config.input_type
+            if input_type == "move":
                 implicit_name = f"{self.property_name}.{mode}"
             else:
-                implicit_name = f"{mechanism}:{self.property_name}.{mode}"
+                implicit_name = f"{input_type}:{self.property_name}.{mode}"
             self.rig_builder.config.layer_name = implicit_name
             self.rig_builder.config.layer_type = LayerType.AUTO_NAMED_MODIFIER
         else:
@@ -1279,8 +1279,8 @@ class ActiveBuilder:
         self.revert_target: Optional[Any] = None
 
         # Auto-detect scroll direction to use linear interpolation (more intuitive for scrolling)
-        mechanism = getattr(config, 'mechanism', 'move')
-        if (mechanism == "scroll" and
+        input_type = getattr(config, 'input_type', 'move')
+        if (input_type == "scroll" and
             config.property == "direction" and
             config.operator == "to" and
             config.over_ms is not None and
@@ -1324,10 +1324,10 @@ class ActiveBuilder:
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
-        mechanism = getattr(self.config, 'mechanism', 'move')
+        input_type = getattr(self.config, 'input_type', 'move')
 
-        if mechanism == "scroll":
-            # Scroll mechanism - use scroll-specific base state
+        if input_type == "scroll":
+            # Scroll input_type - use scroll-specific base state
             if self.config.property == "speed":
                 return self.rig_state._base_scroll_speed
             elif self.config.property == "direction":
@@ -1338,7 +1338,7 @@ class ActiveBuilder:
             else:
                 return 0
         else:
-            # Default mouse movement mechanism
+            # Default mouse movement input_type
             if self.config.property == "speed":
                 return self.rig_state.base.speed
             elif self.config.property == "direction":

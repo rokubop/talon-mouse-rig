@@ -35,7 +35,8 @@ class LayerGroup:
         layer_type: str,
         order: Optional[int] = None,
         is_emit_layer: bool = False,
-        source_layer: Optional[str] = None
+        source_layer: Optional[str] = None,
+        input_type: str = "move"
     ):
         from .contracts import LayerType
 
@@ -48,6 +49,7 @@ class LayerGroup:
         self.creation_time = time.perf_counter()
         self.is_emit_layer = is_emit_layer
         self.source_layer = source_layer
+        self.input_type = input_type
         self.builders: list['ActiveBuilder'] = []
 
         # Accumulated state (for modifier layers - persists after builders complete)

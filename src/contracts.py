@@ -367,9 +367,9 @@ class LayerType:
 class BuilderConfig:
     """Configuration collected by RigBuilder during fluent API calls"""
     def __init__(self):
-        # Device and mechanism
+        # Device and input_type
         self.device: str = "mouse"  # 'mouse', 'gamepad' (future)
-        self.mechanism: str = "move"  # 'move', 'scroll', 'left_stick' (future), etc.
+        self.input_type: str = "move"  # 'move', 'scroll', 'left_stick' (future), etc.
 
         # Property and operator
         self.property: Optional[str] = None  # pos, speed, direction

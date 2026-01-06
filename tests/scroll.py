@@ -183,8 +183,8 @@ def test_scroll_speed_offset_add(on_success, on_failure):
     rig = actions.user.mouse_rig()
     rig.stop()
 
-    base_speed = 5
-    offset = 3
+    base_speed = 0.5
+    offset = 0.3
     expected_speed = base_speed + offset
 
     rig.scroll.direction.to(0, 1)
@@ -195,11 +195,29 @@ def test_scroll_speed_offset_add(on_success, on_failure):
 
     def check_scroll():
         rig_check = actions.user.mouse_rig()
+        print(f"DEBUG: scroll_speed={rig_check.state.scroll_speed}, expected={expected_speed}")
+        print(f"DEBUG: layers={rig_check.state.layers}")
+        print(f"DEBUG: layer_groups={list(rig_check.state._layer_groups.keys())}")
+
+        # Check if any offset layer exists
+        for layer_name in rig_check.state._layer_groups.keys():
+            if "offset" in layer_name:
+                group = rig_check.state._layer_groups[layer_name]
+                print(f"DEBUG: Found offset layer: {layer_name}")
+                print(f"DEBUG:   property={group.property}, mode={group.mode}")
+                print(f"DEBUG:   accumulated_value={group.accumulated_value}")
+                print(f"DEBUG:   get_current_value()={group.get_current_value()}")
+                if group.builders:
+                    builder = group.builders[0]
+                    print(f"DEBUG:   input_type={getattr(builder.config, 'input_type', 'move')}")
+                else:
+                    print(f"DEBUG:   No active builders (completed instantly)")
+
         if abs(rig_check.state.scroll_speed - expected_speed) > 0.1:
             on_failure(f"Scroll speed with offset wrong: expected {expected_speed}, got {rig_check.state.scroll_speed}")
             return
-        if "scroll.speed.offset" not in rig_check.state.layers:
-            on_failure(f"Expected scroll.speed.offset layer, got: {rig_check.state.layers}")
+        if "scroll:speed.offset" not in rig_check.state.layers:
+            on_failure(f"Expected scroll:speed.offset layer, got: {rig_check.state.layers}")
             return
 
         rig_check.stop()
@@ -263,8 +281,8 @@ def test_scroll_speed_offset_revert(on_success, on_failure):
         if abs(rig_check.state.scroll_speed - base_speed) > 0.1:
             on_failure(f"Scroll speed after revert wrong: expected {base_speed}, got {rig_check.state.scroll_speed}")
             return
-        if "scroll.speed.offset" in rig_check.state.layers:
-            on_failure(f"scroll.speed.offset layer should be gone, got: {rig_check.state.layers}")
+        if "scroll:speed.offset" in rig_check.state.layers:
+            on_failure(f"scroll:speed.offset layer should be gone, got: {rig_check.state.layers}")
             return
 
         rig_check.stop()

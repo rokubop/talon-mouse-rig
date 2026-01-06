@@ -605,23 +605,24 @@ class RigState:
             property=builder.config.property,
             mode=builder.config.mode,
             layer_type=builder.config.layer_type,
-            order=builder.config.order
+            order=builder.config.order,
+            input_type=builder.config.input_type
         )
 
         # Initialize base layer accumulated_value from actual base state
         # This ensures that when groups are recreated after deletion, they start with correct values
         if group.is_base:
-            # Get mechanism from builder to determine which base state to use
-            mechanism = getattr(builder.config, 'mechanism', 'move')
+            # Get input_type from group to determine which base state to use
+            input_type = group.input_type
 
-            if mechanism == "scroll":
-                # Scroll mechanism - use scroll base state
+            if input_type == "scroll":
+                # Scroll input_type - use scroll base state
                 if builder.config.property == "speed":
                     group.accumulated_value = self._base_scroll_speed
                 elif builder.config.property == "direction":
                     group.accumulated_value = self._base_scroll_direction.copy()
             else:
-                # Mouse movement mechanism (default)
+                # Mouse movement input_type (default)
                 if builder.config.property == "speed":
                     group.accumulated_value = self._base_speed
                 elif builder.config.property == "direction":
@@ -715,11 +716,11 @@ class RigState:
         current_value = group.get_current_value()
         prop = group.property
 
-        # Get mechanism from first builder in group
-        mechanism = getattr(group.builders[0].config, 'mechanism', 'move') if group.builders else 'move'
+        # Get input_type from group
+        input_type = group.input_type
 
-        # Route to correct base state based on mechanism
-        if mechanism == "scroll":
+        # Route to correct base state based on input_type
+        if input_type == "scroll":
             # Apply to scroll base state
             if prop == "speed":
                 self._base_scroll_speed = float(current_value)
@@ -736,7 +737,7 @@ class RigState:
                     self._base_scroll_direction = current_value.normalized()
                     self._base_scroll_speed = current_value.magnitude()
         else:
-            # Apply to mouse movement base state (default mechanism)
+            # Apply to mouse movement base state (default input_type)
             if prop == "pos":
                 if isinstance(current_value, tuple):
                     self._absolute_base_pos = Vec2.from_tuple(current_value)
@@ -820,10 +821,10 @@ class RigState:
         # Get property and mode from builder config
         prop = builder.config.property
         mode = builder.config.mode
-        mechanism = getattr(builder.config, 'mechanism', 'move')
+        input_type = getattr(builder.config, 'input_type', 'move')
 
-        # Route to correct base state based on mechanism
-        if mechanism == "scroll":
+        # Route to correct base state based on input_type
+        if input_type == "scroll":
             # Bake to scroll base state
             if prop == "vector":
                 self._base_scroll_speed, self._base_scroll_direction = mode_operations.apply_vector_mode(
@@ -834,7 +835,7 @@ class RigState:
             elif prop == "direction":
                 self._base_scroll_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_scroll_direction)
         else:
-            # Bake to mouse movement base state (default mechanism)
+            # Bake to mouse movement base state (default input_type)
             if prop == "vector":
                 # Decompose vector into speed and direction
                 self._base_speed, self._base_direction = mode_operations.apply_vector_mode(
@@ -847,7 +848,7 @@ class RigState:
             elif prop == "direction":
                 self._base_direction = mode_operations.apply_direction_mode(mode, current_value, self._base_direction)
 
-        # Position is mechanism-agnostic (only used for mouse currently)
+        # Position is input_type-agnostic (only used for mouse currently)
         if prop == "pos":
             if mode == "offset":
                 # Offset mode: current_value is an offset vector
@@ -1019,10 +1020,10 @@ class RigState:
         current_value = group.get_current_value()
         pos_is_override = False
 
-        # Check mechanism first to route properly
-        mechanism = getattr(group.builders[0].config, 'mechanism', 'move') if group.builders else 'move'
+        # Check input_type first to route properly
+        input_type = group.input_type
 
-        if mechanism == "scroll":
+        if input_type == "scroll":
             # Apply to scroll state only
             if prop == "speed":
                 scroll_speed = mode_operations.apply_scalar_mode(mode, current_value, scroll_speed)
@@ -1031,7 +1032,7 @@ class RigState:
             elif prop == "vector":
                 scroll_speed, scroll_direction = mode_operations.apply_vector_mode(mode, current_value, scroll_speed, scroll_direction)
         else:
-            # Apply to mouse movement state (default 'move' mechanism)
+            # Apply to mouse movement state (default 'move' input_type)
             if prop == "speed":
                 speed = mode_operations.apply_scalar_mode(mode, current_value, speed)
             elif prop == "direction":
@@ -1039,7 +1040,7 @@ class RigState:
             elif prop == "vector":
                 speed, direction = mode_operations.apply_vector_mode(mode, current_value, speed, direction)
 
-        # Position is mechanism-agnostic (only used for mouse currently)
+        # Position is input_type-agnostic (only used for mouse currently)
         if prop == "pos":
             pos = mode_operations.apply_position_mode(mode, current_value, pos)
             pos_is_override = (mode == "override")
@@ -1050,7 +1051,7 @@ class RigState:
         """Compute current velocity from speed and direction builders.
 
         Returns:
-            (speed, direction) tuple for mouse movement mechanism only
+            (speed, direction) tuple for mouse movement input_type only
         """
         speed = self._base_speed
         direction = Vec2(self._base_direction.x, self._base_direction.y)
@@ -1061,13 +1062,11 @@ class RigState:
         emit_groups = []
 
         for layer_name, group in self._layer_groups.items():
-            # Only process velocity for 'move' mechanism (mouse movement)
+            # Only process velocity for 'move' input_type (mouse movement)
             if group.property in ("speed", "direction", "vector"):
-                # Check mechanism - default to 'move' if not set
-                if group.builders:
-                    mechanism = getattr(group.builders[0].config, 'mechanism', 'move')
-                    if mechanism != 'move':
-                        continue  # Skip scroll and other mechanisms
+                # Check input_type
+                if group.input_type != 'move':
+                    continue  # Skip scroll and other input_types
 
                 if group.is_emit_layer:
                     # Emit layers are pure additive offsets processed separately
@@ -1292,10 +1291,9 @@ class RigState:
         # Find by_lines setting from first active scroll builder
         by_lines = True  # Default
         for group in self._layer_groups.values():
-            if group.builders:
-                mechanism = getattr(group.builders[0].config, 'mechanism', 'move')
-                if mechanism == "scroll" and group.property in ("speed", "direction", "vector"):
-                    # Use by_lines from first active scroll builder
+            if group.input_type == "scroll" and group.property in ("speed", "direction", "vector"):
+                # Use by_lines from first active scroll builder
+                if group.builders:
                     by_lines = group.builders[0].config.by_lines
                     break
 
@@ -2358,23 +2356,38 @@ class RigState:
         if transition_ms is None or transition_ms == 0:
             # Immediate stop
             self._base_speed = 0.0
+            self._base_scroll_speed = 0.0
             # Stop frame loop if no active groups
             if len(self._layer_groups) == 0:
                 self._stop_frame_loop()
         else:
-            # Smooth deceleration - create base layer builder
+            # Smooth deceleration - create base layer builders for both mouse and scroll
             from .builder import ActiveBuilder
 
-            config = BuilderConfig()
-            config.property = "speed"
-            config.layer_name = f"base.{config.property}"
-            config.operator = "to"
-            config.value = 0
-            config.over_ms = transition_ms
-            config.over_easing = easing
+            # Mouse speed deceleration
+            if self._base_speed != 0:
+                config = BuilderConfig()
+                config.property = "speed"
+                config.layer_name = f"base.{config.property}"
+                config.operator = "to"
+                config.value = 0
+                config.over_ms = transition_ms
+                config.over_easing = easing
+                builder = ActiveBuilder(config, self, is_base_layer=True)
+                self.add_builder(builder)
 
-            builder = ActiveBuilder(config, self, is_base_layer=True)
-            self.add_builder(builder)
+            # Scroll speed deceleration
+            if self._base_scroll_speed != 0:
+                scroll_config = BuilderConfig()
+                scroll_config.property = "speed"
+                scroll_config.input_type = "scroll"
+                scroll_config.layer_name = f"scroll:base.{scroll_config.property}"
+                scroll_config.operator = "to"
+                scroll_config.value = 0
+                scroll_config.over_ms = transition_ms
+                scroll_config.over_easing = easing
+                scroll_builder = ActiveBuilder(scroll_config, self, is_base_layer=True)
+                self.add_builder(scroll_builder)
 
     def reverse(self, transition_ms: Optional[float] = None):
         """Reverse direction (180 degrees turn)"""
