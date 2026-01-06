@@ -523,6 +523,262 @@ def test_scroll_speed_offset_add_revert(on_success, on_failure):
     cron.after("2200ms", check_reverted)
 
 
+# ============================================================================
+# SCROLL API TESTS (one-time scroll amounts)
+# ============================================================================
+
+def test_scroll_to_amount(on_success, on_failure):
+    """Test: rig.scroll.to(x, y) - one-time scroll amount (like pos for movement)"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    target = (50, 100)
+    rig.scroll.to(*target)
+
+    def check_scroll():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+        if abs(scroll.x - target[0]) > 0.1 or abs(scroll.y - target[1]) > 0.1:
+            on_failure(f"Scroll amount wrong: expected {target}, got ({scroll.x}, {scroll.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check_scroll)
+
+
+def test_scroll_pos_alias(on_success, on_failure):
+    """Test: rig.scroll.pos.to() - alias for scroll.to()"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    target = (75, 25)
+    rig.scroll.pos.to(*target)
+
+    def check_scroll():
+        rig_check = actions.user.mouse_rig()
+        scroll_pos = rig_check.state.scroll.pos
+        if abs(scroll_pos.current.x - target[0]) > 0.1 or abs(scroll_pos.current.y - target[1]) > 0.1:
+            on_failure(f"Scroll pos wrong: expected {target}, got ({scroll_pos.current.x}, {scroll_pos.current.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check_scroll)
+
+
+def test_scroll_by_amount(on_success, on_failure):
+    """Test: rig.scroll.by(x, y) - scroll by delta amount"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    initial = (10, 10)
+    delta = (20, 30)
+    expected = (initial[0] + delta[0], initial[1] + delta[1])
+
+    rig.scroll.to(*initial)
+
+    def add_delta():
+        rig.scroll.by(*delta)
+
+    def check_scroll():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+        if abs(scroll.x - expected[0]) > 0.1 or abs(scroll.y - expected[1]) > 0.1:
+            on_failure(f"Scroll by wrong: expected {expected}, got ({scroll.x}, {scroll.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", add_delta)
+    cron.after("200ms", check_scroll)
+
+
+def test_scroll_over_time(on_success, on_failure):
+    """Test: rig.scroll.to().over() - animated scroll amount"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    start = (0, 0)
+    target = (100, 50)
+    duration_ms = 1000
+
+    rig.scroll.to(*start)
+
+    def start_animation():
+        rig.scroll.to(*target).over(duration_ms)
+
+    def check_midpoint():
+        rig_mid = actions.user.mouse_rig()
+        scroll = rig_mid.state.scroll
+        # Should be somewhere between start and target
+        if not (10 < scroll.x < 90):
+            on_failure(f"Midpoint scroll.x should be between 10 and 90, got {scroll.x}")
+            return
+
+    def check_final():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+        if abs(scroll.x - target[0]) > 1 or abs(scroll.y - target[1]) > 1:
+            on_failure(f"Final scroll wrong: expected {target}, got ({scroll.x}, {scroll.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_animation)
+    cron.after("600ms", check_midpoint)
+    cron.after("1200ms", check_final)
+
+
+def test_scroll_state_properties(on_success, on_failure):
+    """Test: scroll state property access - .current, .target, .x, .y"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    target = (80, 60)
+    rig.scroll.to(*target).over(500)
+
+    def check_properties():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+
+        # Check .current property
+        if not hasattr(scroll, 'current'):
+            on_failure("scroll should have .current property")
+            return
+
+        # Check .target property
+        if not hasattr(scroll, 'target'):
+            on_failure("scroll should have .target property")
+            return
+
+        # Check .x and .y shortcuts
+        if not hasattr(scroll, 'x') or not hasattr(scroll, 'y'):
+            on_failure("scroll should have .x and .y properties")
+            return
+
+        # Verify target is set correctly
+        if scroll.target is None:
+            on_failure("scroll.target should not be None during animation")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check_properties)
+
+
+def test_scroll_offset_mode(on_success, on_failure):
+    """Test: rig.scroll.offset.to() - scroll offset layer"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    base = (10, 10)
+    offset = (5, 15)
+    expected = (base[0] + offset[0], base[1] + offset[1])
+
+    rig.scroll.to(*base)
+
+    def add_offset():
+        rig.scroll.offset.to(*offset)
+
+    def check_scroll():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+        if abs(scroll.x - expected[0]) > 0.1 or abs(scroll.y - expected[1]) > 0.1:
+            on_failure(f"Scroll with offset wrong: expected {expected}, got ({scroll.x}, {scroll.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", add_offset)
+    cron.after("200ms", check_scroll)
+
+
+def test_scroll_nested_properties(on_success, on_failure):
+    """Test: scroll nested properties - speed, direction, vector access"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.speed.to(10)
+    rig.scroll.direction.to(1, 0)
+
+    def check_properties():
+        rig_check = actions.user.mouse_rig()
+        scroll = rig_check.state.scroll
+
+        # Check nested properties exist
+        if not hasattr(scroll, 'speed'):
+            on_failure("scroll should have .speed property")
+            return
+        if not hasattr(scroll, 'direction'):
+            on_failure("scroll should have .direction property")
+            return
+        if not hasattr(scroll, 'vector'):
+            on_failure("scroll should have .vector property")
+            return
+
+        # Check speed value
+        speed = scroll.speed
+        if abs(speed.current - 10) > 0.1:
+            on_failure(f"scroll.speed.current should be 10, got {speed.current}")
+            return
+
+        # Check direction value
+        direction = scroll.direction
+        if abs(direction.current.x - 1) > 0.1 or abs(direction.current.y) > 0.1:
+            on_failure(f"scroll.direction.current should be (1, 0), got ({direction.current.x}, {direction.current.y})")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check_properties)
+
+
+def test_scroll_base_state(on_success, on_failure):
+    """Test: rig.state.base.scroll - base scroll state access"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    base_amount = (30, 40)
+    rig.scroll.to(*base_amount)
+
+    def check_base():
+        rig_check = actions.user.mouse_rig()
+        base_scroll = rig_check.state.base.scroll
+
+        if not hasattr(base_scroll, 'current'):
+            on_failure("base.scroll should have .current property")
+            return
+
+        if not hasattr(base_scroll, 'speed'):
+            on_failure("base.scroll should have .speed property")
+            return
+
+        if not hasattr(base_scroll, 'direction'):
+            on_failure("base.scroll should have .direction property")
+            return
+
+        # Clean up
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", check_base)
+
+
 # Export test list
 SCROLL_TESTS = [
     ("scroll.speed.to()", test_scroll_speed_to),
@@ -540,4 +796,12 @@ SCROLL_TESTS = [
     ("scroll horizontal", test_scroll_horizontal),
     ("scroll.emit()", test_scroll_emit),
     ("scroll.speed.offset.add().revert()", test_scroll_speed_offset_add_revert),
+    ("scroll.to() - one-time amount", test_scroll_to_amount),
+    ("scroll.pos.to() - alias", test_scroll_pos_alias),
+    ("scroll.by() - delta", test_scroll_by_amount),
+    ("scroll.to().over() - animated", test_scroll_over_time),
+    ("scroll state properties", test_scroll_state_properties),
+    ("scroll.offset.to()", test_scroll_offset_mode),
+    ("scroll nested properties", test_scroll_nested_properties),
+    ("scroll base state", test_scroll_base_state),
 ]

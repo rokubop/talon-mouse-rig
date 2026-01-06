@@ -94,7 +94,10 @@ class ModeProxy:
 
 
 class ScrollPropertyProxy:
-    """Proxy for scroll input_type - sets input_type then returns normal property builders"""
+    """Proxy for scroll input_type - sets input_type then returns normal property builders
+
+    Also provides direct animation methods that act as aliases for scroll.vector
+    """
 
     def __init__(self, builder: 'RigBuilder', mode: str = None):
         self.builder = builder
@@ -134,6 +137,26 @@ class ScrollPropertyProxy:
     def scale(self) -> 'ScrollPropertyProxy':
         self.mode = "scale"
         return self
+
+    @property
+    def pos(self) -> 'PropertyBuilder':
+        """Scroll position/amount (relative scroll with .to() or .by())"""
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "pos")
+
+    # Direct animation methods for one-time scroll
+    def to(self, *args) -> 'RigBuilder':
+        """Scroll by delta amount (alias for .by() since scroll has no absolute position)"""
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "pos").by(*args)
+
+    def by(self, *args) -> 'RigBuilder':
+        """Scroll by delta amount (relative one-time scroll)"""
+        if self.mode:
+            self.builder.config.mode = self.mode
+        return PropertyBuilder(self.builder, "pos").by(*args)
 
 
 class RigBuilder:
@@ -781,6 +804,9 @@ class RigBuilder:
                 result = self.rig_state._base_scroll_speed
             elif self.config.property == "direction":
                 result = Vec2(self.rig_state._base_scroll_direction.x, self.rig_state._base_scroll_direction.y)
+            elif self.config.property == "pos":
+                # Scroll pos = scroll amount (like pos for movement)
+                result = self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
             elif self.config.property == "vector":
                 result = self.rig_state._base_scroll_direction * self.rig_state._base_scroll_speed
             else:

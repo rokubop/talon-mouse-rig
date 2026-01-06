@@ -2126,9 +2126,11 @@ class RigState:
 
         @property
         def pos(self) -> 'RigState.BasePropertyState':
-            """Alias for scroll (scroll position)"""
-            base_scroll_pos = self._rig_state._base_scroll_direction * self._rig_state._base_scroll_speed
-            return RigState.BasePropertyState(self._rig_state, "scroll", base_scroll_pos)
+            """Base scroll amount (one-time scroll, like pos for movement)"""
+            # Note: For now, scroll doesn't have a separate 'pos' base value like movement does
+            # So we return the scroll_vector as the base scroll amount
+            base_scroll_amount = self._rig_state._base_scroll_direction * self._rig_state._base_scroll_speed
+            return RigState.BasePropertyState(self._rig_state, "scroll", base_scroll_amount)
 
         @property
         def speed(self) -> 'RigState.BasePropertyState':
@@ -2198,7 +2200,9 @@ class RigState:
 
         @property
         def pos(self) -> 'RigState.SmartPropertyState':
-            """Alias for scroll vector (scroll position) with layer access"""
+            """Scroll amount (one-time scroll, like pos for movement) with layer access"""
+            # Note: For now, scroll doesn't have a separate 'pos' computed value
+            # So we return the computed scroll amount
             scroll_speed = self._rig_state._compute_current_state()[3]
             scroll_direction = self._rig_state._compute_current_state()[4]
             return RigState.SmartPropertyState(self._rig_state, "scroll", scroll_direction * scroll_speed)
