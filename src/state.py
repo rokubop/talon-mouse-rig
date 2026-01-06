@@ -80,9 +80,7 @@ class RigState:
         speed = self.speed
         direction = self.direction
         vector = self.vector
-        scroll_speed = self.scroll_speed
-        scroll_direction = self.scroll_direction
-        scroll_vector = self.scroll_vector
+        scroll = self.scroll
         layers = self.layers
         try:
             cardinal = self.direction_cardinal
@@ -92,34 +90,62 @@ class RigState:
             import traceback
             traceback.print_exc()
 
+        try:
+            scroll_cardinal = scroll.direction_cardinal
+        except Exception as e:
+            scroll_cardinal = None
+            print(f"Error getting scroll.direction_cardinal: {e}")
+            import traceback
+            traceback.print_exc()
+
         lines = [
             "RigState:",
             f"  pos = ({pos.x:.1f}, {pos.y:.1f})",
-            f"  pos.value = ({pos.value.x:.1f}, {pos.value.y:.1f}), pos.target = {pos.target}",
+            f"  pos.current = ({pos.current.x:.1f}, {pos.current.y:.1f}), pos.target = {pos.target}",
             f"  pos.x = {pos.x:.1f}, pos.y = {pos.y:.1f}",
-            f"  speed = {speed.value:.1f}",
-            f"  speed.value = {speed.value:.1f}, speed.target = {speed.target}",
+            f"  speed = {speed.current:.1f}",
+            f"  speed.current = {speed.current:.1f}, speed.target = {speed.target}",
             f"  direction = ({direction.x:.2f}, {direction.y:.2f})",
-            f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
+            f"  direction.current = ({direction.current.x:.2f}, {direction.current.y:.2f}), direction.target = {direction.target}",
         ]
 
         if cardinal:
             lines.extend([
-                f"  direction_cardinal = {cardinal.value or 'None'}",
-                f"  direction_cardinal.value = {cardinal.value or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
+                f"  direction_cardinal = {cardinal.current or 'None'}",
+                f"  direction_cardinal.current = {cardinal.current or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
             ])
         else:
             lines.extend([
                 f"  direction_cardinal = None",
-                f"  direction_cardinal.value = None, direction_cardinal.target = None",
+                f"  direction_cardinal.current = None, direction_cardinal.target = None",
             ])
 
         lines.extend([
             f"  vector = ({vector.x:.2f}, {vector.y:.2f})",
-            f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
-            f"  scroll_speed = {scroll_speed.value:.2f}",
-            f"  scroll_direction = ({scroll_direction.x:.2f}, {scroll_direction.y:.2f})",
-            f"  scroll_vector = ({scroll_vector.x:.2f}, {scroll_vector.y:.2f})",
+            f"  vector.current = ({vector.current.x:.2f}, {vector.current.y:.2f}), vector.target = {vector.target}",
+            f"  scroll = ({scroll.x:.2f}, {scroll.y:.2f})",
+            f"  scroll.current = ({scroll.current.x:.2f}, {scroll.current.y:.2f}), scroll.target = {scroll.target}",
+            f"  scroll.x = {scroll.x:.2f}, scroll.y = {scroll.y:.2f}",
+            f"  scroll.speed = {scroll.speed.current:.2f}",
+            f"  scroll.speed.current = {scroll.speed.current:.2f}, scroll.speed.target = {scroll.speed.target}",
+            f"  scroll.direction = ({scroll.direction.x:.2f}, {scroll.direction.y:.2f})",
+            f"  scroll.direction.current = ({scroll.direction.current.x:.2f}, {scroll.direction.current.y:.2f}), scroll.direction.target = {scroll.direction.target}",
+        ])
+
+        if scroll_cardinal:
+            lines.extend([
+                f"  scroll.direction_cardinal = {scroll_cardinal.current or 'None'}",
+                f"  scroll.direction_cardinal.current = {scroll_cardinal.current or 'None'}, scroll.direction_cardinal.target = {scroll_cardinal.target or 'None'}",
+            ])
+        else:
+            lines.extend([
+                f"  scroll.direction_cardinal = None",
+                f"  scroll.direction_cardinal.current = None, scroll.direction_cardinal.target = None",
+            ])
+
+        lines.extend([
+            f"  scroll.vector = ({scroll.vector.x:.2f}, {scroll.vector.y:.2f})",
+            f"  scroll.vector.current = ({scroll.vector.current.x:.2f}, {scroll.vector.current.y:.2f}), scroll.vector.target = {scroll.vector.target}",
             f"  layers = {layers}",
             f"  base = <BaseState>",
             f"  layer(name) = <LayerState | None>",
@@ -1281,8 +1307,8 @@ class RigState:
         """Emit scroll events based on current scroll velocity (speed * direction)"""
         from talon import actions
 
-        scroll_speed = self.scroll_speed.value
-        scroll_direction = self.scroll_direction.value
+        scroll_speed = self.scroll_speed.current
+        scroll_direction = self.scroll_direction.current
 
         # Skip if no scroll speed
         if abs(scroll_speed) < 0.01:
@@ -1717,13 +1743,13 @@ class RigState:
 
     # Public API for reading state
     class CardinalPropertyState:
-        """Smart accessor for direction_cardinal with .value and .target"""
+        """Smart accessor for direction_cardinal with .current and .target"""
         def __init__(self, rig_state: 'RigState', current_cardinal: Optional[str]):
             self._rig_state = rig_state
             self._current_cardinal = current_cardinal
 
         @property
-        def value(self) -> Optional[str]:
+        def current(self) -> Optional[str]:
             """Current cardinal direction"""
             return self._current_cardinal
 
@@ -1744,7 +1770,7 @@ class RigState:
             return None
 
         def __repr__(self):
-            return f"CardinalPropertyState(value={self._current_cardinal}, target={self.target})"
+            return f"CardinalPropertyState(current={self._current_cardinal}, target={self.target})"
 
         def __str__(self):
             return str(self._current_cardinal)
@@ -1857,7 +1883,7 @@ class RigState:
             return "accumulated"
 
         @property
-        def value(self):
+        def current(self):
             """Current value from LayerGroup (includes accumulated + all active builders)"""
             return self._group.get_current_value()
 
@@ -1920,14 +1946,14 @@ class RigState:
 
     # Base state access
     class BasePropertyState:
-        """Smart accessor for base state properties with .value and .target"""
+        """Smart accessor for base state properties with .current and .target"""
         def __init__(self, rig_state: 'RigState', property_name: str, base_value):
             self._rig_state = rig_state
             self._property_name = property_name
             self._base_value = base_value
 
         @property
-        def value(self):
+        def current(self):
             """Current baked base value"""
             return self._base_value
 
@@ -1953,55 +1979,55 @@ class RigState:
 
         # Magic methods to make BasePropertyState behave like the underlying value
         def __add__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value + other_val
 
         def __radd__(self, other):
             return other + self._base_value
 
         def __sub__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value - other_val
 
         def __rsub__(self, other):
             return other - self._base_value
 
         def __mul__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value * other_val
 
         def __rmul__(self, other):
             return other * self._base_value
 
         def __truediv__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value / other_val
 
         def __rtruediv__(self, other):
             return other / self._base_value
 
         def __eq__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value == other_val
 
         def __ne__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value != other_val
 
         def __lt__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value < other_val
 
         def __le__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value <= other_val
 
         def __gt__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value > other_val
 
         def __ge__(self, other):
-            other_val = other.value if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
+            other_val = other.current if isinstance(other, (RigState.BasePropertyState, RigState.SmartPropertyState)) else other
             return self._base_value >= other_val
 
         def __float__(self):
@@ -2027,20 +2053,33 @@ class RigState:
             direction = self.direction
             vector = self.vector
             cardinal = self.direction_cardinal
+            scroll = self.scroll
+            scroll_cardinal = scroll.direction_cardinal
 
             lines = [
                 "BaseState:",
-                f"  pos = ({pos.value.x:.1f}, {pos.value.y:.1f})",
-                f"  pos.value = ({pos.value.x:.1f}, {pos.value.y:.1f}), pos.target = {pos.target}",
+                f"  pos = ({pos.current.x:.1f}, {pos.current.y:.1f})",
+                f"  pos.current = ({pos.current.x:.1f}, {pos.current.y:.1f}), pos.target = {pos.target}",
                 f"  pos.x = {pos.x:.1f}, pos.y = {pos.y:.1f}",
-                f"  speed = {speed.value:.1f}",
-                f"  speed.value = {speed.value:.1f}, speed.target = {speed.target}",
-                f"  direction = ({direction.value.x:.2f}, {direction.value.y:.2f})",
-                f"  direction.value = ({direction.value.x:.2f}, {direction.value.y:.2f}), direction.target = {direction.target}",
-                f"  direction_cardinal = {cardinal.value or 'None'}",
-                f"  direction_cardinal.value = {cardinal.value or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
-                f"  vector = ({vector.value.x:.2f}, {vector.value.y:.2f})",
-                f"  vector.value = ({vector.value.x:.2f}, {vector.value.y:.2f}), vector.target = {vector.target}",
+                f"  speed = {speed.current:.1f}",
+                f"  speed.current = {speed.current:.1f}, speed.target = {speed.target}",
+                f"  direction = ({direction.current.x:.2f}, {direction.current.y:.2f})",
+                f"  direction.current = ({direction.current.x:.2f}, {direction.current.y:.2f}), direction.target = {direction.target}",
+                f"  direction_cardinal = {cardinal.current or 'None'}",
+                f"  direction_cardinal.current = {cardinal.current or 'None'}, direction_cardinal.target = {cardinal.target or 'None'}",
+                f"  vector = ({vector.current.x:.2f}, {vector.current.y:.2f})",
+                f"  vector.current = ({vector.current.x:.2f}, {vector.current.y:.2f}), vector.target = {vector.target}",
+                f"  scroll = ({scroll.current.x:.2f}, {scroll.current.y:.2f})",
+                f"  scroll.current = ({scroll.current.x:.2f}, {scroll.current.y:.2f}), scroll.target = {scroll.target}",
+                f"  scroll.x = {scroll.x:.2f}, scroll.y = {scroll.y:.2f}",
+                f"  scroll.speed = {scroll.speed.current:.2f}",
+                f"  scroll.speed.current = {scroll.speed.current:.2f}, scroll.speed.target = {scroll.speed.target}",
+                f"  scroll.direction = ({scroll.direction.current.x:.2f}, {scroll.direction.current.y:.2f})",
+                f"  scroll.direction.current = ({scroll.direction.current.x:.2f}, {scroll.direction.current.y:.2f}), scroll.direction.target = {scroll.direction.target}",
+                f"  scroll.direction_cardinal = {scroll_cardinal.current or 'None'}",
+                f"  scroll.direction_cardinal.current = {scroll_cardinal.current or 'None'}, scroll.direction_cardinal.target = {scroll_cardinal.target or 'None'}",
+                f"  scroll.vector = ({scroll.vector.current.x:.2f}, {scroll.vector.current.y:.2f})",
+                f"  scroll.vector.current = ({scroll.vector.current.x:.2f}, {scroll.vector.current.y:.2f}), scroll.vector.target = {scroll.vector.target}",
             ]
             return "\n".join(lines)
 
@@ -2075,10 +2114,157 @@ class RigState:
             base_vector = self._rig_state._base_direction * self._rig_state._base_speed
             return RigState.BasePropertyState(self._rig_state, "vector", base_vector)
 
+        @property
+        def scroll(self) -> 'RigState.BaseScrollPropertyContainer':
+            """Base scroll property container"""
+            return RigState.BaseScrollPropertyContainer(self._rig_state)
+
+    class BaseScrollPropertyContainer:
+        """Container for base scroll properties (pos, speed, direction, vector)"""
+        def __init__(self, rig_state: 'RigState'):
+            self._rig_state = rig_state
+
+        @property
+        def pos(self) -> 'RigState.BasePropertyState':
+            """Alias for scroll (scroll position)"""
+            base_scroll_pos = self._rig_state._base_scroll_direction * self._rig_state._base_scroll_speed
+            return RigState.BasePropertyState(self._rig_state, "scroll", base_scroll_pos)
+
+        @property
+        def speed(self) -> 'RigState.BasePropertyState':
+            return RigState.BasePropertyState(self._rig_state, "scroll_speed", self._rig_state._base_scroll_speed)
+
+        @property
+        def direction(self) -> 'RigState.BasePropertyState':
+            return RigState.BasePropertyState(self._rig_state, "scroll_direction", self._rig_state._base_scroll_direction)
+
+        @property
+        def direction_cardinal(self) -> 'RigState.CardinalPropertyState':
+            """Base scroll direction as cardinal/intercardinal string"""
+            cardinal = self._rig_state._get_cardinal_direction(self._rig_state._base_scroll_direction)
+            return RigState.CardinalPropertyState(self._rig_state, cardinal)
+
+        @property
+        def vector(self) -> 'RigState.BasePropertyState':
+            """Base scroll vector (scroll_speed * scroll_direction)"""
+            base_scroll_vector = self._rig_state._base_scroll_direction * self._rig_state._base_scroll_speed
+            return RigState.BasePropertyState(self._rig_state, "scroll_vector", base_scroll_vector)
+
+        # Shortcuts to match scroll API
+        @property
+        def current(self):
+            """Current base scroll vector value"""
+            return self._rig_state._base_scroll_direction * self._rig_state._base_scroll_speed
+
+        @property
+        def target(self):
+            """Target value from base scroll animation (None if no base animation)"""
+            # Check for base.scroll layer
+            for layer_name, group in self._rig_state._layer_groups.items():
+                if (group.is_base and
+                    group.property in ("scroll", "scroll_vector") and
+                    len(group.builders) > 0):
+                    for builder in group.builders:
+                        if not builder.lifecycle.is_complete():
+                            return builder.target_value
+            return None
+
+        @property
+        def x(self):
+            """X component of the base scroll vector"""
+            return self.current.x
+
+        @property
+        def y(self):
+            """Y component of the base scroll vector"""
+            return self.current.y
+
+        def __repr__(self):
+            return f"({self.current.x:.2f}, {self.current.y:.2f})"
+
+        def __str__(self):
+            return self.__repr__()
+
     @property
     def base(self) -> 'RigState.BaseState':
         """Access to base (baked) state only"""
         return RigState.BaseState(self)
+
+    # Scroll property container for computed values
+    class ScrollPropertyContainer:
+        """Container for scroll properties with nested access to pos, speed, direction, vector"""
+        def __init__(self, rig_state: 'RigState'):
+            self._rig_state = rig_state
+
+        @property
+        def pos(self) -> 'RigState.SmartPropertyState':
+            """Alias for scroll vector (scroll position) with layer access"""
+            scroll_speed = self._rig_state._compute_current_state()[3]
+            scroll_direction = self._rig_state._compute_current_state()[4]
+            return RigState.SmartPropertyState(self._rig_state, "scroll", scroll_direction * scroll_speed)
+
+        @property
+        def speed(self) -> 'RigState.SmartPropertyState':
+            """Current computed scroll speed (with .offset, .override, .scale layer access)"""
+            scroll_speed_val = self._rig_state._compute_current_state()[3]
+            return RigState.SmartPropertyState(self._rig_state, "scroll_speed", scroll_speed_val)
+
+        @property
+        def direction(self) -> 'RigState.SmartPropertyState':
+            """Current computed scroll direction (with .offset, .override, .scale layer access)"""
+            scroll_direction_vec = self._rig_state._compute_current_state()[4]
+            return RigState.SmartPropertyState(self._rig_state, "scroll_direction", scroll_direction_vec)
+
+        @property
+        def direction_cardinal(self) -> 'RigState.CardinalPropertyState':
+            """Computed scroll direction as cardinal/intercardinal string"""
+            scroll_direction_vec = self._rig_state._compute_current_state()[4]
+            cardinal = self._rig_state._get_cardinal_direction(scroll_direction_vec)
+            return RigState.CardinalPropertyState(self._rig_state, cardinal)
+
+        @property
+        def vector(self) -> 'RigState.SmartPropertyState':
+            """Current computed scroll vector (with .offset, .override, .scale layer access)"""
+            scroll_speed = self._rig_state._compute_current_state()[3]
+            scroll_direction = self._rig_state._compute_current_state()[4]
+            return RigState.SmartPropertyState(self._rig_state, "scroll_vector", scroll_direction * scroll_speed)
+
+        # Direct value access (matching scroll API)
+        @property
+        def current(self):
+            """Current computed scroll vector value"""
+            scroll_speed = self._rig_state._compute_current_state()[3]
+            scroll_direction = self._rig_state._compute_current_state()[4]
+            return scroll_direction * scroll_speed
+
+        @property
+        def target(self):
+            """Target value from base scroll animation (None if no base animation)"""
+            # Check for base.scroll or base.scroll_vector layer
+            for layer_name, group in self._rig_state._layer_groups.items():
+                if (group.is_base and
+                    group.property in ("scroll", "scroll_vector") and
+                    len(group.builders) > 0):
+                    for builder in group.builders:
+                        if not builder.lifecycle.is_complete():
+                            return builder.target_value
+            return None
+
+        @property
+        def x(self):
+            """X component of the computed scroll vector"""
+            return self.current.x
+
+        @property
+        def y(self):
+            """Y component of the computed scroll vector"""
+            return self.current.y
+
+        def __repr__(self):
+            return f"({self.current.x:.2f}, {self.current.y:.2f})"
+
+        def __str__(self):
+            return self.__repr__()
 
     # Smart property accessors for computed values with layer mode access
     class SmartPropertyState:
@@ -2086,12 +2272,12 @@ class RigState:
         def __init__(self, rig_state: 'RigState', property_name: str, computed_value):
             self._rig_state = rig_state
             self._property_name = property_name
-            self._computed_value = computed_value
+            self._computed_current = computed_value
 
         @property
-        def value(self):
+        def current(self):
             """Current computed value (includes all layers)"""
-            return self._computed_value
+            return self._computed_current
 
         @property
         def target(self):
@@ -2110,17 +2296,17 @@ class RigState:
         # Shortcuts for Vec2 properties (pos, direction, vector)
         @property
         def x(self):
-            """X component of the computed value (shortcut to .value.x)"""
-            if not hasattr(self._computed_value, 'x'):
+            """X component of the computed value (shortcut to .current.x)"""
+            if not hasattr(self._computed_current, 'x'):
                 raise AttributeError(f"Property '{self._property_name}' is a scalar and doesn't have .x component. Only Vec2 properties (pos, direction, vector) support .x/.y shortcuts.")
-            return self._computed_value.x
+            return self._computed_current.x
 
         @property
         def y(self):
-            """Y component of the computed value (shortcut to .value.y)"""
-            if not hasattr(self._computed_value, 'y'):
+            """Y component of the computed value (shortcut to .current.y)"""
+            if not hasattr(self._computed_current, 'y'):
                 raise AttributeError(f"Property '{self._property_name}' is a scalar and doesn't have .y component. Only Vec2 properties (pos, direction, vector) support .x/.y shortcuts.")
-            return self._computed_value.y
+            return self._computed_current.y
 
         # Layer mode accessors
         @property
@@ -2143,18 +2329,18 @@ class RigState:
 
         def __repr__(self):
             # Show available properties/methods, not the computed value
-            prop_type = "Vec2" if hasattr(self._computed_value, 'x') else "scalar"
+            prop_type = "Vec2" if hasattr(self._computed_current, 'x') else "scalar"
 
             parts = [
                 f"SmartPropertyState('{self._property_name}')",
-                f"  .value - Current computed {self._property_name}",
+                f"  .current - Current computed {self._property_name}",
                 f"  .target - Target from base animation (or None)",
             ]
 
             if prop_type == "Vec2":
                 parts.extend([
-                    f"  .x - Shortcut to .value.x",
-                    f"  .y - Shortcut to .value.y",
+                    f"  .x - Shortcut to .current.x",
+                    f"  .y - Shortcut to .current.y",
                 ])
 
             parts.extend([
@@ -2166,102 +2352,102 @@ class RigState:
             return "\n".join(parts)
 
         def __str__(self):
-            return str(self._computed_value)
+            return str(self._computed_current)
 
         # Magic methods to make SmartPropertyState behave like the underlying value
-        # in mathematical operations (auto-delegates to .value)
+        # in mathematical operations (auto-delegates to .current)
         def __add__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value + other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current + other_val
 
         def __radd__(self, other):
-            return other + self._computed_value
+            return other + self._computed_current
 
         def __sub__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value - other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current - other_val
 
         def __rsub__(self, other):
-            return other - self._computed_value
+            return other - self._computed_current
 
         def __mul__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value * other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current * other_val
 
         def __rmul__(self, other):
-            return other * self._computed_value
+            return other * self._computed_current
 
         def __truediv__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value / other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current / other_val
 
         def __rtruediv__(self, other):
-            return other / self._computed_value
+            return other / self._computed_current
 
         def __floordiv__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value // other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current // other_val
 
         def __rfloordiv__(self, other):
-            return other // self._computed_value
+            return other // self._computed_current
 
         def __mod__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value % other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current % other_val
 
         def __rmod__(self, other):
-            return other % self._computed_value
+            return other % self._computed_current
 
         def __pow__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value ** other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current ** other_val
 
         def __rpow__(self, other):
-            return other ** self._computed_value
+            return other ** self._computed_current
 
         def __neg__(self):
-            return -self._computed_value
+            return -self._computed_current
 
         def __pos__(self):
-            return +self._computed_value
+            return +self._computed_current
 
         def __abs__(self):
-            return abs(self._computed_value)
+            return abs(self._computed_current)
 
         # Comparison operators
         def __eq__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value == other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current == other_val
 
         def __ne__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value != other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current != other_val
 
         def __lt__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value < other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current < other_val
 
         def __le__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value <= other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current <= other_val
 
         def __gt__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value > other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current > other_val
 
         def __ge__(self, other):
-            other_val = other.value if isinstance(other, self.__class__) else other
-            return self._computed_value >= other_val
+            other_val = other.current if isinstance(other, self.__class__) else other
+            return self._computed_current >= other_val
 
         # Numeric conversion
         def __float__(self):
-            return float(self._computed_value)
+            return float(self._computed_current)
 
         def __int__(self):
-            return int(self._computed_value)
+            return int(self._computed_current)
 
         def __bool__(self):
-            return bool(self._computed_value)
+            return bool(self._computed_current)
 
         def __getattr__(self, name):
             """Delegate attribute/method access to the underlying computed value
@@ -2269,7 +2455,7 @@ class RigState:
             This allows Vec2 methods like .to_cardinal(), .normalized(), etc. to work
             on SmartPropertyState objects transparently.
             """
-            return getattr(self._computed_value, name)
+            return getattr(self._computed_current, name)
 
     # Override property getters to return smart accessors
     @property
@@ -2317,11 +2503,9 @@ class RigState:
         return RigState.SmartPropertyState(self, "vector", scroll_direction * scroll_speed)
 
     @property
-    def scroll(self) -> 'RigState.SmartPropertyState':
-        """Alias for scroll_vector (with .offset, .override, .scale layer access)"""
-        scroll_speed = self._compute_current_state()[3]
-        scroll_direction = self._compute_current_state()[4]
-        return RigState.SmartPropertyState(self, "vector", scroll_direction * scroll_speed)
+    def scroll(self) -> 'RigState.ScrollPropertyContainer':
+        """Scroll property container with nested access to pos, speed, direction, vector"""
+        return RigState.ScrollPropertyContainer(self)
 
     def add_stop_callback(self, callback):
         """Add a callback to fire when the frame loop stops"""

@@ -303,8 +303,8 @@ def test_layer_direction_offset_by(on_success, on_failure):
             return
 
         # Check offset value
-        if offset_state.value != 90:
-            on_failure(f"Offset value is {offset_state.value}, expected 90")
+        if offset_state.current != 90:
+            on_failure(f"Offset value is {offset_state.current}, expected 90")
             return
 
         on_success()
@@ -343,8 +343,8 @@ def test_layer_direction_offset_by_over(on_success, on_failure):
             return
 
         # Check offset value
-        if offset_state.value != 180:
-            on_failure(f"Offset value is {offset_state.value}, expected 180")
+        if offset_state.current != 180:
+            on_failure(f"Offset value is {offset_state.current}, expected 180")
             return
 
         on_success()
