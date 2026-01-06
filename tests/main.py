@@ -303,6 +303,7 @@ def stop_all_tests():
     actions.user.ui_elements_set_state("run_all_Speed", False)
     actions.user.ui_elements_set_state("run_all_Direction", False)
     actions.user.ui_elements_set_state("run_all_Vector", False)
+    actions.user.ui_elements_set_state("run_all_Scroll", False)
     actions.user.ui_elements_set_state("run_all_Validation", False)
     actions.user.ui_elements_set_state("run_all_Contracts", False)
     actions.user.ui_elements_set_state("run_all_Behaviors", False)

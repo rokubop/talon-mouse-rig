@@ -442,6 +442,12 @@ class RigBuilder:
             rig.layer("wind").emit(500, "ease_out").then(lambda: print("Wind faded"))
             rig.layer("wind").copy().emit(500)  # Keep wind layer active
         """
+        # Execute the builder first if it hasn't been executed yet
+        # This ensures the layer exists before we try to emit it
+        # Only execute if the builder is valid and has an operation
+        if not self._executed and self._is_valid and self.config.property is not None:
+            self._execute()
+
         # Validate easing
         self.config.validate_easing(easing, context='emit', mark_invalid=self._mark_invalid)
 
@@ -498,7 +504,11 @@ class RigBuilder:
             velocity = current_value if isinstance(current_value, Vec2) else Vec2(0, 0)
         elif group.property == "speed" and group.mode == "offset":
             # Convert speed offset to vector using current direction
-            current_direction = self.rig_state.direction
+            # Use scroll_direction for scroll input_type, direction for move input_type
+            if group.input_type == "scroll":
+                current_direction = self.rig_state.scroll_direction
+            else:
+                current_direction = self.rig_state.direction
             speed_contrib = group.get_current_value()
             velocity = current_direction * speed_contrib
         else:
@@ -509,9 +519,14 @@ class RigBuilder:
         self.rig_state.remove_builder(layer_name, bake=False)
 
         # Create emit layer with decaying offset and mark it as an emit layer
+        # Preserve input_type (scroll vs move) from the original group
         emit_layer = f"emit.{layer_name}.{int(time.perf_counter() * 1000000)}"
         self._mark_invalid()
-        builder = RigBuilder(self.rig_state, layer=emit_layer).vector.offset.to(velocity.x, velocity.y).revert(ms, easing)
+
+        if group.input_type == "scroll":
+            builder = RigBuilder(self.rig_state, layer=emit_layer).scroll.vector.offset.to(velocity.x, velocity.y).revert(ms, easing)
+        else:
+            builder = RigBuilder(self.rig_state, layer=emit_layer).vector.offset.to(velocity.x, velocity.y).revert(ms, easing)
 
         # Mark the layer group as an emit layer
         if emit_layer in self.rig_state._layer_groups:

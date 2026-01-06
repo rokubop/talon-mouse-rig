@@ -415,10 +415,10 @@ def test_scroll_emit(on_success, on_failure):
 
     rig.scroll.direction.to(0, 1)
     rig.scroll.speed.to(base_speed)
-    
+
     def add_offset():
         rig.scroll.speed.offset.add(emit_offset).emit(300)
-    
+
     def check_after_emit():
         rig_mid = actions.user.mouse_rig()
         # Offset layer should be gone, replaced by emit layer
@@ -434,7 +434,7 @@ def test_scroll_emit(on_success, on_failure):
         if not has_emit_layer:
             on_failure(f"Expected emit layer, got: {rig_mid.state.layers}")
             return
-    
+
     def check_after_fade():
         rig_final = actions.user.mouse_rig()
         # Should be back to base speed after decay
@@ -446,7 +446,7 @@ def test_scroll_emit(on_success, on_failure):
         if has_emit_layer:
             on_failure(f"Emit layer should be gone after fade, got: {rig_final.state.layers}")
             return
-        
+
         rig_final.stop()
         on_success()
 
@@ -465,10 +465,10 @@ def test_scroll_speed_offset_add_revert(on_success, on_failure):
 
     rig.scroll.direction.to(0, 1)
     rig.scroll.speed.to(base_speed)
-    
+
     def start_offset():
         rig.scroll.speed.offset.add(offset).over(1000).revert(1000)
-    
+
     def check_initial():
         rig_check = actions.user.mouse_rig()
         # Should have offset layer active

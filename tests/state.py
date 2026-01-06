@@ -27,6 +27,26 @@ def test_rig_state_empty():
     print(f"rig.state.vector = {rig.state.vector}")
     print(f"rig.state.vector.value = {rig.state.vector.value}")
     print(f"rig.state.vector.target = {rig.state.vector.target}")
+    print(f"rig.state.scroll = {rig.state.scroll}")
+    print(f"rig.state.scroll.value = {rig.state.scroll.value}")
+    print(f"rig.state.scroll.target = {rig.state.scroll.target}")
+    print(f"rig.state.scroll.x = {rig.state.scroll.x}")
+    print(f"rig.state.scroll.y = {rig.state.scroll.y}")
+    print(f"rig.state.scroll.pos = {rig.state.scroll.pos}")
+    print(f"rig.state.scroll.pos.value = {rig.state.scroll.pos.value}")
+    print(f"rig.state.scroll.pos.target = {rig.state.scroll.pos.target}")
+    print(f"rig.state.scroll.speed = {rig.state.scroll.speed}")
+    print(f"rig.state.scroll.speed.value = {rig.state.scroll.speed.value}")
+    print(f"rig.state.scroll.speed.target = {rig.state.scroll.speed.target}")
+    print(f"rig.state.scroll.direction = {rig.state.scroll.direction}")
+    print(f"rig.state.scroll.direction.value = {rig.state.scroll.direction.value}")
+    print(f"rig.state.scroll.direction.target = {rig.state.scroll.direction.target}")
+    print(f"rig.state.scroll.direction_cardinal = {rig.state.scroll.direction_cardinal}")
+    print(f"rig.state.scroll.direction_cardinal.value = {rig.state.scroll.direction_cardinal.value}")
+    print(f"rig.state.scroll.direction_cardinal.target = {rig.state.scroll.direction_cardinal.target}")
+    print(f"rig.state.scroll.vector = {rig.state.scroll.vector}")
+    print(f"rig.state.scroll.vector.value = {rig.state.scroll.vector.value}")
+    print(f"rig.state.scroll.vector.target = {rig.state.scroll.vector.target}")
     print(f"rig.state.layers = {rig.state.layers}")
     print(f"rig.state.frame_loop_active = {rig.state._frame_loop_job is not None}")
 
@@ -57,6 +77,26 @@ def test_base_state_empty():
     print(f"rig.state.base.vector = {rig.state.base.vector}")
     print(f"rig.state.base.vector.value = {rig.state.base.vector.value}")
     print(f"rig.state.base.vector.target = {rig.state.base.vector.target}")
+    print(f"rig.state.base.scroll = {rig.state.base.scroll}")
+    print(f"rig.state.base.scroll.value = {rig.state.base.scroll.value}")
+    print(f"rig.state.base.scroll.target = {rig.state.base.scroll.target}")
+    print(f"rig.state.base.scroll.x = {rig.state.base.scroll.x}")
+    print(f"rig.state.base.scroll.y = {rig.state.base.scroll.y}")
+    print(f"rig.state.base.scroll.pos = {rig.state.base.scroll.pos}")
+    print(f"rig.state.base.scroll.pos.value = {rig.state.base.scroll.pos.value}")
+    print(f"rig.state.base.scroll.pos.target = {rig.state.base.scroll.pos.target}")
+    print(f"rig.state.base.scroll.speed = {rig.state.base.scroll.speed}")
+    print(f"rig.state.base.scroll.speed.value = {rig.state.base.scroll.speed.value}")
+    print(f"rig.state.base.scroll.speed.target = {rig.state.base.scroll.speed.target}")
+    print(f"rig.state.base.scroll.direction = {rig.state.base.scroll.direction}")
+    print(f"rig.state.base.scroll.direction.value = {rig.state.base.scroll.direction.value}")
+    print(f"rig.state.base.scroll.direction.target = {rig.state.base.scroll.direction.target}")
+    print(f"rig.state.base.scroll.direction_cardinal = {rig.state.base.scroll.direction_cardinal}")
+    print(f"rig.state.base.scroll.direction_cardinal.value = {rig.state.base.scroll.direction_cardinal.value}")
+    print(f"rig.state.base.scroll.direction_cardinal.target = {rig.state.base.scroll.direction_cardinal.target}")
+    print(f"rig.state.base.scroll.vector = {rig.state.base.scroll.vector}")
+    print(f"rig.state.base.scroll.vector.value = {rig.state.base.scroll.vector.value}")
+    print(f"rig.state.base.scroll.vector.target = {rig.state.base.scroll.vector.target}")
 
     return True, "BaseState repr shown"
 
@@ -69,6 +109,9 @@ def test_rig_state_with_animations():
     rig.speed.offset.to(3).over(1000)
     rig.direction.to((1, 0)).over(500)
     rig.pos.offset.to((100, 100)).over(2000)
+    rig.scroll.to((50, 50)).over(1500)
+    rig.scroll.speed.to(10).over(800)
+    rig.scroll.direction.to((0, 1)).over(600)
 
     time.sleep(0.1)
 
@@ -85,6 +128,9 @@ def test_base_state_with_animations():
 
     rig.speed.to(5).over(1000)
     rig.direction.to((1, 0)).over(500)
+    rig.scroll.to((50, 50)).over(1500)
+    rig.scroll.speed.to(10).over(800)
+    rig.scroll.direction.to((0, 1)).over(600)
 
     time.sleep(0.1)
 
@@ -174,10 +220,330 @@ def test_layer_state_pos_offset():
     rig.stop()
     return True, "pos.offset layer shown"
 
+def test_layer_state_base_scroll():
+    """Test LayerState repr for base.scroll"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.to((100, 50)).over(1000)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("base.scroll")
+    if not layer:
+        return False, "base.scroll layer not found"
+
+    print("\nLayerState (base.scroll):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "base.scroll layer shown"
+
+def test_layer_state_scroll_offset():
+    """Test LayerState repr for scroll.offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.offset.to((50, 100)).over(1500)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("scroll.offset")
+    if not layer:
+        return False, "scroll.offset layer not found"
+
+    print("\nLayerState (scroll.offset):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "scroll.offset layer shown"
+
+def test_scroll_state_empty():
+    """Test scroll state repr with no scroll animations"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    print("\nScroll state (empty):")
+    print(f"rig.state.scroll = {rig.state.scroll}")
+    print(f"rig.state.scroll.value = {rig.state.scroll.value}")
+    print(f"rig.state.scroll.target = {rig.state.scroll.target}")
+    print(f"rig.state.scroll.x = {rig.state.scroll.x}")
+    print(f"rig.state.scroll.y = {rig.state.scroll.y}")
+    print(f"rig.state.base.scroll = {rig.state.base.scroll}")
+    print(f"rig.state.base.scroll.value = {rig.state.base.scroll.value}")
+    print(f"rig.state.base.scroll.target = {rig.state.base.scroll.target}")
+
+    return True, "Empty scroll state shown"
+
+def test_scroll_state_with_animations():
+    """Test scroll state with active animations on base and offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.to((100, 50)).over(1000)
+    rig.scroll.offset.to((20, 30)).over(800)
+
+    time.sleep(0.1)
+
+    print("\nScroll state (with animations):")
+    print(f"rig.state.scroll = {rig.state.scroll}")
+    print(f"rig.state.scroll.value = {rig.state.scroll.value}")
+    print(f"rig.state.scroll.target = {rig.state.scroll.target}")
+    print(f"rig.state.scroll.x = {rig.state.scroll.x}")
+    print(f"rig.state.scroll.y = {rig.state.scroll.y}")
+
+    print("\nBase scroll state:")
+    print(f"rig.state.base.scroll = {rig.state.base.scroll}")
+    print(f"rig.state.base.scroll.value = {rig.state.base.scroll.value}")
+    print(f"rig.state.base.scroll.target = {rig.state.base.scroll.target}")
+
+    rig.stop()
+    return True, "Scroll state with animations shown"
+
+def test_scroll_layer_custom_named():
+    """Test LayerState repr for custom named scroll layer"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.layer("wobble").scroll.offset.to((15, 25)).over(1000)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("wobble")
+    if not layer:
+        return False, "wobble layer not found"
+
+    print("\nLayerState (wobble - custom named scroll):")
+    print(layer)
+
+    rig.stop()
+    return True, "Custom named scroll layer shown"
+
+def test_layer_state_scroll_pos():
+    """Test LayerState repr for base.scroll.pos"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.pos.to((200, 150)).over(1200)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("base.scroll.pos")
+    if not layer:
+        return False, "base.scroll.pos layer not found"
+
+    print("\nLayerState (base.scroll.pos):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "base.scroll.pos layer shown"
+
+def test_layer_state_scroll_speed():
+    """Test LayerState repr for base.scroll.speed"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.speed.to(15).over(1000)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("base.scroll.speed")
+    if not layer:
+        return False, "base.scroll.speed layer not found"
+
+    print("\nLayerState (base.scroll.speed):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "base.scroll.speed layer shown"
+
+def test_layer_state_scroll_direction():
+    """Test LayerState repr for base.scroll.direction"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.direction.to((1, 1)).over(800)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("base.scroll.direction")
+    if not layer:
+        return False, "base.scroll.direction layer not found"
+
+    print("\nLayerState (base.scroll.direction):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "base.scroll.direction layer shown"
+
+def test_layer_state_scroll_vector():
+    """Test LayerState repr for base.scroll.vector"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.vector.to((10, 20)).over(1500)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("base.scroll.vector")
+    if not layer:
+        return False, "base.scroll.vector layer not found"
+
+    print("\nLayerState (base.scroll.vector):")
+    print(layer)
+
+    print("\nIndividual property access:")
+    print(f"layer.prop = {layer.prop}")
+    print(f"layer.mode = {layer.mode}")
+    print(f"layer.value = {layer.value}")
+    print(f"layer.target = {layer.target}")
+    print(f"layer.time_alive = {layer.time_alive:.2f}s")
+    print(f"layer.time_left = {layer.time_left:.2f}s")
+
+    rig.stop()
+    return True, "base.scroll.vector layer shown"
+
+def test_layer_state_scroll_pos_offset():
+    """Test LayerState repr for scroll.pos.offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.pos.offset.to((30, 40)).over(1000)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("scroll.pos.offset")
+    if not layer:
+        return False, "scroll.pos.offset layer not found"
+
+    print("\nLayerState (scroll.pos.offset):")
+    print(layer)
+
+    rig.stop()
+    return True, "scroll.pos.offset layer shown"
+
+def test_layer_state_scroll_speed_offset():
+    """Test LayerState repr for scroll.speed.offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.speed.offset.to(5).over(800)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("scroll.speed.offset")
+    if not layer:
+        return False, "scroll.speed.offset layer not found"
+
+    print("\nLayerState (scroll.speed.offset):")
+    print(layer)
+
+    rig.stop()
+    return True, "scroll.speed.offset layer shown"
+
+def test_layer_state_scroll_direction_offset():
+    """Test LayerState repr for scroll.direction.offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.direction.offset.to((0.5, 0.5)).over(600)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("scroll.direction.offset")
+    if not layer:
+        return False, "scroll.direction.offset layer not found"
+
+    print("\nLayerState (scroll.direction.offset):")
+    print(layer)
+
+    rig.stop()
+    return True, "scroll.direction.offset layer shown"
+
+def test_layer_state_scroll_vector_offset():
+    """Test LayerState repr for scroll.vector.offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.vector.offset.to((5, 10)).over(1200)
+    time.sleep(0.1)
+
+    layer = rig.state.layer("scroll.vector.offset")
+    if not layer:
+        return False, "scroll.vector.offset layer not found"
+
+    print("\nLayerState (scroll.vector.offset):")
+    print(layer)
+
+    rig.stop()
+    return True, "scroll.vector.offset layer shown"
+
+def test_scroll_state_all_properties():
+    """Test all scroll sub-properties with animations"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    rig.scroll.pos.to((100, 100)).over(1000)
+    rig.scroll.speed.to(20).over(800)
+    rig.scroll.direction.to((1, 0)).over(600)
+    rig.scroll.vector.to((15, 0)).over(1200)
+
+    time.sleep(0.1)
+
+    print("\nAll scroll properties (with animations):")
+    print(f"rig.state.scroll.pos = {rig.state.scroll.pos}")
+    print(f"rig.state.scroll.pos.value = {rig.state.scroll.pos.value}")
+    print(f"rig.state.scroll.pos.target = {rig.state.scroll.pos.target}")
+    print(f"rig.state.scroll.speed = {rig.state.scroll.speed}")
+    print(f"rig.state.scroll.speed.value = {rig.state.scroll.speed.value}")
+    print(f"rig.state.scroll.speed.target = {rig.state.scroll.speed.target}")
+    print(f"rig.state.scroll.direction = {rig.state.scroll.direction}")
+    print(f"rig.state.scroll.direction.value = {rig.state.scroll.direction.value}")
+    print(f"rig.state.scroll.direction.target = {rig.state.scroll.direction.target}")
+    print(f"rig.state.scroll.direction_cardinal = {rig.state.scroll.direction_cardinal}")
+    print(f"rig.state.scroll.direction_cardinal.value = {rig.state.scroll.direction_cardinal.value}")
+    print(f"rig.state.scroll.direction_cardinal.target = {rig.state.scroll.direction_cardinal.target}")
+    print(f"rig.state.scroll.vector = {rig.state.scroll.vector}")
+    print(f"rig.state.scroll.vector.value = {rig.state.scroll.vector.value}")
+    print(f"rig.state.scroll.vector.target = {rig.state.scroll.vector.target}")
+
+    rig.stop()
+    return True, "All scroll properties shown"
+    return True, "pos.offset layer shown"
+
 def test_frame_loop_status():
     """Test frame loop status in RigState repr"""
     rig = actions.user.mouse_rig()
-    rig.stop()
 
     print("\nFrame loop status (stopped):")
     print(f"frame_loop_active = {rig.state._frame_loop_job is not None}")
@@ -198,7 +564,20 @@ STATE_TESTS = [
     ("BaseState (with animations)", test_base_state_with_animations),
     ("LayerState - base.speed", test_layer_state_base_speed),
     ("LayerState - speed.offset", test_layer_state_offset),
-    ("LayerState - pos.offset", test_layer_state_pos_offset),
+    ("LayerState - base.scroll", test_layer_state_base_scroll),
+    ("LayerState - scroll.offset", test_layer_state_scroll_offset),
+    ("LayerState - base.scroll.pos", test_layer_state_scroll_pos),
+    ("LayerState - base.scroll.speed", test_layer_state_scroll_speed),
+    ("LayerState - base.scroll.direction", test_layer_state_scroll_direction),
+    ("LayerState - base.scroll.vector", test_layer_state_scroll_vector),
+    ("LayerState - scroll.pos.offset", test_layer_state_scroll_pos_offset),
+    ("LayerState - scroll.speed.offset", test_layer_state_scroll_speed_offset),
+    ("LayerState - scroll.direction.offset", test_layer_state_scroll_direction_offset),
+    ("LayerState - scroll.vector.offset", test_layer_state_scroll_vector_offset),
     ("LayerState - custom named", test_layer_state_custom_named),
+    ("Scroll state (empty)", test_scroll_state_empty),
+    ("Scroll state (with animations)", test_scroll_state_with_animations),
+    ("Scroll all properties", test_scroll_state_all_properties),
+    ("LayerState - custom scroll", test_scroll_layer_custom_named),
     ("Frame loop status", test_frame_loop_status),
 ]
