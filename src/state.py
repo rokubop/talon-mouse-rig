@@ -597,7 +597,10 @@ class RigState:
         layer = builder.config.layer_name
 
         if layer in self._layer_groups:
-            return self._layer_groups[layer]
+            group = self._layer_groups[layer]
+            # Update input_type in case it changed (important for groups that exist across different contexts)
+            group.input_type = builder.config.input_type
+            return group
 
         # Create new group
         group = LayerGroup(
