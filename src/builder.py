@@ -1217,9 +1217,7 @@ class ActiveBuilder:
 
         # For base layers, always use override mode to store absolute result values
         # Modes (offset/scale) are only meaningful for modifier layers
-        if config.mode is None and is_base_layer:
-            config.mode = "override"
-        else:
+        if config.mode is None:
             config.mode = "override"
 
         self.group_lifecycle: Optional[Lifecycle] = None
