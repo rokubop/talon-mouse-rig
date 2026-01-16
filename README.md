@@ -314,15 +314,3 @@ cardinal = rig.state.direction.to_cardinal()
 rig.state.direction.magnitude()
 rig.state.direction.normalized()
 ```
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions welcome! Open an issue or PR on GitHub.
-
-## Support
-
-For issues or questions, please open an issue on GitHub.

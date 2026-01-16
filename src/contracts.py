@@ -147,7 +147,7 @@ VALID_BUILDER_METHODS = [
 
 # Valid LayerState attributes (properties and methods)
 VALID_LAYER_STATE_ATTRS = [
-    'prop', 'mode', 'operator', 'value', 'target', 'time_alive', 'time_left'
+    'prop', 'mode', 'operator', 'current', 'target', 'time_alive', 'time_left'
 ]
 
 

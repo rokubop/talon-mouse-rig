@@ -1,8 +1,9 @@
 {
-  "name": "mouse_rig",
+  "name": "talon-mouse-rig",
   "title": "Mouse Rig",
   "description": "Control your mouse with position, speed, direction, and vector commands, over time and with advanced behaviors",
   "version": "0.5.0",
+  "status": "development",
   "namespace": "user.mouse_rig",
   "github": "https://github.com/rokubop/mouse_rig",
   "preview": "",
@@ -11,9 +12,14 @@
     "mouse",
     "movement"
   ],
+  "dependencyCheck": false,
   "dependencies": {},
   "devDependencies": {
-    "ui_elements": "0.10.0"
+    "talon-ui-elements": {
+      "version": "0.12.0",
+      "namespace": "user.ui_elements",
+      "github": "https://github.com/rokubop/talon-ui-elements"
+    }
   },
   "contributes": {
     "settings": [
@@ -42,6 +48,21 @@
       "user.mouse_rig_reload",
       "user.mouse_rig_reset",
       "user.mouse_rig_reverse",
+      "user.mouse_rig_scroll_direction_by",
+      "user.mouse_rig_scroll_direction_down",
+      "user.mouse_rig_scroll_direction_left",
+      "user.mouse_rig_scroll_direction_right",
+      "user.mouse_rig_scroll_direction_to",
+      "user.mouse_rig_scroll_direction_up",
+      "user.mouse_rig_scroll_go_direction",
+      "user.mouse_rig_scroll_go_down",
+      "user.mouse_rig_scroll_go_left",
+      "user.mouse_rig_scroll_go_right",
+      "user.mouse_rig_scroll_go_up",
+      "user.mouse_rig_scroll_increment_by",
+      "user.mouse_rig_scroll_increment_to",
+      "user.mouse_rig_scroll_speed_add",
+      "user.mouse_rig_scroll_speed_to",
       "user.mouse_rig_speed_add",
       "user.mouse_rig_speed_mul",
       "user.mouse_rig_speed_to",
@@ -69,6 +90,7 @@
       "user.ui_elements_unhighlight"
     ]
   },
-  "_generator": "manifest_builder",
-  "_generatorVersion": "1.0.0"
+  "_generator": "talon-manifest-tools",
+  "_generatorVersion": "2.0.0",
+  "_generatorRequireVersionAction": true
 }

@@ -35,6 +35,7 @@ def toggle_test_ui(show: bool = None):
         from .special import SPECIAL_TESTS
         from .state import STATE_TESTS
         from .scroll import SCROLL_TESTS
+        from .actions_scroll import ACTIONS_SCROLL_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
@@ -47,6 +48,7 @@ def toggle_test_ui(show: bool = None):
             ("Behaviors", BEHAVIOR_TESTS),
             ("Special", SPECIAL_TESTS),
             ("Actions", ACTIONS_TESTS),
+            ("Actions Scroll", ACTIONS_SCROLL_TESTS),
             ("State", STATE_TESTS)
         ]
 
