@@ -1,5 +1,8 @@
 # Talon Mouse Rig
 
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
+![Status](https://img.shields.io/badge/status-prototype-red)
+
 All purpose mouse rig for Talon with control over position, speed, direction, vectors, interpolation, timing, stacking, callbacks, and behaviors, favoring OS-level APIs for game compatibility.
 
 ## Overview
@@ -68,20 +71,27 @@ For full control, use the fluent API with `rig = actions.user.mouse_rig()`. See 
 
 ## Installation
 
-### Prerequisites
-- [Talon](https://talonvoice.com/)
+### Development Dependencies
+
+Optional dependencies for development and testing:
+- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.10.0+)
 
 ### Install
-Clone into your Talon user directory:
+
+Clone this repo into your [Talon](https://talonvoice.com/) user directory:
 
 ```sh
-# mac/linux
+# mac and linux
 cd ~/.talon/user
 
 # windows
 cd ~/AppData/Roaming/talon/user
 
-git clone https://github.com/rokubop/talon-mouse-rig.git
+# This repo
+git clone https://github.com/rokubop/talon-mouse-rig
+
+# Dev Dependencies (optional)
+git clone https://github.com/rokubop/talon-ui-elements
 ```
 
 ## Fluent API

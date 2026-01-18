@@ -469,17 +469,5 @@ def rig() -> Rig:
     """
     return Rig()
 
-
-def get_version() -> tuple[int, int, int]:
-    """Returns (major, minor, patch) from manifest.json"""
-    import json
-    src_dir = os.path.dirname(__file__)
-    parent_dir = os.path.dirname(src_dir)
-    manifest_path = os.path.join(parent_dir, 'manifest.json')
-    with open(manifest_path, 'r', encoding='utf-8') as f:
-        version_str = json.load(f)['version']
-    return tuple(map(int, version_str.split('.')))
-
-
 # Export public API
 __all__ = ['rig', 'Rig', 'RigBuilder', 'RigState', 'reload_rig']

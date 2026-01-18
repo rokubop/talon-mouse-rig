@@ -568,10 +568,6 @@ class Actions:
         from .tests.main import toggle_test_ui
         toggle_test_ui()
 
-    def mouse_rig_version() -> tuple[int, int, int]:
-        """Returns the package version as (major, minor, patch)"""
-        return get_version()
-
     # Scroll actions
     def mouse_rig_scroll_increment_to(
             x: float,
