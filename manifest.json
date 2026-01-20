@@ -12,10 +12,11 @@
     "mouse",
     "movement"
   ],
+  "license": "MIT",
   "dependencies": {},
   "devDependencies": {
     "talon-ui-elements": {
-      "version": "0.10.0",
+      "min_version": "0.13.0",
       "namespace": "user.ui_elements",
       "github": "https://github.com/rokubop/talon-ui-elements"
     }
@@ -89,9 +90,9 @@
       "user.ui_elements_unhighlight"
     ]
   },
-  "requiresTalonBeta": false,
   "_generator": "talon-manifest-generator",
   "_generatorVersion": "2.0.0",
   "_generatorRequiresVersionAction": true,
-  "_generatorStrictNamespace": true
+  "_generatorStrictNamespace": true,
+  "_generatorFrozenFields": []
 }

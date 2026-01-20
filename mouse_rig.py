@@ -1,6 +1,6 @@
 from talon import actions, Module
 from typing import Any
-from .src import rig as get_rig, reload_rig, get_version
+from .src import rig as get_rig, reload_rig
 
 mod = Module()
 

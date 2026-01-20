@@ -2,6 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.5.0-blue)
 ![Status](https://img.shields.io/badge/status-prototype-red)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 All purpose mouse rig for Talon with control over position, speed, direction, vectors, interpolation, timing, stacking, callbacks, and behaviors, favoring OS-level APIs for game compatibility.
 
