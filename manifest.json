@@ -90,8 +90,8 @@
       "user.ui_elements_unhighlight"
     ]
   },
-  "_generator": "talon-manifest-generator",
-  "_generatorVersion": "2.0.0",
+  "_generator": "talon-pack",
+  "_generatorVersion": "3.0.0",
   "_generatorRequiresVersionAction": true,
   "_generatorStrictNamespace": true,
   "_generatorFrozenFields": []

@@ -1,5 +1,5 @@
 # Mouse Rig Development Commands - Uncomment to use
-# rig test requires talon-ui-elements
+# "mouse rig test" requires talon-ui-elements
 
-# rig reload: user.mouse_rig_reload()
-# rig test: user.mouse_rig_test_toggle_ui()
+# mouse rig reload: user.mouse_rig_reload()
+# mouse rig test: user.mouse_rig_test_toggle_ui()
