@@ -373,122 +373,74 @@ class Actions:
             x: float,
             y: float,
             initial_speed: int | float = 5,
-            target_speed: int | float = None,
-            over_ms: int = None,
-            easing: str = None
+            initial_ms: int = None,
+            initial_easing: str = None
         ) -> None:
-        """Move direction, and starting speed if stopped.
+        """Set direction and start moving if stopped. Respects current speed if already moving.
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
         rig.direction(x, y)
         if not rig.state.speed:
-            rig.speed(initial_speed)
-        if target_speed is not None:
-            rig.speed.to(target_speed).over(over_ms, easing)
+            rig.speed.to(initial_speed).over(initial_ms, initial_easing)
         ```
 
         Args:
             x: Horizontal direction (-1 for left, 1 for right)
             y: Vertical direction (-1 for up, 1 for down)
             initial_speed: Speed to use if mouse isn't already moving
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
         rig = actions.user.mouse_rig()
         rig.direction(x, y)
 
         if not rig.state.speed:
-            rig.speed(initial_speed)
+            if initial_ms is not None:
+                rig.speed.to(initial_speed).over(initial_ms, initial_easing)
+            else:
+                rig.speed(initial_speed)
 
-        if target_speed is not None and over_ms is not None and rig.state.speed != target_speed:
-            rig.speed.to(target_speed).over(over_ms, easing)
-
-    def mouse_rig_go_left(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_left(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move left, setting direction and starting speed if stopped.
 
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.direction(-1, 0)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-        if target_speed is not None:
-            rig.speed.to(target_speed).over(over_ms, easing)
-        ```
-
         Args:
             initial_speed: Speed to use if mouse isn't already moving
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(-1, 0, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_go_right(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_right(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move right, setting direction and starting speed if stopped.
 
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.direction(1, 0)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-        if target_speed is not None:
-            rig.speed.to(target_speed).over(over_ms, easing)
-        ```
-
         Args:
             initial_speed: Speed to use if mouse isn't already moving
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(1, 0, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_go_up(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_up(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move up, setting direction and starting speed if stopped.
 
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.direction(0, -1)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-        if target_speed is not None:
-            rig.speed.to(target_speed).over(over_ms, easing)
-        ```
-
         Args:
             initial_speed: Speed to use if mouse isn't already moving
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(0, -1, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_go_down(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_go_down(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move down, setting direction and starting speed if stopped.
 
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.direction(0, 1)
-        if not rig.state.speed:
-            rig.speed(initial_speed)
-        if target_speed is not None:
-            rig.speed.to(target_speed).over(over_ms, easing)
-        ```
-
         Args:
             initial_speed: Speed to use if mouse isn't already moving
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: "linear", "ease_in", "ease_out", "ease_in_out", or add number at end for power curve e.g. "ease_in_out2"
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(0, 1, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_go_direction(0, 1, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_state_speed() -> float:
         """Get current speed from rig state"""
@@ -569,60 +521,50 @@ class Actions:
         toggle_test_ui()
 
     # Scroll actions
-    def mouse_rig_scroll_increment_to(
-            x: float,
-            y: float,
-            over_ms: int = None,
-            easing: str = None,
-            callback: callable = None
-        ) -> None:
-        """Set scroll vector (combines speed and direction), optionally over time.
+    def mouse_rig_scroll_stop(stop_ms: float = None, easing: str = None, callback: callable = None) -> None:
+        """Stop scrolling, optionally over time.
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
-        rig.scroll.vector.to(x, y).over(over_ms, easing).then(callback)
+        rig.scroll.stop(stop_ms, easing).then(callback)
         ```
 
         Args:
-            x: Horizontal scroll component
-            y: Vertical scroll component
-            over_ms: Duration in ms (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
-            callback: Function to call when complete (optional)
+            stop_ms: Time in ms to decelerate to stop
+            easing: Easing function - "linear", "ease_in_out", etc.
+            callback: Function to call when scroll fully stops
         """
         rig = actions.user.mouse_rig()
-        builder = rig.scroll.vector.to(x, y)
+        handle = rig.scroll.stop(stop_ms, easing)
 
-        if over_ms is not None:
-            builder = builder.over(over_ms, easing)
         if callback is not None:
-            builder = builder.then(callback)
+            handle.then(callback)
 
-    def mouse_rig_scroll_increment_by(
+    def mouse_rig_scroll_by(
             dx: float,
             dy: float,
             over_ms: int = None,
             easing: str = None,
             callback: callable = None
         ) -> None:
-        """Adjust scroll vector by offset, optionally over time.
+        """One-time scroll by delta amount (like scroll wheel).
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
-        rig.scroll.vector.by(dx, dy).over(over_ms, easing).then(callback)
+        rig.scroll.by(dx, dy).over(over_ms, easing).then(callback)
         ```
 
         Args:
-            dx: Horizontal scroll offset
-            dy: Vertical scroll offset
-            over_ms: Duration in ms (optional)
+            dx: Horizontal scroll amount (positive = right, negative = left)
+            dy: Vertical scroll amount (positive = down, negative = up)
+            over_ms: Duration in ms to spread scroll over (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
             callback: Function to call when complete (optional)
         """
         rig = actions.user.mouse_rig()
-        builder = rig.scroll.vector.by(dx, dy)
+        builder = rig.scroll.by(dx, dy)
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
@@ -803,79 +745,71 @@ class Actions:
             x: float,
             y: float,
             initial_speed: int | float = 5,
-            target_speed: int | float = None,
-            over_ms: int = None,
-            easing: str = None
+            initial_ms: int = None,
+            initial_easing: str = None
         ) -> None:
-        """Set scroll direction and start scrolling if not already scrolling.
+        """Set scroll direction and start scrolling if stopped. Respects current speed if already scrolling.
 
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
         rig.scroll.direction(x, y)
-        if not rig.scroll.state.speed:
-            rig.scroll.speed(initial_speed)
-        if target_speed is not None:
-            rig.scroll.speed.to(target_speed).over(over_ms, easing)
+        if not rig.state.scroll_speed:
+            rig.scroll.speed.to(initial_speed).over(initial_ms, initial_easing)
         ```
 
         Args:
             x: Horizontal direction (-1 for left, 1 for right)
             y: Vertical direction (-1 for up, 1 for down)
             initial_speed: Speed to use if not already scrolling
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: Easing function
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
         rig = actions.user.mouse_rig()
         rig.scroll.direction(x, y)
 
-        if not rig.scroll.state.speed:
-            rig.scroll.speed(initial_speed)
+        if not rig.state.scroll_speed:
+            if initial_ms is not None:
+                rig.scroll.speed.to(initial_speed).over(initial_ms, initial_easing)
+            else:
+                rig.scroll.speed(initial_speed)
 
-        if target_speed is not None and over_ms is not None and rig.scroll.state.speed != target_speed:
-            rig.scroll.speed.to(target_speed).over(over_ms, easing)
-
-    def mouse_rig_scroll_go_left(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_scroll_go_left(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll left, setting direction and starting speed if not scrolling.
 
         Args:
             initial_speed: Speed to use if not already scrolling
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: Easing function
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(-1, 0, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_scroll_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_scroll_go_right(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_scroll_go_right(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll right, setting direction and starting speed if not scrolling.
 
         Args:
             initial_speed: Speed to use if not already scrolling
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: Easing function
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(1, 0, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_scroll_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_scroll_go_up(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_scroll_go_up(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll up, setting direction and starting speed if not scrolling.
 
         Args:
             initial_speed: Speed to use if not already scrolling
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: Easing function
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(0, -1, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_scroll_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
 
-    def mouse_rig_scroll_go_down(initial_speed: int | float = 5, target_speed: int | float = None, over_ms: int = None, easing: str = None) -> None:
+    def mouse_rig_scroll_go_down(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll down, setting direction and starting speed if not scrolling.
 
         Args:
             initial_speed: Speed to use if not already scrolling
-            target_speed: Target speed to transition to
-            over_ms: Duration in ms for speed transition
-            easing: Easing function
+            initial_ms: Duration to ramp up to initial_speed (optional)
+            initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(0, 1, initial_speed, target_speed, over_ms, easing)
+        actions.user.mouse_rig_scroll_go_direction(0, 1, initial_speed, initial_ms, initial_easing)

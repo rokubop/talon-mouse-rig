@@ -129,6 +129,22 @@ class StopHandle:
         return self
 
 
+class ScrollStopHandle:
+    """Handle returned by scroll.stop() that allows adding callbacks via .then()"""
+
+    def __init__(self, state: RigState):
+        self._state = state
+
+    def then(self, callback):
+        """Add a callback to be executed when scroll fully stops
+
+        Args:
+            callback: Function to call when scroll stopped
+        """
+        self._state.add_scroll_stop_callback(callback)
+        return self
+
+
 class Rig:
     """Main entry point for mouse rig operations
 

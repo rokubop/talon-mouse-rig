@@ -74,6 +74,7 @@ class RigState:
 
         # Stop callbacks (fired when frame loop stops)
         self._stop_callbacks: list = []
+        self._scroll_stop_callbacks: list = []
 
     def __repr__(self) -> str:
         pos = self.pos
@@ -1247,6 +1248,44 @@ class RigState:
 
         return has_absolute_position, absolute_target, relative_delta, relative_position_updates
 
+    def _process_scroll_position_builders(self) -> tuple[Vec2, list]:
+        """Process all scroll_pos builders (one-time scroll) and gather their contributions
+
+        Returns:
+            - scroll_delta: Accumulated delta from all scroll.by() builders
+            - scroll_position_updates: List of (builder, new_value, new_int_value) for tracking updates
+        """
+        scroll_delta = Vec2(0, 0)
+        scroll_position_updates = []
+
+        for layer_name, group in self._layer_groups.items():
+            if group.property != "scroll_pos":
+                continue
+
+            if not group.builders:
+                continue
+
+            # scroll_pos only supports relative (by) operations
+            for builder in group.builders:
+                current_interpolated = builder.get_interpolated_value()
+
+                # Initialize tracking attributes if needed
+                if not hasattr(builder, '_last_emitted_scroll_pos'):
+                    builder._last_emitted_scroll_pos = Vec2(0, 0)
+                if not hasattr(builder, '_total_emitted_scroll_int'):
+                    builder._total_emitted_scroll_int = Vec2(0, 0)
+
+                # Compute delta accounting for accumulated error (subpixel accuracy)
+                target_total = current_interpolated
+                actual_delta = target_total - builder._last_emitted_scroll_pos
+
+                scroll_delta += actual_delta
+
+                # Store update to apply after builder removal check
+                scroll_position_updates.append((builder, current_interpolated, current_interpolated))
+
+        return scroll_delta, scroll_position_updates
+
     def _has_api_overrides(self) -> bool:
         """Check if any active group has API overrides"""
         for group in self._layer_groups.values():
@@ -1303,24 +1342,32 @@ class RigState:
                     mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
                 self._expected_mouse_pos = ctrl.mouse_pos()
 
-    def _emit_scroll(self):
-        """Emit scroll events based on current scroll velocity (speed * direction)"""
+    def _emit_scroll(self, scroll_pos_delta: Optional[Vec2] = None):
+        """Emit scroll events based on velocity and/or one-time scroll delta
+
+        Args:
+            scroll_pos_delta: Additional scroll from scroll.by() builders
+        """
         from talon import actions
 
         scroll_speed = self.scroll_speed.current
         scroll_direction = self.scroll_direction.current
 
-        # Skip if no scroll speed
-        if abs(scroll_speed) < 0.01:
-            return
-
         # Compute scroll velocity vector
         scroll_velocity = scroll_direction * scroll_speed
+
+        # Add scroll position delta if provided
+        if scroll_pos_delta is not None:
+            scroll_velocity = scroll_velocity + scroll_pos_delta
+
+        # Skip if no scroll
+        if abs(scroll_velocity.x) < 0.01 and abs(scroll_velocity.y) < 0.01:
+            return
 
         # Find by_lines setting from first active scroll builder
         by_lines = True  # Default
         for group in self._layer_groups.values():
-            if group.input_type == "scroll" and group.property in ("speed", "direction", "vector"):
+            if group.input_type == "scroll" and group.property in ("speed", "direction", "vector", "scroll_pos"):
                 # Use by_lines from first active scroll builder
                 if group.builders:
                     by_lines = group.builders[0].config.by_lines
@@ -1471,8 +1518,11 @@ class RigState:
         # 3. Emit mouse movement (absolute or relative mode)
         self._emit_mouse_movement(has_absolute_position, absolute_target, frame_delta)
 
-        # 3.1. Emit scroll events
-        self._emit_scroll()
+        # 3.1. Process scroll position builders (one-time scroll)
+        scroll_pos_delta, scroll_position_updates = self._process_scroll_position_builders()
+
+        # 3.2. Emit scroll events (velocity + one-time delta)
+        self._emit_scroll(scroll_pos_delta if scroll_pos_delta.magnitude() > 0.001 else None)
 
         # 3.5. Update committed_value for pos.offset groups with replace_target
         for group in self._layer_groups.values():
@@ -1485,6 +1535,10 @@ class RigState:
         for builder, new_value, new_int_value in relative_position_updates:
             builder._last_emitted_relative_pos = new_value
             builder._total_emitted_int = new_int_value
+
+        # 4.1. Update scroll position tracking
+        for builder, new_value, _ in scroll_position_updates:
+            builder._last_emitted_scroll_pos = new_value
 
         # 5. Remove completed builders (may emit final deltas)
         completed_layers = self._remove_completed_builders(current_time)
@@ -2580,6 +2634,71 @@ class RigState:
                 scroll_builder = ActiveBuilder(scroll_config, self, is_base_layer=True)
                 self.add_builder(scroll_builder)
 
+    def add_scroll_stop_callback(self, callback):
+        """Add a callback to fire when scroll stops"""
+        self._scroll_stop_callbacks.append(callback)
+
+    def scroll_stop(self, transition_ms: Optional[float] = None, easing: str = "linear", **kwargs):
+        """Stop scrolling: bake scroll layers, clear scroll effects, decelerate scroll to 0
+
+        Similar to stop() but only affects scroll-related state:
+        1. Bake scroll layers into base
+        2. Clear scroll-related layer groups
+        3. Set scroll speed to 0 (with optional smooth deceleration)
+        """
+        # Validate arguments
+        transition_ms = validate_timing(transition_ms, 'transition_ms', method='scroll_stop')
+
+        config = BuilderConfig()
+        all_kwargs = {'easing': easing, **kwargs}
+        config.validate_method_kwargs('stop', **all_kwargs)
+
+        # 1. Bake scroll-related layers into base
+        scroll_layers = [
+            layer for layer, group in self._layer_groups.items()
+            if group.input_type == "scroll"
+        ]
+        for layer in scroll_layers:
+            group = self._layer_groups[layer]
+            if group.is_base:
+                self._bake_group_to_base(group)
+
+        # 2. Clear scroll-related layer groups
+        for layer in scroll_layers:
+            del self._layer_groups[layer]
+            if layer in self._layer_orders:
+                del self._layer_orders[layer]
+
+        # 3. Decelerate scroll speed to 0
+        if transition_ms is None or transition_ms == 0:
+            # Immediate stop
+            self._base_scroll_speed = 0.0
+            # Fire scroll stop callbacks
+            for callback in self._scroll_stop_callbacks:
+                try:
+                    callback()
+                except Exception as e:
+                    print(f"Error in scroll stop callback: {e}")
+            self._scroll_stop_callbacks.clear()
+            # Stop frame loop if no active groups remain
+            if len(self._layer_groups) == 0 and self._base_speed == 0:
+                self._stop_frame_loop()
+        else:
+            # Smooth deceleration
+            from .builder import ActiveBuilder
+
+            if self._base_scroll_speed != 0:
+                scroll_config = BuilderConfig()
+                scroll_config.property = "speed"
+                scroll_config.input_type = "scroll"
+                scroll_config.layer_name = f"scroll:base.{scroll_config.property}"
+                scroll_config.operator = "to"
+                scroll_config.value = 0
+                scroll_config.over_ms = transition_ms
+                scroll_config.over_easing = easing
+                scroll_builder = ActiveBuilder(scroll_config, self, is_base_layer=True)
+                self.add_builder(scroll_builder)
+
     def reverse(self, transition_ms: Optional[float] = None):
         """Reverse direction (180 degrees turn)"""
         # This will be implemented via builder in builder.py
@@ -2653,6 +2772,7 @@ class RigState:
 
         # Clear stop callbacks
         self._stop_callbacks.clear()
+        self._scroll_stop_callbacks.clear()
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
         """Trigger revert on a layer group

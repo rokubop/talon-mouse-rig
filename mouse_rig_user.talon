@@ -75,3 +75,33 @@ rig bank left: user.mouse_rig_direction_by(-90)
 rig bank right: user.mouse_rig_direction_by(90)
 
 rig reverse: user.mouse_rig_reverse(1000)
+
+# One-time scroll
+rig scroll up: user.mouse_rig_scroll_by(0, -3)
+rig scroll down: user.mouse_rig_scroll_by(0, 3)
+rig scroll left: user.mouse_rig_scroll_by(-3, 0)
+rig scroll right: user.mouse_rig_scroll_by(3, 0)
+rig page up: user.mouse_rig_scroll_by(0, -10)
+rig page down: user.mouse_rig_scroll_by(0, 10)
+
+# Continuous scroll
+rig scroll go up: user.mouse_rig_scroll_go_up(1)
+rig scroll go down: user.mouse_rig_scroll_go_down(1)
+rig scroll go left: user.mouse_rig_scroll_go_left(1)
+rig scroll go right: user.mouse_rig_scroll_go_right(1)
+
+rig scroll go up slow: user.mouse_rig_scroll_go_up(2)
+rig scroll go down slow: user.mouse_rig_scroll_go_down(2)
+rig scroll go up fast: user.mouse_rig_scroll_go_up(15)
+rig scroll go down fast: user.mouse_rig_scroll_go_down(15)
+
+rig scroll slow: user.mouse_rig_scroll_speed_to(2)
+rig scroll normal: user.mouse_rig_scroll_speed_to(5)
+rig scroll fast: user.mouse_rig_scroll_speed_to(15)
+
+rig scroll speed up: user.mouse_rig_scroll_speed_add(3)
+rig scroll speed down: user.mouse_rig_scroll_speed_add(-3)
+rig scroll speed <number>: user.mouse_rig_scroll_speed_to(number)
+
+rig scroll stop: user.mouse_rig_scroll_stop()
+rig scroll reverse: user.mouse_rig_scroll_direction_by(180)

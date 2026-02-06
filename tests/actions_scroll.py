@@ -9,68 +9,6 @@ from talon import actions, cron
 
 
 # ============================================================================
-# SCROLL INCREMENT (VECTOR) ACTION TESTS
-# ============================================================================
-
-def test_action_scroll_increment_to(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_increment_to(x, y) - instant vector"""
-    actions.user.mouse_rig_stop()
-
-    target_x, target_y = 0, 5
-    actions.user.mouse_rig_scroll_increment_to(target_x, target_y)
-
-    def check_vector():
-        rig = actions.user.mouse_rig()
-        vector = rig.state.scroll_vector
-        if abs(vector.x - target_x) > 0.1 or abs(vector.y - target_y) > 0.1:
-            on_failure(f"Scroll vector wrong: expected ({target_x}, {target_y}), got ({vector.x}, {vector.y})")
-            return
-        actions.user.mouse_rig_stop()
-        on_success()
-
-    cron.after("50ms", check_vector)
-
-
-def test_action_scroll_increment_by(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_increment_by(dx, dy) - relative vector"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_increment_to(0, 3)
-
-    dx, dy = 2, 2
-    actions.user.mouse_rig_scroll_increment_by(dx, dy)
-
-    def check_vector():
-        rig = actions.user.mouse_rig()
-        vector = rig.state.scroll_vector
-        expected_x, expected_y = 2, 5
-        if abs(vector.x - expected_x) > 0.1 or abs(vector.y - expected_y) > 0.1:
-            on_failure(f"Scroll vector wrong: expected ({expected_x}, {expected_y}), got ({vector.x}, {vector.y})")
-            return
-        actions.user.mouse_rig_stop()
-        on_success()
-
-    cron.after("50ms", check_vector)
-
-
-def test_action_scroll_increment_to_over(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_increment_to(x, y, over_ms) - animated vector"""
-    actions.user.mouse_rig_stop()
-
-    target_x, target_y = 3, 6
-
-    def check_vector():
-        rig = actions.user.mouse_rig()
-        vector = rig.state.scroll_vector
-        if abs(vector.x - target_x) > 0.2 or abs(vector.y - target_y) > 0.2:
-            on_failure(f"Final vector wrong: expected ({target_x}, {target_y}), got ({vector.x}, {vector.y})")
-            return
-        actions.user.mouse_rig_stop()
-        on_success()
-
-    actions.user.mouse_rig_scroll_increment_to(target_x, target_y, 500, "ease_in_out", check_vector)
-
-
-# ============================================================================
 # SCROLL SPEED ACTION TESTS
 # ============================================================================
 
@@ -371,8 +309,8 @@ def test_action_scroll_go_down(on_success, on_failure):
     cron.after("100ms", check_and_stop)
 
 
-def test_action_scroll_go_with_target_speed(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_go_down(initial, target, over_ms) - speed transition"""
+def test_action_scroll_go_with_initial_ms(on_success, on_failure):
+    """Test: actions.user.mouse_rig_scroll_go_down(speed, initial_ms) - ramp up from 0"""
     actions.user.mouse_rig_stop()
 
     def check_speed():
@@ -384,7 +322,7 @@ def test_action_scroll_go_with_target_speed(on_success, on_failure):
         actions.user.mouse_rig_stop()
         on_success()
 
-    actions.user.mouse_rig_scroll_go_down(3, 10, 500, "ease_in_out")
+    actions.user.mouse_rig_scroll_go_down(10, 500, "ease_in_out")
     cron.after("600ms", check_speed)
 
 
@@ -393,9 +331,6 @@ def test_action_scroll_go_with_target_speed(on_success, on_failure):
 # ============================================================================
 
 ACTIONS_SCROLL_TESTS = [
-    ("actions.user.mouse_rig_scroll_increment_to()", test_action_scroll_increment_to),
-    ("actions.user.mouse_rig_scroll_increment_by()", test_action_scroll_increment_by),
-    ("actions.user.mouse_rig_scroll_increment_to() over", test_action_scroll_increment_to_over),
     ("actions.user.mouse_rig_scroll_speed_to()", test_action_scroll_speed_to),
     ("actions.user.mouse_rig_scroll_speed_add()", test_action_scroll_speed_add),
     ("actions.user.mouse_rig_scroll_speed_to() over", test_action_scroll_speed_to_over),
@@ -412,5 +347,5 @@ ACTIONS_SCROLL_TESTS = [
     ("actions.user.mouse_rig_scroll_go_right()", test_action_scroll_go_right),
     ("actions.user.mouse_rig_scroll_go_up()", test_action_scroll_go_up),
     ("actions.user.mouse_rig_scroll_go_down()", test_action_scroll_go_down),
-    ("actions.user.mouse_rig_scroll_go() with target speed", test_action_scroll_go_with_target_speed),
+    ("actions.user.mouse_rig_scroll_go() with initial_ms", test_action_scroll_go_with_initial_ms),
 ]

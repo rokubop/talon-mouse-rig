@@ -148,15 +148,34 @@ class ScrollPropertyProxy:
     # Direct animation methods for one-time scroll
     def to(self, *args) -> 'RigBuilder':
         """Scroll by delta amount (alias for .by() since scroll has no absolute position)"""
-        if self.mode:
-            self.builder.config.mode = self.mode
-        return PropertyBuilder(self.builder, "pos").by(*args)
+        return self.by(*args)
 
     def by(self, *args) -> 'RigBuilder':
-        """Scroll by delta amount (relative one-time scroll)"""
+        """Scroll by delta amount (relative one-time scroll)
+
+        Args:
+            dx, dy: Scroll amounts (positive y = down, negative y = up)
+
+        Example:
+            rig.scroll.by(0, 5).over(500)  # Scroll down 5 over 500ms
+        """
         if self.mode:
             self.builder.config.mode = self.mode
-        return PropertyBuilder(self.builder, "pos").by(*args)
+        return PropertyBuilder(self.builder, "scroll_pos").by(*args)
+
+    def stop(self, ms: float = None, easing: str = "linear"):
+        """Stop scrolling: bake scroll layers, clear scroll effects, decelerate to 0
+
+        Args:
+            ms: Duration to decelerate over. If None, stops immediately.
+            easing: Easing function for gradual deceleration.
+
+        Returns:
+            ScrollStopHandle for chaining .then(callback)
+        """
+        from . import ScrollStopHandle
+        self.builder.rig_state.scroll_stop(ms, easing)
+        return ScrollStopHandle(self.builder.rig_state)
 
 
 class RigBuilder:

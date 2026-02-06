@@ -8,13 +8,14 @@ from typing import Protocol, Callable, Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from .core import Vec2
 
-VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector']
+VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector', 'scroll_pos']
 
 VALID_OPERATORS = {
     'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'pos': ['to', 'add', 'by', 'sub', 'bake'],
     'vector': ['to', 'add', 'by', 'sub', 'bake'],
+    'scroll_pos': ['by'],  # One-time scroll only supports relative
 }
 
 VALID_MODES = ['offset', 'override', 'scale']
