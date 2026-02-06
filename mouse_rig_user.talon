@@ -1,44 +1,20 @@
-# Your file to customize - Add / modify / or comment out commands as desired
+# Customize your mouse rig commands here
 
-rig left: user.mouse_rig_go_left(4)
-rig right: user.mouse_rig_go_right(4)
-rig up: user.mouse_rig_go_up(4)
-rig down: user.mouse_rig_go_down(4)
-
-rig left slow:
-    user.mouse_rig_direction_left()
-    user.mouse_rig_speed_to(1.0)
-rig right slow:
-    user.mouse_rig_direction_right()
-    user.mouse_rig_speed_to(1.0)
-rig up slow:
-    user.mouse_rig_direction_up()
-    user.mouse_rig_speed_to(1.0)
-rig down slow:
-    user.mouse_rig_direction_down()
-    user.mouse_rig_speed_to(1.0)
-
-rig left fast:
-    user.mouse_rig_direction_left()
-    user.mouse_rig_speed_to(10)
-rig right fast:
-    user.mouse_rig_direction_right()
-    user.mouse_rig_speed_to(10)
-rig up fast:
-    user.mouse_rig_direction_up()
-    user.mouse_rig_speed_to(10)
-rig down fast:
-    user.mouse_rig_direction_down()
-    user.mouse_rig_speed_to(10)
+rig left: user.mouse_rig_go_left(4.0)
+rig left slow: user.mouse_rig_go_left(1.0)
+rig right: user.mouse_rig_go_right(4.0)
+rig right slow: user.mouse_rig_go_right(1.0)
+rig up: user.mouse_rig_go_up(4.0)
+rig up slow: user.mouse_rig_go_up(1.0)
+rig down: user.mouse_rig_go_down(4.0)
+rig down slow: user.mouse_rig_go_down(1.0)
 
 rig slow: user.mouse_rig_speed_to(1.0)
-rig normal: user.mouse_rig_speed_to(4)
-rig fast: user.mouse_rig_speed_to(10)
-
+rig normal: user.mouse_rig_speed_to(4.0)
+rig fast: user.mouse_rig_speed_to(10.0)
 rig [speed | slow] down: user.mouse_rig_speed_mul(0.5)
 rig speed up: user.mouse_rig_speed_mul(2)
 rig speed <number>: user.mouse_rig_speed_to(number)
-
 rig boost: user.mouse_rig_speed_mul(3, 800, 0, 800)
 
 rig stop: user.mouse_rig_stop()
@@ -62,46 +38,30 @@ rig jump right: user.mouse_rig_pos_by(200, 0, 200)
 rig jump up: user.mouse_rig_pos_by(0, -200, 200)
 rig jump down: user.mouse_rig_pos_by(0, 200, 200)
 
-rig [curve | turn] left: user.mouse_rig_direction_to(-1, 0, 1000)
-rig [curve | turn] right: user.mouse_rig_direction_to(1, 0, 1000)
-rig [curve | turn] up: user.mouse_rig_direction_to(0, -1, 1000)
-rig [curve | turn] down: user.mouse_rig_direction_to(0, 1, 1000)
-rig [curve | turn] around: user.mouse_rig_direction_by(180, 1000)
-
-rig rotate left: user.mouse_rig_direction_by(-90, 1000)
-rig rotate right: user.mouse_rig_direction_by(90, 1000)
-
-rig bank left: user.mouse_rig_direction_by(-90)
-rig bank right: user.mouse_rig_direction_by(90)
+rig curve left: user.mouse_rig_direction_by(-90, 1000)
+rig curve right: user.mouse_rig_direction_by(90, 1000)
+rig turn left: user.mouse_rig_direction_by(-90)
+rig turn right: user.mouse_rig_direction_by(90)
 
 rig reverse: user.mouse_rig_reverse(1000)
 
-# One-time scroll
-rig scroll up: user.mouse_rig_scroll_by(0, -3)
-rig scroll down: user.mouse_rig_scroll_by(0, 3)
-rig scroll left: user.mouse_rig_scroll_by(-3, 0)
-rig scroll right: user.mouse_rig_scroll_by(3, 0)
-rig page up: user.mouse_rig_scroll_by(0, -10)
-rig page down: user.mouse_rig_scroll_by(0, 10)
-
-# Continuous scroll
-rig scroll go up: user.mouse_rig_scroll_go_up(1)
-rig scroll go down: user.mouse_rig_scroll_go_down(1)
-rig scroll go left: user.mouse_rig_scroll_go_left(1)
-rig scroll go right: user.mouse_rig_scroll_go_right(1)
-
-rig scroll go up slow: user.mouse_rig_scroll_go_up(2)
-rig scroll go down slow: user.mouse_rig_scroll_go_down(2)
-rig scroll go up fast: user.mouse_rig_scroll_go_up(15)
-rig scroll go down fast: user.mouse_rig_scroll_go_down(15)
-
-rig scroll slow: user.mouse_rig_scroll_speed_to(2)
-rig scroll normal: user.mouse_rig_scroll_speed_to(5)
-rig scroll fast: user.mouse_rig_scroll_speed_to(15)
-
-rig scroll speed up: user.mouse_rig_scroll_speed_add(3)
-rig scroll speed down: user.mouse_rig_scroll_speed_add(-3)
-rig scroll speed <number>: user.mouse_rig_scroll_speed_to(number)
-
+rig scroll up: user.mouse_rig_scroll_by(0, -5)
+rig scroll down: user.mouse_rig_scroll_by(0, 5)
+rig scroll left: user.mouse_rig_scroll_by(-5, 0)
+rig scroll right: user.mouse_rig_scroll_by(5, 0)
+rig scroll up smooth: user.mouse_rig_scroll_by(0, -10, 300)
+rig scroll down smooth: user.mouse_rig_scroll_by(0, 10, 300)
+rig page up: user.mouse_rig_scroll_by(0, -25)
+rig page down: user.mouse_rig_scroll_by(0, 25)
+rig page up smooth: user.mouse_rig_scroll_by(0, -25, 500, "ease_in_out")
+rig page down smooth: user.mouse_rig_scroll_by(0, 25, 500, "ease_in_out")
+rig scroll go up: user.mouse_rig_scroll_go_up(0.1)
+rig scroll go down: user.mouse_rig_scroll_go_down(0.1)
+rig scroll go left: user.mouse_rig_scroll_go_left(0.1)
+rig scroll go right: user.mouse_rig_scroll_go_right(0.1)
 rig scroll stop: user.mouse_rig_scroll_stop()
-rig scroll reverse: user.mouse_rig_scroll_direction_by(180)
+rig scroll stop smooth: user.mouse_rig_scroll_stop(500)
+rig scroll [speed | slow] down: user.mouse_rig_scroll_speed_mul(0.5)
+rig scroll speed up: user.mouse_rig_scroll_speed_mul(2)
+rig scroll speed <number>: user.mouse_rig_scroll_speed_to(number)
+rig scroll boost: user.mouse_rig_scroll_speed_mul(3, 800, 0, 800)

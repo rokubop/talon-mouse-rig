@@ -631,6 +631,36 @@ class Actions:
         if revert_ms:
             builder = builder.revert(revert_ms)
 
+    def mouse_rig_scroll_speed_mul(
+            value: float | int,
+            over_ms: int = None,
+            hold_ms: int = None,
+            revert_ms: int = None
+        ) -> None:
+        """Multiply current scroll speed, optionally over time.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.scroll.speed.mul(value).over(over_ms).hold(hold_ms).revert(revert_ms)
+        ```
+
+        Args:
+            value: Multiplier for scroll speed
+            over_ms: Duration to multiply speed (optional)
+            hold_ms: Duration to hold at new speed (optional)
+            revert_ms: Duration to revert to previous speed (optional)
+        """
+        rig = actions.user.mouse_rig()
+        builder = rig.scroll.speed.mul(value)
+
+        if over_ms:
+            builder = builder.over(over_ms)
+        if hold_ms:
+            builder = builder.hold(hold_ms)
+        if revert_ms:
+            builder = builder.revert(revert_ms)
+
     def mouse_rig_scroll_direction_to(
             x: int | float,
             y: int | float,

@@ -15,7 +15,7 @@ VALID_OPERATORS = {
     'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
     'pos': ['to', 'add', 'by', 'sub', 'bake'],
     'vector': ['to', 'add', 'by', 'sub', 'bake'],
-    'scroll_pos': ['by'],  # One-time scroll only supports relative
+    'scroll_pos': ['add', 'by'],  # One-time scroll only supports relative (by is alias for add)
 }
 
 VALID_MODES = ['offset', 'override', 'scale']

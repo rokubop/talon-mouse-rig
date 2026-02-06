@@ -1059,7 +1059,10 @@ class PropertyBuilder:
         if self.rig_builder.config.property == "pos":
             self.rig_builder.config.is_synchronous = True
             # pos.by() defaults to absolute (pixels) unless explicitly set via .absolute/.relative
-        self.rig_builder.config.movement_type = "relative"
+            self.rig_builder.config.movement_type = "relative"
+        elif self.rig_builder.config.property == "scroll_pos":
+            self.rig_builder.config.is_synchronous = True
+            self.rig_builder.config.movement_type = "relative"
         #     if not self.rig_builder.config._movement_type_explicit:
         #         self.rig_builder.config.movement_type = "absolute"
         # else:
@@ -1443,6 +1446,11 @@ class ActiveBuilder:
             current_direction = self.rig_state.base.direction
             return mode_operations.calculate_vector_target(operator, value, current_speed, current_direction, mode)
 
+        elif self.config.property == "scroll_pos":
+            # scroll_pos only supports offset mode via .by()
+            # Convert to Vec2 and return as offset
+            return Vec2.from_tuple(value) if isinstance(value, tuple) else value
+
         return current
 
     def execute_synchronous(self):
@@ -1487,6 +1495,19 @@ class ActiveBuilder:
                     move_relative(int(delta.x), int(delta.y))
                 else:
                     mouse_move_relative(int(delta.x), int(delta.y))
+
+        elif self.config.property == "scroll_pos":
+            # One-time scroll - emit immediately
+            from talon import actions
+            delta = self.target_value
+            if abs(delta.x) > 0.01 or abs(delta.y) > 0.01:
+                by_lines = self.config.by_lines if hasattr(self.config, 'by_lines') else True
+                if abs(delta.x) > 0.01 and abs(delta.y) > 0.01:
+                    actions.mouse_scroll(x=delta.x, y=delta.y, by_lines=by_lines)
+                elif abs(delta.y) > 0.01:
+                    actions.mouse_scroll(delta.y, by_lines=by_lines)
+                elif abs(delta.x) > 0.01:
+                    actions.mouse_scroll(x=delta.x, y=0, by_lines=by_lines)
 
         # Add other property types here as needed (speed, direction, etc.)
 
@@ -1687,6 +1708,20 @@ class ActiveBuilder:
                     self.lifecycle.has_reverted(),
                     interpolation
                 )
+        elif self.config.property == "scroll_pos":
+            # scroll_pos only supports offset mode (relative scrolling via .by())
+            # Animate scroll delta from zero to target
+            neutral = Vec2(0, 0)
+            if phase is None:
+                if self.lifecycle.has_reverted():
+                    return neutral
+                return self.target_value
+            elif phase == LifecyclePhase.OVER:
+                return self.target_value * progress
+            elif phase == LifecyclePhase.HOLD:
+                return self.target_value
+            elif phase == LifecyclePhase.REVERT:
+                return self.target_value + (neutral - self.target_value) * progress
 
         return self.target_value
 
