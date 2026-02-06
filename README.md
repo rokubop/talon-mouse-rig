@@ -1,5 +1,5 @@
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
-![Status](https://img.shields.io/badge/status-prototype-red)
+![Version](https://img.shields.io/badge/version-0.6.0-blue)
+![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 # Talon Mouse Rig
@@ -13,17 +13,38 @@
 
 ## Overview
 
-The rig gives you full control over these properties:
+Mouse rig gives you
 
-- **Direction** - A normalized vector (x, y) indicating movement direction
-- **Speed** - Movement magnitude in pixels per frame
-- **Vector** - Direction × Speed (velocity)
-- **Position** - Absolute or relative positioning with interpolation
-- **Scroll** - Continuous scrolling with independent speed, direction, and vector control (just like mouse movement)
+- ~[40 talon actions](mouse_rig.py) for controlling mouse position, speed, direction, and scroll
+- All operations can specify transition durations and easing for smooth movement
+- Works with games by using relative movement when possible
+- Callbacks available on every operation for clicking and dragging
+- Ready to use voice commands in [mouse_rig_user.talon](mouse_rig_user.talon) you can customize
+- Advanced behavior with accessing `actions.user.mouse_rig()` directly.
+
+## Installation
+
+Clone this repo into your [Talon](https://talonvoice.com/) user directory:
+
+```sh
+# mac and linux
+cd ~/.talon/user
+
+# windows
+cd ~/AppData/Roaming/talon/user
+
+# This repo
+git clone https://github.com/rokubop/talon-mouse-rig
+```
+
+🎉 Done!
+
+Hop over to **[mouse_rig_user.talon](mouse_rig_user.talon)**.
+This is your file to customize voice commands.
 
 ## Talon Actions
 
-Convenience actions for voice commands. See [`mouse_rig_user.talon`](mouse_rig_user.talon) for examples.
+All Talon actions use **`actions.user.mouse_rig()`** under the hood.
 
 **Direction + Speed**
 ```python
@@ -32,7 +53,7 @@ user.mouse_rig_go_left(speed)
 user.mouse_rig_go_right(speed)
 user.mouse_rig_go_up(speed)
 user.mouse_rig_go_down(speed)
-user.mouse_rig_go_left(initial_speed, target_speed, over_ms, easing)
+user.mouse_rig_go_left(initial_speed, over_ms, easing)
 ```
 
 **Direction:**
@@ -65,39 +86,6 @@ user.mouse_rig_pos_to(500, 500, 1000, "ease_in_out")
 user.mouse_rig_pos_to(x, y, over_ms, easing)
 user.mouse_rig_pos_by(dx, dy, over_ms, easing)
 user.mouse_rig_pos_by_value(distance, over_ms, easing)
-```
-
-**Ready to use example talon commands:**
-
-[mouse_rig_user.talon](mouse_rig_user.talon)
-
-**Advanced:**
-
-For full control, use the fluent API with `rig = actions.user.mouse_rig()`. See the [Fluent API](#fluent-api) section below for details.
-
-## Installation
-
-### Development Dependencies
-
-Optional dependencies for development and testing:
-- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.10.0+)
-
-### Install
-
-Clone this repo into your [Talon](https://talonvoice.com/) user directory:
-
-```sh
-# mac and linux
-cd ~/.talon/user
-
-# windows
-cd ~/AppData/Roaming/talon/user
-
-# This repo
-git clone https://github.com/rokubop/talon-mouse-rig
-
-# Dev Dependencies (optional)
-git clone https://github.com/rokubop/talon-ui-elements
 ```
 
 ## Fluent API
@@ -161,17 +149,23 @@ rig.scroll.vector.add(0, 2)
 # Offset layers for temporary boosts
 rig.scroll.speed.offset.add(10).over(1000)
 rig.scroll.speed.offset.revert()
-rig.layer("boost").scroll.speed.offset.add(10).over(1000)
 
-# Control scroll units (default is by_lines)
-rig.scroll.speed.by_lines.to(5)
-rig.scroll.speed.by_pixels.to(100)
-
-# Stop scrolling
-rig.scroll.speed.to(0)
 rig.stop()  # stops all movement including scroll
 rig.stop(1000)  # smooth stop
 ```
+
+### Offset and override layers
+
+Use offset layers for temporary boosts that can stack and revert independently of base values. Override layers work the same but replace instead of adding to base values.
+
+```python
+rig.speed.offset.add(10).over(1000)  # Additive offset layer
+rig.speed.override.to(5).over(1000)  # Override layer
+rig.speed.offset.revert(1000)  # Revert offset layer
+rig.speed.override.revert(1000)  # Revert override layer
+```
+
+You can combine behaviors with these, for example `.stack()`, `.queue()`, and `.throttle()` to create complex interactions.
 
 ### Layers
 
@@ -267,7 +261,7 @@ rig.speed.add(10).over(300) \
 ```python
 rig.stop(ms?)
 rig.reverse(ms?)
-rig.bake()
+rig.bake() # flatten entire rig into a single layer
 ```
 
 #### State
@@ -330,3 +324,13 @@ cardinal = rig.state.direction.to_cardinal()
 rig.state.direction.magnitude()
 rig.state.direction.normalized()
 ```
+
+## Contributing
+
+### Development Dependencies
+
+The test runner requires:
+
+- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.14.0+)
+
+Uncomment the [mouse_rig_dev.talon](mouse_rig_dev.talon) commands to enable testing actions.
