@@ -1,17 +1,14 @@
 {
   "name": "talon-mouse-rig",
   "title": "Mouse Rig",
-  "description": "Control your mouse with position, speed, direction, and vector commands, over time and with advanced behaviors",
+  "description": "All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.",
   "version": "0.5.0",
-  "status": "prototype",
+  "status": "experimental",
   "namespace": "user.mouse_rig",
   "github": "https://github.com/rokubop/talon-mouse-rig",
   "preview": "",
   "author": "Rokubop",
-  "tags": [
-    "mouse",
-    "movement"
-  ],
+  "tags": ["mouse", "movement"],
   "license": "MIT",
   "dependencies": {},
   "devDependencies": {

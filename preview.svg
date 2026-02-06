@@ -1,43 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="120" height="100">
   <defs>
-    <!-- Gradient for motion trail -->
-    <linearGradient id="trailGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.8"/>
-    </linearGradient>
-    <!-- Glow effect -->
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-
-  <!-- Motion trail curves -->
-  <path d="M5 50 Q30 25, 55 50 T105 50" stroke="url(#trailGrad)" stroke-width="5" fill="none" stroke-linecap="round"/>
-  <path d="M15 68 Q40 43, 65 68 T115 68" stroke="url(#trailGrad)" stroke-width="3.5" fill="none" stroke-linecap="round" opacity="0.5"/>
-
-  <!-- Mouse cursor (visual center around 85, 50) -->
-  <g transform="translate(77, 37)" filter="url(#glow)">
-    <!-- Cursor shape -->
+  <!-- Gradient circle background -->
+  <circle cx="60" cy="50" r="45" fill="url(#bgGrad)"/>
+  <!-- 8-direction style with diagonal carets -->
+  <!-- Cardinals -->
+  <path d="M55 15 L60 5 L65 15" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M55 85 L60 95 L65 85" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M15 45 L5 50 L15 55" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M105 45 L115 50 L105 55" stroke="#60a5fa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Diagonals -->
+  <path d="M95 12 L102 5 L109 12" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6" transform="rotate(45, 102, 8)"/>
+  <path d="M95 88 L102 95 L109 88" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6" transform="rotate(-45, 102, 92)"/>
+  <path d="M11 12 L18 5 L25 12" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6" transform="rotate(-45, 18, 8)"/>
+  <path d="M11 88 L18 95 L25 88" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6" transform="rotate(45, 18, 92)"/>
+  <g transform="translate(50, 37)">
     <path d="M0 0 L0 28 L7 21 L12 32 L16 30 L11 19 L20 19 Z" fill="#e5e7eb" stroke="#4b5563" stroke-width="1.5"/>
   </g>
-
-  <!-- Direction carets centered around cursor visual center (85, 50) -->
-  <!-- Up caret -->
-  <path d="M75 18 L85 8 L95 18" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- Right caret -->
-  <path d="M112 40 L122 50 L112 60" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- Down caret -->
-  <path d="M75 82 L85 92 L95 82" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- Left caret -->
-  <path d="M58 40 L48 50 L58 60" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-
-  <!-- Speed indicator dots -->
-  <circle cx="145" cy="50" r="5" fill="#3b82f6" opacity="0.3"/>
-  <circle cx="158" cy="50" r="5" fill="#3b82f6" opacity="0.5"/>
-  <circle cx="171" cy="50" r="5" fill="#3b82f6" opacity="0.7"/>
-  <circle cx="184" cy="50" r="5" fill="#3b82f6" opacity="1"/>
 </svg>

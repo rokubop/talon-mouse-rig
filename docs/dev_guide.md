@@ -1,4 +1,4 @@
-# Mouse Rig V2 - Development Guide
+# Mouse Rig - Development Guide
 
 ## Architecture Overview
 

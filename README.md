@@ -1,12 +1,15 @@
-# Talon Mouse Rig
-
-![Preview](preview.svg)
-
 ![Version](https://img.shields.io/badge/version-0.5.0-blue)
 ![Status](https://img.shields.io/badge/status-prototype-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-All purpose mouse rig for Talon with control over position, speed, direction, vectors, interpolation, timing, stacking, callbacks, and behaviors, favoring OS-level APIs for game compatibility.
+# Talon Mouse Rig
+
+<table width="600"><tr>
+<td width="150"><img src="preview.svg"></td>
+<td>All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.</td>
+</tr></table>
+
+![Demo](demo.webp)
 
 ## Overview
 
