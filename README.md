@@ -1,5 +1,7 @@
 # Talon Mouse Rig
 
+![Preview](preview.svg)
+
 ![Version](https://img.shields.io/badge/version-0.5.0-blue)
 ![Status](https://img.shields.io/badge/status-prototype-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
