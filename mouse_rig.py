@@ -545,7 +545,7 @@ class Actions:
         run_sequence(steps)
 
     def mouse_rig_wait(ms: float) -> Any:
-        """Wait for a duration. Use inside mouse_rig_sequence for timed delays.
+        """For use with `user.mouse_rig_sequence`
 
         Example:
         ```python

@@ -2,13 +2,16 @@
   "name": "talon-mouse-rig",
   "title": "Mouse Rig",
   "description": "All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "status": "experimental",
   "namespace": "user.mouse_rig",
   "github": "https://github.com/rokubop/talon-mouse-rig",
   "preview": "https://raw.githubusercontent.com/rokubop/talon-mouse-rig/main/preview.svg",
   "author": "Rokubop",
-  "tags": ["mouse", "movement"],
+  "tags": [
+    "mouse",
+    "movement"
+  ],
   "license": "MIT",
   "dependencies": {},
   "devDependencies": {
@@ -61,6 +64,7 @@
       "user.mouse_rig_scroll_speed_mul",
       "user.mouse_rig_scroll_speed_to",
       "user.mouse_rig_scroll_stop",
+      "user.mouse_rig_sequence",
       "user.mouse_rig_speed_add",
       "user.mouse_rig_speed_mul",
       "user.mouse_rig_speed_to",
@@ -73,7 +77,8 @@
       "user.mouse_rig_state_speed",
       "user.mouse_rig_stop",
       "user.mouse_rig_test_toggle_ui",
-      "user.mouse_rig_version"
+      "user.mouse_rig_version",
+      "user.mouse_rig_wait"
     ]
   },
   "depends": {
