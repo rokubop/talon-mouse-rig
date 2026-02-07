@@ -15,12 +15,12 @@
 
 Mouse rig gives you
 
-- ~[40 talon actions](mouse_rig.py) for controlling mouse position, speed, direction, and scroll
-- All operations can specify transition durations and easing
+- ~50 actions for controlling mouse position, speed, direction, and scroll
+- Transitions and easing
 - Works with games by using relative movement when possible
-- Ready to use voice commands in [mouse_rig_user.talon](mouse_rig_user.talon) you can customize
+- Ready to use voice commands in [mouse_rig_user.talon](mouse_rig_user.talon)
 - Sequencing actions
-- Offset and override layers for temporary effects independent of base state
+- Offset and override layers for temporary effects
 
 ## Installation
 
@@ -44,8 +44,6 @@ Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out comma
 This is your file to customize.
 
 ## Talon Actions
-
-~50 actions for mouse position, speed, direction, and scroll.
 
 **At a Glance**
 
@@ -85,11 +83,13 @@ Transitions also accept an easing function. Solid = base, faded = 2→4 (sharper
 
 <img src="assets/easing_curves.svg">
 
-When Talon actions support transitions, you'll see parameters like `over_ms`, `hold_ms`, `revert_ms`, and `easing`. Not all actions expose every parameter. For full control, use the [fluent API](#fluent-api).
+When Talon actions support transitions, you'll see parameters like `over_ms`, `hold_ms`, `revert_ms`, and `easing`.
+
+Not all actions expose every parameter. For full control, use the [fluent API](#fluent-api).
 
 ## Fluent API
 
-`rig = actions.user.mouse_rig()` — full control over every operation.
+`rig = actions.user.mouse_rig()` - full control over every operation.
 
 ```python
 rig.pos.to(960, 540).over(400, "ease_in_out")
@@ -120,7 +120,7 @@ rig.speed.add(10).over(300) \
 Already moving right and want a temporary speed boost on hiss?
 
 ```python
-# Offset adds to the base value and auto-reverts — base state is untouched
+# Offset adds to the base value and auto-reverts - base state is untouched
 rig.speed.offset.add(10).over(200).hold(500).revert(200)
 
 # Override replaces the base value instead of adding
@@ -138,6 +138,7 @@ rig.layer("boost").speed.add(10).over(1000)
 rig.layer("slowmo").speed.mul(0.5).over(1000)
 rig.layer("boost").revert(1000)  # remove effect
 rig.layer("boost").bake()        # flatten into base
+rig.layer("boost").emit(1000)    # convert to anonymous layer that fades out
 ```
 
 **Repeat behaviors** control what happens when a layer fires again while active:
@@ -183,8 +184,10 @@ builder.run()  # execute now instead of waiting for GC
 
 ## Tests
 
-211 tests across 13 groups run live inside Talon and serve as working examples. See the [test files](tests/) for usage patterns.
+200+ tests across 13 groups run live inside Talon and serve as working examples. See the [test files](tests/) for usage patterns.
+
+Uncomment [mouse_rig_dev.talon](mouse_rig_dev.talon) to enable.
+
+Requires [talon-ui-elements](https://github.com/rokubop/talon-ui-elements) (v0.14.0+).
 
 ![Tests](assets/tests.png)
-
-Requires [talon-ui-elements](https://github.com/rokubop/talon-ui-elements) (v0.14.0+). Uncomment [mouse_rig_dev.talon](mouse_rig_dev.talon) to enable.
