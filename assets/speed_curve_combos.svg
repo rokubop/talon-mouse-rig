@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 200" width="470" height="200">
+  <defs>
+    <linearGradient id="gf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cell 1: .over() -->
+  <g transform="translate(0, 0)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="35,55 100,13 140,13 140,55" fill="url(#gf)"/>
+    <polyline points="10,55 35,55 100,13 140,13" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.over()</text>
+  </g>
+
+  <!-- Cell 2: .revert() -->
+  <g transform="translate(160, 0)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="10,55 10,13 40,13 105,55" fill="url(#gf)"/>
+    <polyline points="10,13 40,13 105,55 140,55" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.revert()</text>
+  </g>
+
+  <!-- Cell 3: .over().revert() -->
+  <g transform="translate(320, 0)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="25,55 75,13 125,55" fill="url(#gf)"/>
+    <polyline points="10,55 25,55 75,13 125,55 140,55" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.over().revert()</text>
+  </g>
+
+  <!-- Cell 4: .over().hold().revert() -->
+  <g transform="translate(0, 105)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="20,55 50,13 100,13 130,55" fill="url(#gf)"/>
+    <polyline points="10,55 20,55 50,13 100,13 130,55 140,55" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.over().hold().revert()</text>
+  </g>
+
+  <!-- Cell 5: .hold().revert() -->
+  <g transform="translate(160, 105)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="10,55 10,13 80,13 125,55" fill="url(#gf)"/>
+    <polyline points="10,55 10,13 80,13 125,55 140,55" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.hold().revert()</text>
+  </g>
+
+  <!-- Cell 6: .over().hold() -->
+  <g transform="translate(320, 105)">
+    <line x1="10" y1="55" x2="140" y2="55" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="13" x2="140" y2="13" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polygon points="20,55 55,13 140,13 140,55" fill="url(#gf)"/>
+    <polyline points="10,55 20,55 55,13 140,13" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">.over().hold()</text>
+  </g>
+</svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 464 95" width="464" height="95">
+
+  <!-- Cell 1: linear -->
+  <g transform="translate(0, 0)">
+    <line x1="10" y1="58" x2="100" y2="58" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="8" x2="100" y2="8" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <polyline points="10,58 100,8" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="55" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">linear</text>
+  </g>
+
+  <!-- Cell 2: ease_in family -->
+  <g transform="translate(118, 0)">
+    <line x1="10" y1="58" x2="100" y2="58" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="8" x2="100" y2="8" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <!-- ease_in4: t⁴ (most extreme) -->
+    <polyline points="10,58 19,58 28,57.9 37,57.6 46,56.7 55,54.9 64,51.5 73,46 82,37.5 91,25.2 100,8" stroke="#3b82f6" stroke-opacity="0.2" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in3: t³ -->
+    <polyline points="10,58 19,58 28,57.6 37,56.7 46,54.8 55,51.8 64,47.2 73,40.9 82,32.4 91,21.6 100,8" stroke="#3b82f6" stroke-opacity="0.35" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in2: t² -->
+    <polyline points="10,58 19,57.5 28,56 37,53.5 46,50 55,45.5 64,40 73,33.5 82,26 91,17.5 100,8" stroke="#3b82f6" stroke-opacity="0.55" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in: 1-cos(t*π/2) (gentlest, solid) -->
+    <polyline points="10,58 19,57.4 28,55.6 37,52.6 46,48.4 55,43.4 64,37.4 73,30.7 82,23.5 91,15.8 100,8" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="55" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">ease_in</text>
+  </g>
+
+  <!-- Cell 3: ease_out family -->
+  <g transform="translate(236, 0)">
+    <line x1="10" y1="58" x2="100" y2="58" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="8" x2="100" y2="8" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <!-- ease_out4: 1-(1-t)⁴ (most extreme) -->
+    <polyline points="10,58 19,40.8 28,28.5 37,20 46,14.5 55,11.1 64,9.3 73,8.4 82,8.1 91,8 100,8" stroke="#3b82f6" stroke-opacity="0.2" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_out3: 1-(1-t)³ -->
+    <polyline points="10,58 19,44.5 28,33.6 37,25.2 46,18.8 55,14.3 64,11.2 73,9.4 82,8.4 91,8.1 100,8" stroke="#3b82f6" stroke-opacity="0.35" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_out2: 1-(1-t)² -->
+    <polyline points="10,58 19,48.5 28,40 37,32.5 46,26 55,20.5 64,16 73,12.5 82,10 91,8.5 100,8" stroke="#3b82f6" stroke-opacity="0.55" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_out: sin(t*π/2) (gentlest, solid) -->
+    <polyline points="10,58 19,50.2 28,42.6 37,35.3 46,28.6 55,22.7 64,17.6 73,13.5 82,10.5 91,8.6 100,8" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="55" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">ease_out</text>
+  </g>
+
+  <!-- Cell 4: ease_in_out family -->
+  <g transform="translate(354, 0)">
+    <line x1="10" y1="58" x2="100" y2="58" stroke="#94a3b8" stroke-width="0.5"/>
+    <line x1="10" y1="8" x2="100" y2="8" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,4"/>
+    <!-- ease_in_out4: piecewise t⁴ (most extreme S) -->
+    <polyline points="10,58 19,58 28,57.4 37,54.8 46,47.8 55,33 64,18.2 73,11.2 82,8.6 91,8 100,8" stroke="#3b82f6" stroke-opacity="0.2" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in_out3: piecewise t³ -->
+    <polyline points="10,58 19,57.8 28,56.4 37,52.6 46,45.2 55,33 64,20.8 73,13.4 82,9.6 91,8.2 100,8" stroke="#3b82f6" stroke-opacity="0.35" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in_out2: piecewise t² -->
+    <polyline points="10,58 19,57 28,54 37,49 46,42 55,33 64,24 73,17 82,12 91,9.1 100,8" stroke="#3b82f6" stroke-opacity="0.55" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- ease_in_out: (1-cos(t*π))/2 (gentlest, solid) -->
+    <polyline points="10,58 19,56.8 28,53.1 37,47.1 46,38.9 55,33 64,27.1 73,18.9 82,12.9 91,9.2 100,8" stroke="#3b82f6" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="55" y="78" text-anchor="middle" fill="#64748b" font-size="11" font-family="ui-monospace, monospace">ease_in_out</text>
+  </g>
+</svg>
