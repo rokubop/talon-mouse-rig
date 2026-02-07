@@ -1,6 +1,7 @@
 from talon import actions, Module
 from typing import Any
 from .src import rig as get_rig, reload_rig
+from .src.sequence import run_sequence, WaitHandle
 
 mod = Module()
 
@@ -65,6 +66,7 @@ class Actions:
             builder = builder.over(over_ms, easing)
         if callback is not None:
             builder = builder.then(callback)
+        return builder
 
     def mouse_rig_pos_by(
             dx: float,
@@ -100,6 +102,7 @@ class Actions:
             builder = builder.over(over_ms, easing)
         if callback is not None:
             builder = builder.then(callback)
+        return builder
 
     def mouse_rig_pos_by_value(
             value: int | float,
@@ -136,6 +139,7 @@ class Actions:
             builder = builder.over(over_ms, easing)
         if callback is not None:
             builder = builder.then(callback)
+        return builder
 
     def mouse_rig_speed_to(
             value: float | int,
@@ -169,6 +173,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_speed_add(
             value: float | int,
@@ -202,6 +207,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_speed_mul(
             value: float | int,
@@ -235,6 +241,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_direction_to(
             x: int | float,
@@ -266,6 +273,7 @@ class Actions:
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
+        return builder
 
     def mouse_rig_direction_by(
             degrees: int | float,
@@ -290,6 +298,7 @@ class Actions:
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
+        return builder
 
     def mouse_rig_direction_left(over_ms: int = None, easing: str = None) -> None:
         """Set direction to left, optionally curve over time.
@@ -304,7 +313,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_direction_to(-1, 0, over_ms, easing)
+        return actions.user.mouse_rig_direction_to(-1, 0, over_ms, easing)
 
     def mouse_rig_direction_right(over_ms: int = None, easing: str = None) -> None:
         """Set direction to right, optionally curve over time.
@@ -319,7 +328,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_direction_to(1, 0, over_ms, easing)
+        return actions.user.mouse_rig_direction_to(1, 0, over_ms, easing)
 
     def mouse_rig_direction_up(over_ms: int = None, easing: str = None) -> None:
         """Set direction to up, optionally curve over time.
@@ -334,7 +343,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_direction_to(0, -1, over_ms, easing)
+        return actions.user.mouse_rig_direction_to(0, -1, over_ms, easing)
 
     def mouse_rig_direction_down(over_ms: int = None, easing: str = None) -> None:
         """Set direction to down, optionally curve over time.
@@ -349,7 +358,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_direction_to(0, 1, over_ms, easing)
+        return actions.user.mouse_rig_direction_to(0, 1, over_ms, easing)
 
     def mouse_rig_reverse(reverse_ms: int = None) -> None:
         """Reverse the current direction, optionally over time.
@@ -398,9 +407,9 @@ class Actions:
 
         if not rig.state.speed:
             if initial_ms is not None:
-                rig.speed.to(initial_speed).over(initial_ms, initial_easing)
+                return rig.speed.to(initial_speed).over(initial_ms, initial_easing)
             else:
-                rig.speed(initial_speed)
+                return rig.speed(initial_speed)
 
     def mouse_rig_go_left(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move left, setting direction and starting speed if stopped.
@@ -410,7 +419,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_go_right(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move right, setting direction and starting speed if stopped.
@@ -420,7 +429,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_go_up(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move up, setting direction and starting speed if stopped.
@@ -430,7 +439,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_go_down(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Move down, setting direction and starting speed if stopped.
@@ -440,7 +449,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_go_direction(0, 1, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_go_direction(0, 1, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_state_speed() -> float:
         """Get current speed from rig state"""
@@ -505,6 +514,7 @@ class Actions:
 
         if callback is not None:
             handle.then(callback)
+        return handle
 
     def mouse_rig_reload() -> None:
         """Reload/reset rig. Useful for development"""
@@ -514,6 +524,42 @@ class Actions:
         """Reset rig to default state (speed=0, direction=right, clear all layers)"""
         rig = actions.user.mouse_rig()
         rig.reset()
+
+    def mouse_rig_sequence(steps: list) -> None:
+        """Run a sequence of steps, waiting for rig animations between steps.
+
+        Each step is a callable (lambda/function). If a step returns a RigBuilder
+        with an async lifecycle (.over/.hold/.revert), the sequence waits for its
+        animation to complete before running the next step. Otherwise continues
+        immediately.
+
+        Example:
+        ```python
+        actions.user.mouse_rig_sequence([
+            lambda: ctrl.mouse_click(0, down=True),
+            lambda: actions.user.mouse_rig_pos_to(500, 300, 500),
+            lambda: ctrl.mouse_click(0, up=True),
+        ])
+        ```
+        """
+        run_sequence(steps)
+
+    def mouse_rig_wait(ms: float) -> Any:
+        """Wait for a duration. Use inside mouse_rig_sequence for timed delays.
+
+        Example:
+        ```python
+        actions.user.mouse_rig_sequence([
+            lambda: actions.user.mouse_rig_go_right(3),
+            lambda: actions.user.mouse_rig_wait(1000),
+            lambda: actions.user.mouse_rig_stop(),
+        ])
+        ```
+
+        Args:
+            ms: Duration to wait in milliseconds
+        """
+        return WaitHandle(ms)
 
     def mouse_rig_test_toggle_ui():
         """Show the QA UI for mouse rig development"""
@@ -540,6 +586,7 @@ class Actions:
 
         if callback is not None:
             handle.then(callback)
+        return handle
 
     def mouse_rig_scroll_by(
             dx: float,
@@ -570,6 +617,7 @@ class Actions:
             builder = builder.over(over_ms, easing)
         if callback is not None:
             builder = builder.then(callback)
+        return builder
 
     def mouse_rig_scroll_speed_to(
             value: float | int,
@@ -600,6 +648,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_scroll_speed_add(
             value: float | int,
@@ -630,6 +679,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_scroll_speed_mul(
             value: float | int,
@@ -660,6 +710,7 @@ class Actions:
             builder = builder.hold(hold_ms)
         if revert_ms:
             builder = builder.revert(revert_ms)
+        return builder
 
     def mouse_rig_scroll_direction_to(
             x: int | float,
@@ -686,6 +737,7 @@ class Actions:
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
+        return builder
 
     def mouse_rig_scroll_direction_by(
             degrees: int | float,
@@ -710,6 +762,7 @@ class Actions:
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
+        return builder
 
     def mouse_rig_scroll_direction_left(over_ms: int = None, easing: str = None) -> None:
         """Set scroll direction to left, optionally curve over time.
@@ -724,7 +777,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_scroll_direction_to(-1, 0, over_ms, easing)
+        return actions.user.mouse_rig_scroll_direction_to(-1, 0, over_ms, easing)
 
     def mouse_rig_scroll_direction_right(over_ms: int = None, easing: str = None) -> None:
         """Set scroll direction to right, optionally curve over time.
@@ -739,7 +792,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_scroll_direction_to(1, 0, over_ms, easing)
+        return actions.user.mouse_rig_scroll_direction_to(1, 0, over_ms, easing)
 
     def mouse_rig_scroll_direction_up(over_ms: int = None, easing: str = None) -> None:
         """Set scroll direction to up, optionally curve over time.
@@ -754,7 +807,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_scroll_direction_to(0, -1, over_ms, easing)
+        return actions.user.mouse_rig_scroll_direction_to(0, -1, over_ms, easing)
 
     def mouse_rig_scroll_direction_down(over_ms: int = None, easing: str = None) -> None:
         """Set scroll direction to down, optionally curve over time.
@@ -769,7 +822,7 @@ class Actions:
             over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
-        actions.user.mouse_rig_scroll_direction_to(0, 1, over_ms, easing)
+        return actions.user.mouse_rig_scroll_direction_to(0, 1, over_ms, easing)
 
     def mouse_rig_scroll_go_direction(
             x: float,
@@ -800,9 +853,9 @@ class Actions:
 
         if not rig.state.scroll_speed:
             if initial_ms is not None:
-                rig.scroll.speed.to(initial_speed).over(initial_ms, initial_easing)
+                return rig.scroll.speed.to(initial_speed).over(initial_ms, initial_easing)
             else:
-                rig.scroll.speed(initial_speed)
+                return rig.scroll.speed(initial_speed)
 
     def mouse_rig_scroll_go_left(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll left, setting direction and starting speed if not scrolling.
@@ -812,7 +865,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_scroll_go_direction(-1, 0, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_scroll_go_right(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll right, setting direction and starting speed if not scrolling.
@@ -822,7 +875,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_scroll_go_direction(1, 0, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_scroll_go_up(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll up, setting direction and starting speed if not scrolling.
@@ -832,7 +885,7 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_scroll_go_direction(0, -1, initial_speed, initial_ms, initial_easing)
 
     def mouse_rig_scroll_go_down(initial_speed: int | float = 5, initial_ms: int = None, initial_easing: str = None) -> None:
         """Scroll down, setting direction and starting speed if not scrolling.
@@ -842,4 +895,4 @@ class Actions:
             initial_ms: Duration to ramp up to initial_speed (optional)
             initial_easing: Easing function for ramp up (optional)
         """
-        actions.user.mouse_rig_scroll_go_direction(0, 1, initial_speed, initial_ms, initial_easing)
+        return actions.user.mouse_rig_scroll_go_direction(0, 1, initial_speed, initial_ms, initial_easing)

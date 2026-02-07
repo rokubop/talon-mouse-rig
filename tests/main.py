@@ -17,7 +17,8 @@ _test_runner_state = {
     "passed_count": 0,
     "failed_count": 0,
     "all_tests_running": False,
-    "test_results_file": None
+    "test_results_file": None,
+    "group_names": []
 }
 
 
@@ -36,6 +37,7 @@ def toggle_test_ui(show: bool = None):
         from .state import STATE_TESTS
         from .scroll import SCROLL_TESTS
         from .actions_scroll import ACTIONS_SCROLL_TESTS
+        from .sequence import SEQUENCE_TESTS
 
         test_groups = [
             ("Position", POSITION_TESTS),
@@ -49,8 +51,11 @@ def toggle_test_ui(show: bool = None):
             ("Special", SPECIAL_TESTS),
             ("Actions", ACTIONS_TESTS),
             ("Actions Scroll", ACTIONS_SCROLL_TESTS),
+            ("Sequence", SEQUENCE_TESTS),
             ("State", STATE_TESTS)
         ]
+
+        _test_runner_state["group_names"] = [name for name, _ in test_groups]
 
         show = show if show is not None else not actions.user.ui_elements_get_trees()
 
@@ -301,18 +306,8 @@ def stop_all_tests():
     _test_runner_state["all_tests_running"] = False
     _test_runner_state["test_results_file"] = None
 
-    actions.user.ui_elements_set_state("run_all_Position", False)
-    actions.user.ui_elements_set_state("run_all_Speed", False)
-    actions.user.ui_elements_set_state("run_all_Direction", False)
-    actions.user.ui_elements_set_state("run_all_Vector", False)
-    actions.user.ui_elements_set_state("run_all_Scroll", False)
-    actions.user.ui_elements_set_state("run_all_Validation", False)
-    actions.user.ui_elements_set_state("run_all_Contracts", False)
-    actions.user.ui_elements_set_state("run_all_Behaviors", False)
-    actions.user.ui_elements_set_state("run_all_Special", False)
-    actions.user.ui_elements_set_state("run_all_Actions", False)
-    actions.user.ui_elements_set_state("run_all_Actions Scroll", False)
-    actions.user.ui_elements_set_state("run_all_State", False)
+    for name in _test_runner_state["group_names"]:
+        actions.user.ui_elements_set_state(f"run_all_{name}", False)
     actions.user.ui_elements_set_state("run_all_tests_global", False)
     actions.user.ui_elements_set_state("current_test", None)
 

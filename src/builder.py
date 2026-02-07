@@ -706,6 +706,20 @@ class RigBuilder:
     # EXECUTION (on __del__)
     # ========================================================================
 
+    def run(self) -> 'RigBuilder':
+        """Explicitly execute this builder immediately.
+
+        After calling run(), __del__ becomes a no-op since _executed is True.
+        Useful for mouse_rig_sequence where .then() needs to be attached
+        before execution.
+
+        Returns:
+            self
+        """
+        if self._is_valid and not self._executed:
+            self._execute()
+        return self
+
     def __del__(self):
         if self._is_valid and not self._executed:
             self._execute()
