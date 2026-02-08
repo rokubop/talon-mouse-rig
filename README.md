@@ -117,25 +117,25 @@ rig.speed.add(10).over(300) \
 
 ### Offset and Override
 
-Already moving right and want a temporary speed boost on hiss?
+Use an offset layer for a separate, revertible effect.
+Available on all properties pos, speed, direction, etc
 
 ```python
-# Offset adds to the base value and auto-reverts - base state is untouched
-rig.speed.offset.add(10).over(200).hold(500).revert(200)
+# start (can do up to 3 stacks)
+rig.speed.offset.stack(3).add(10).over(200)
 
-# Override replaces the base value instead of adding
-rig.speed.override.to(5).over(200).hold(500).revert(200)
+# later
+rig.speed.offset.revert(200)
 ```
 
-Scroll works the same way: `rig.scroll.speed.offset.add(10).over(1000)`
+Built in layers are `offset` or `override`.
 
 ### Layers
 
-Named layers provide isolated, revertible effects calculated after base values.
+Instead of using built-in `offset`, use named layers when you want to invoke a start and stop at different times, and be able to reference it in `state.layers` for introspection.
 
 ```python
 rig.layer("boost").speed.add(10).over(1000)
-rig.layer("slowmo").speed.mul(0.5).over(1000)
 rig.layer("boost").revert(1000)  # remove effect
 rig.layer("boost").bake()        # flatten into base
 rig.layer("boost").emit(1000)    # convert to anonymous layer that fades out
