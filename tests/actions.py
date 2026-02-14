@@ -100,7 +100,7 @@ def test_action_pos_by_over(on_success, on_failure):
 def test_action_speed_to(on_success, on_failure):
     """Test: actions.user.mouse_rig_speed_to(value) - instant speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_right()
+    actions.user.mouse_rig_direction_to(1, 0)
     actions.user.mouse_rig_speed_to(10)
 
     if actions.user.mouse_rig_state_speed() != 10:
@@ -117,7 +117,7 @@ def test_action_speed_to(on_success, on_failure):
 def test_action_speed_add(on_success, on_failure):
     """Test: actions.user.mouse_rig_speed_add(delta) - add to speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_up()
+    actions.user.mouse_rig_direction_to(0, -1)
     actions.user.mouse_rig_speed_to(5)
     actions.user.mouse_rig_speed_add(3)
 
@@ -135,7 +135,7 @@ def test_action_speed_add(on_success, on_failure):
 def test_action_speed_mul(on_success, on_failure):
     """Test: actions.user.mouse_rig_speed_mul(factor) - multiply speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_left()
+    actions.user.mouse_rig_direction_to(-1, 0)
     actions.user.mouse_rig_speed_to(5)
     actions.user.mouse_rig_speed_mul(2)
 
@@ -190,7 +190,7 @@ def test_action_speed_to_hold_revert(on_success, on_failure):
 def test_action_speed_to_hold(on_success, on_failure):
     """Test: actions.user.mouse_rig_speed_to(value, hold) - pulse with standalone hold"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_right()
+    actions.user.mouse_rig_direction_to(1, 0)
     actions.user.mouse_rig_speed_to(5)
 
     def check_after_pulse():
@@ -279,82 +279,14 @@ def test_action_direction_by_over(on_success, on_failure):
     cron.after("500ms", check_direction)
 
 
-def test_action_direction_left(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_left() - cardinal direction"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_left()
-    actions.user.mouse_rig_speed_to(5)
-
-    def check_direction():
-        actions.user.mouse_rig_stop()
-        dx, dy = actions.user.mouse_rig_state_direction()
-        if abs(dx - (-1.0)) >= 0.01 or abs(dy - 0.0) >= 0.01:
-            on_failure(f"Direction wrong: expected (-1.0, 0.0), got ({dx}, {dy})")
-            return
-        on_success()
-
-    cron.after("500ms", check_direction)
-
-
-def test_action_direction_right(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_right() - cardinal direction"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_right()
-    actions.user.mouse_rig_speed_to(5)
-
-    def check_direction():
-        actions.user.mouse_rig_stop()
-        dx, dy = actions.user.mouse_rig_state_direction()
-        if abs(dx - 1.0) >= 0.01 or abs(dy - 0.0) >= 0.01:
-            on_failure(f"Direction wrong: expected (1.0, 0.0), got ({dx}, {dy})")
-            return
-        on_success()
-
-    cron.after("500ms", check_direction)
-
-
-def test_action_direction_up(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_up() - cardinal direction"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_up()
-    actions.user.mouse_rig_speed_to(5)
-
-    def check_direction():
-        actions.user.mouse_rig_stop()
-        dx, dy = actions.user.mouse_rig_state_direction()
-        if abs(dx - 0.0) >= 0.01 or abs(dy - (-1.0)) >= 0.01:
-            on_failure(f"Direction wrong: expected (0.0, -1.0), got ({dx}, {dy})")
-            return
-        on_success()
-
-    cron.after("500ms", check_direction)
-
-
-def test_action_direction_down(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_down() - cardinal direction"""
-    actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_down()
-    actions.user.mouse_rig_speed_to(5)
-
-    def check_direction():
-        actions.user.mouse_rig_stop()
-        dx, dy = actions.user.mouse_rig_state_direction()
-        if abs(dx - 0.0) >= 0.01 or abs(dy - 1.0) >= 0.01:
-            on_failure(f"Direction wrong: expected (0.0, 1.0), got ({dx}, {dy})")
-            return
-        on_success()
-
-    cron.after("500ms", check_direction)
-
-
 # ============================================================================
 # GO ACTION TESTS
 # ============================================================================
 
-def test_action_go_direction(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_direction(x, y, speed) - set direction & speed"""
+def test_action_go_vector(on_success, on_failure):
+    """Test: actions.user.mouse_rig_go_vector(x, y, speed) - set direction & speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_direction(1, 0, 5)
+    actions.user.mouse_rig_go_vector(1, 0, 5)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -368,9 +300,9 @@ def test_action_go_direction(on_success, on_failure):
 
 
 def test_action_go_left(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_left(speed) - go left"""
+    """Test: actions.user.mouse_rig_go("left", speed) - go left"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_left(3)
+    actions.user.mouse_rig_go("left", 3)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -384,9 +316,9 @@ def test_action_go_left(on_success, on_failure):
 
 
 def test_action_go_right(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_right(speed) - go right"""
+    """Test: actions.user.mouse_rig_go("right", speed) - go right"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_right(4)
+    actions.user.mouse_rig_go("right", 4)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -400,9 +332,9 @@ def test_action_go_right(on_success, on_failure):
 
 
 def test_action_go_up(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_up(speed) - go up"""
+    """Test: actions.user.mouse_rig_go("up", speed) - go up"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_up(6)
+    actions.user.mouse_rig_go("up", 6)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -416,9 +348,9 @@ def test_action_go_up(on_success, on_failure):
 
 
 def test_action_go_down(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_down(speed) - go down"""
+    """Test: actions.user.mouse_rig_go("down", speed) - go down"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_down(7)
+    actions.user.mouse_rig_go("down", 7)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -438,7 +370,7 @@ def test_action_go_down(on_success, on_failure):
 def test_action_state_getters(on_success, on_failure):
     """Test: actions.user.mouse_rig_state_* - state getter actions"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_direction_right()
+    actions.user.mouse_rig_direction_to(1, 0)
     actions.user.mouse_rig_speed_to(5)
 
     def check_state():
@@ -482,7 +414,7 @@ def test_action_state_getters(on_success, on_failure):
 def test_action_stop(on_success, on_failure):
     """Test: actions.user.mouse_rig_stop() - stop action"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_right(5)
+    actions.user.mouse_rig_go("right", 5)
 
     def check_stopped():
         if actions.user.mouse_rig_state_speed() != 0:
@@ -497,7 +429,7 @@ def test_action_stop(on_success, on_failure):
 def test_action_stop_over(on_success, on_failure):
     """Test: actions.user.mouse_rig_stop(over_ms) - animated stop"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_right(10)
+    actions.user.mouse_rig_go("right", 10)
 
     def check_stopped():
         speed = actions.user.mouse_rig_state_speed()
@@ -530,15 +462,11 @@ ACTIONS_TESTS = [
     ("actions.user.mouse_rig_direction_by()", test_action_direction_by),
     ("actions.user.mouse_rig_direction_to() over", test_action_direction_to_over),
     ("actions.user.mouse_rig_direction_by() over", test_action_direction_by_over),
-    ("actions.user.mouse_rig_direction_left()", test_action_direction_left),
-    ("actions.user.mouse_rig_direction_right()", test_action_direction_right),
-    ("actions.user.mouse_rig_direction_up()", test_action_direction_up),
-    ("actions.user.mouse_rig_direction_down()", test_action_direction_down),
-    ("actions.user.mouse_rig_go_direction()", test_action_go_direction),
-    ("actions.user.mouse_rig_go_left()", test_action_go_left),
-    ("actions.user.mouse_rig_go_right()", test_action_go_right),
-    ("actions.user.mouse_rig_go_up()", test_action_go_up),
-    ("actions.user.mouse_rig_go_down()", test_action_go_down),
+    ("actions.user.mouse_rig_go_vector()", test_action_go_vector),
+    ("actions.user.mouse_rig_go('left')", test_action_go_left),
+    ("actions.user.mouse_rig_go('right')", test_action_go_right),
+    ("actions.user.mouse_rig_go('up')", test_action_go_up),
+    ("actions.user.mouse_rig_go('down')", test_action_go_down),
     ("actions.user.mouse_rig_state_*()", test_action_state_getters),
     ("actions.user.mouse_rig_stop()", test_action_stop),
     ("actions.user.mouse_rig_stop() over", test_action_stop_over),

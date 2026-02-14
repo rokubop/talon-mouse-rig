@@ -1454,9 +1454,10 @@ class RigState:
                 self._expected_mouse_pos = None  # Reset tracking
 
         # If we have an expected position from last movement, check if it matches actual
-        if self._expected_mouse_pos is not None:
+        expected = self._expected_mouse_pos
+        if expected is not None:
             current_x, current_y = ctrl.mouse_pos()
-            expected_x, expected_y = self._expected_mouse_pos
+            expected_x, expected_y = expected
 
             # If mouse position differs from expected, user moved it manually
             if current_x != expected_x or current_y != expected_y:
@@ -2819,6 +2820,13 @@ class RigState:
                     config.revert_ms = revert_ms if revert_ms is not None else 0
                     config.revert_easing = easing
                     config.is_synchronous = False
+
+                    # Zero out accumulated value — the revert builder takes sole
+                    # ownership of the value during its transition back to zero.
+                    if isinstance(group.accumulated_value, Vec2):
+                        group.accumulated_value = Vec2(0, 0)
+                    else:
+                        group.accumulated_value = 0.0
 
                     # Create the builder
                     builder = ActiveBuilder(config, self, is_base_layer=False)

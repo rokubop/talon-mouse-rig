@@ -251,7 +251,7 @@ def test_sequence_with_stop(on_success, on_failure):
     results = []
 
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_go_right(5),
+        lambda: actions.user.mouse_rig_go("right", 5),
         lambda: actions.user.mouse_rig_wait(200),
         lambda: actions.user.mouse_rig_stop(300),
         lambda: results.append("stopped"),

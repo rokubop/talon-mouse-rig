@@ -728,8 +728,8 @@ class RigBuilder:
         """Validate and execute the builder"""
         self._executed = True
 
-        # Special case: revert-only call
-        if self.config.property is None and self.config.operator is None:
+        # Special case: revert-only call (e.g. rig.layer("name").revert(ms) or rig.speed.offset.revert(ms))
+        if self.config.operator is None:
             if self.config.revert_ms is not None:
                 self.rig_state.trigger_revert(self.config.layer_name, self.config.revert_ms, self.config.revert_easing)
                 return

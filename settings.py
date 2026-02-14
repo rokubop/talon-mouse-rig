@@ -51,3 +51,31 @@ mod.setting(
     You may want to adjust this based on your mouse DPI settings or based on the application/game.
     """
 )
+
+mod.setting(
+    "mouse_rig_natural_turn_ms",
+    type=int,
+    default=500,
+    desc="Base duration in ms for direction changes in go_natural. Scales with speed (faster = smoother turns)."
+)
+
+mod.setting(
+    "mouse_rig_natural_turn_easing",
+    type=str,
+    default="ease_out2",
+    desc="Easing function for direction changes in go_natural"
+)
+
+mod.setting(
+    "mouse_rig_natural_speed_ms",
+    type=int,
+    default=200,
+    desc="Duration in ms for speed changes in go_natural"
+)
+
+mod.setting(
+    "mouse_rig_natural_speed_easing",
+    type=str,
+    default="ease_in_out",
+    desc="Easing function for speed changes in go_natural"
+)

@@ -194,6 +194,28 @@ class Lifecycle:
             self.revert_ms >= 0
         )
 
+    def trigger_revert(self, current_time: float, revert_ms: Optional[float] = None, easing: str = "linear"):
+        """Externally trigger the revert phase, interrupting whatever phase is active.
+
+        Args:
+            current_time: Current timestamp from perf_counter()
+            revert_ms: Duration in ms for revert. If None, uses existing revert_ms.
+            easing: Easing function for the revert.
+        """
+        if revert_ms is not None:
+            self.revert_ms = revert_ms
+        if easing:
+            self.revert_easing = easing
+
+        # If revert_ms is still None/0, complete immediately
+        if not self.revert_ms or self.revert_ms <= 0:
+            self.revert_ms = 0
+            self.phase = None
+            return
+
+        self.phase = LifecyclePhase.REVERT
+        self.phase_start_time = current_time
+
     def is_animating(self) -> bool:
         """Check if lifecycle is currently in an active animation phase.
 
