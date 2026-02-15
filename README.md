@@ -13,56 +13,56 @@
 
 **Movement**
 
-* `mouse_rig_move` - Move a fixed distance in a direction
-* `mouse_rig_move_natural` - Move a fixed distance with smooth easing
-* `mouse_rig_move_value` - Move a fixed distance in the current direction
-* `mouse_rig_go` - Start continuous movement
-* `mouse_rig_go_natural` - Start continuous movement with smooth turns and speed ramp
-* `mouse_rig_pos_to` - Move to an absolute screen position
-* `mouse_rig_pos_to_natural` - Move to an absolute screen position with smooth easing
+* `user.mouse_rig_move` - Move a fixed distance in a direction
+* `user.mouse_rig_move_natural` - Move a fixed distance with smooth easing
+* `user.mouse_rig_move_value` - Move a fixed distance in the current direction
+* `user.mouse_rig_go` - Start continuous movement
+* `user.mouse_rig_go_natural` - Start continuous movement with smooth turns and speed ramp
+* `user.mouse_rig_pos_to` - Move to an absolute screen position
+* `user.mouse_rig_pos_to_natural` - Move to an absolute screen position with smooth easing
 
 **Speed and Direction**
 
-* `mouse_rig_speed_to` - Set speed to an absolute value
-* `mouse_rig_speed_add` - Add to the current speed
-* `mouse_rig_speed_mul` - Multiply the current speed
-* `mouse_rig_direction` - Set direction to a cardinal direction
-* `mouse_rig_rotate` - Rotate direction by degrees
-* `mouse_rig_reverse` - Reverse the current direction
-* `mouse_rig_boost` - Speed offset that ramps up and decays
-* `mouse_rig_boost_start` - Start a sustained speed offset
-* `mouse_rig_boost_stop` - Stop a sustained speed offset
+* `user.mouse_rig_speed_to` - Set speed to an absolute value
+* `user.mouse_rig_speed_add` - Add to the current speed
+* `user.mouse_rig_speed_mul` - Multiply the current speed
+* `user.mouse_rig_direction` - Set direction to a cardinal direction
+* `user.mouse_rig_rotate` - Rotate direction by degrees
+* `user.mouse_rig_reverse` - Reverse the current direction
+* `user.mouse_rig_boost` - Speed offset that ramps up and decays
+* `user.mouse_rig_boost_start` - Start a sustained speed offset
+* `user.mouse_rig_boost_stop` - Stop a sustained speed offset
 
 **Scroll**
 
-* `mouse_rig_scroll` - Scroll a fixed number of ticks
-* `mouse_rig_scroll_natural` - Scroll with smooth easing via native API
-* `mouse_rig_scroll_go` - Start continuous scrolling
-* `mouse_rig_scroll_go_natural` - Start continuous scrolling with smooth transitions
-* `mouse_rig_scroll_speed_to` - Set scroll speed
-* `mouse_rig_scroll_speed_add` - Add to scroll speed
-* `mouse_rig_scroll_speed_mul` - Multiply scroll speed
-* `mouse_rig_scroll_direction` - Set scroll direction
-* `mouse_rig_scroll_direction_by` - Rotate scroll direction by degrees
-* `mouse_rig_scroll_boost` - Scroll speed offset that ramps up and decays
-* `mouse_rig_scroll_boost_start` - Start a sustained scroll speed offset
-* `mouse_rig_scroll_boost_stop` - Stop a sustained scroll speed offset
+* `user.mouse_rig_scroll` - Scroll a fixed number of ticks
+* `user.mouse_rig_scroll_natural` - Scroll with smooth easing via native API
+* `user.mouse_rig_scroll_go` - Start continuous scrolling
+* `user.mouse_rig_scroll_go_natural` - Start continuous scrolling with smooth transitions
+* `user.mouse_rig_scroll_speed_to` - Set scroll speed
+* `user.mouse_rig_scroll_speed_add` - Add to scroll speed
+* `user.mouse_rig_scroll_speed_mul` - Multiply scroll speed
+* `user.mouse_rig_scroll_direction` - Set scroll direction
+* `user.mouse_rig_scroll_direction_by` - Rotate scroll direction by degrees
+* `user.mouse_rig_scroll_boost` - Scroll speed offset that ramps up and decays
+* `user.mouse_rig_scroll_boost_start` - Start a sustained scroll speed offset
+* `user.mouse_rig_scroll_boost_stop` - Stop a sustained scroll speed offset
 
 **Control**
 
-* `mouse_rig_stop` - Stop movement, optionally with smooth deceleration
-* `mouse_rig_scroll_stop` - Stop scrolling, optionally with smooth deceleration
-* `mouse_rig_button_prime` - Hold a mouse button during the next rig action, release on stop
-* `mouse_rig_sequence` - Chain actions with waits between steps
-* `mouse_rig_reset` - Reset rig to default state
+* `user.mouse_rig_stop` - Stop movement, optionally with smooth deceleration
+* `user.mouse_rig_scroll_stop` - Stop scrolling, optionally with smooth deceleration
+* `user.mouse_rig_button_prime` - Hold a mouse button during the next rig action, release on stop
+* `user.mouse_rig_sequence` - Chain actions with waits between steps
+* `user.mouse_rig_reset` - Reset rig to default state
 
 **State**
 
-* `mouse_rig_state` - Get the full state object for reading computed values
-* `mouse_rig_state_speed` - Get the current speed
-* `mouse_rig_state_direction` - Get the current direction as (x, y)
-* `mouse_rig_state_direction_cardinal` - Get the current direction as a string
-* `mouse_rig_state_is_moving` - Check if the mouse is currently moving
+* `user.mouse_rig_state` - Get the full state object for reading computed values
+* `user.mouse_rig_state_speed` - Get the current speed
+* `user.mouse_rig_state_direction` - Get the current direction as (x, y)
+* `user.mouse_rig_state_direction_cardinal` - Get the current direction as a string
+* `user.mouse_rig_state_is_moving` - Check if the mouse is currently moving
 
 See [mouse_rig.py](mouse_rig.py) for full signatures and parameters.
 
@@ -97,7 +97,7 @@ actions.user.mouse_rig_sequence([
 ])
 ```
 
-Use `mouse_rig_wait` to insert pauses:
+Use `user.mouse_rig_wait` to insert pauses:
 
 ```python
 actions.user.mouse_rig_sequence([
@@ -304,12 +304,12 @@ builder.run()  # execute now instead of waiting for GC
 
 Mouse and scroll use OS-specific APIs for compatibility with games and applications that don't respond to Talon's default mouse movement.
 
-**Mouse** (`mouse_rig_api` setting):
+**Mouse** (`user.mouse_rig_api` setting):
 * `"talon"` - Talon's built-in mouse API (default for absolute movement)
 * `"platform"` - Native OS API: SendInput (Windows), CGEvent (macOS), XTest (Linux). Default for relative movement.
 
-**Scroll** (`mouse_rig_scroll_api` setting):
-* `"default"` - Follows `mouse_rig_api` (default)
+**Scroll** (`user.mouse_rig_scroll_api` setting):
+* `"default"` - Follows `user.mouse_rig_api` (default)
 * `"platform"` - Native OS API with sub-line precision, enabling smooth direction transitions at low scroll speeds
 
 Individual actions can also override the API with the `api` parameter.
