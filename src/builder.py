@@ -7,7 +7,7 @@ import math
 import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
-from .core import Vec2, is_vec2, mouse_move, mouse_move_relative
+from .core import Vec2, is_vec2, mouse_move, mouse_move_relative, mouse_scroll_native
 from .mouse_api import MOUSE_APIS, get_mouse_move_functions
 from .contracts import (
     BuilderConfig,
@@ -136,6 +136,18 @@ class ScrollPropertyProxy:
     @property
     def scale(self) -> 'ScrollPropertyProxy':
         self.mode = "scale"
+        return self
+
+    @property
+    def by_lines(self) -> 'ScrollPropertyProxy':
+        """For scroll operations - scroll by lines (default, discrete notches via Talon)"""
+        self.builder.config.by_lines = True
+        return self
+
+    @property
+    def by_pixels(self) -> 'ScrollPropertyProxy':
+        """For scroll operations - scroll by pixels (smooth, native platform API)"""
+        self.builder.config.by_lines = False
         return self
 
     @property
@@ -1511,17 +1523,9 @@ class ActiveBuilder:
                     mouse_move_relative(int(delta.x), int(delta.y))
 
         elif self.config.property == "scroll_pos":
-            # One-time scroll - emit immediately
-            from talon import actions
             delta = self.target_value
             if abs(delta.x) > 0.01 or abs(delta.y) > 0.01:
-                by_lines = self.config.by_lines if hasattr(self.config, 'by_lines') else True
-                if abs(delta.x) > 0.01 and abs(delta.y) > 0.01:
-                    actions.mouse_scroll(x=delta.x, y=delta.y, by_lines=by_lines)
-                elif abs(delta.y) > 0.01:
-                    actions.mouse_scroll(delta.y, by_lines=by_lines)
-                elif abs(delta.x) > 0.01:
-                    actions.mouse_scroll(x=delta.x, y=0, by_lines=by_lines)
+                mouse_scroll_native(delta.x, delta.y)
 
         # Add other property types here as needed (speed, direction, etc.)
 

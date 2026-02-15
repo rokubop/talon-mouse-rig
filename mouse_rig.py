@@ -79,7 +79,98 @@ class Actions:
             builder = builder.then(callback)
         return builder
 
-    def mouse_rig_pos_by(
+    def mouse_rig_pos_to_natural(
+            x: float,
+            y: float,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """Move mouse to absolute position with smooth easing.
+        Defaults from mouse_rig_natural_pos_ms and mouse_rig_natural_pos_easing settings.
+
+        Args:
+            x: Target x coordinate
+            y: Target y coordinate
+            over_ms: Duration in ms (default: from settings)
+            easing: Easing function (default: from settings)
+            callback: Function to call when movement completes (optional)
+        """
+        if over_ms is None:
+            over_ms = settings.get("user.mouse_rig_natural_pos_ms")
+        if easing is None:
+            easing = settings.get("user.mouse_rig_natural_pos_easing")
+        rig = actions.user.mouse_rig()
+        builder = rig.pos.to(x, y).over(over_ms, easing)
+
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_move(
+            direction: str,
+            amount: float = 1,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None,
+            api: str = None
+        ) -> None:
+        """Move mouse in a direction by amount.
+
+        Args:
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            amount: Distance in pixels (default: 1)
+            over_ms: Duration in ms (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional)
+            callback: Function to call when movement completes (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+        """
+        rig = actions.user.mouse_rig()
+        x, y = DIRECTION_MAP[direction]
+        builder = rig.pos.by(x * amount, y * amount)
+
+        if api is not None:
+            builder = builder.api(api)
+        if over_ms is not None:
+            builder = builder.over(over_ms, easing)
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_move_natural(
+            direction: str,
+            amount: float = 1,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None,
+            api: str = None
+        ) -> None:
+        """Move mouse in a direction with smooth easing.
+        Defaults from mouse_rig_natural_move_ms and mouse_rig_natural_move_easing settings.
+
+        Args:
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            amount: Distance in pixels (default: 1)
+            over_ms: Duration in ms (default: from settings)
+            easing: Easing function (default: from settings)
+            callback: Function to call when movement completes (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+        """
+        if over_ms is None:
+            over_ms = settings.get("user.mouse_rig_natural_move_ms")
+        if easing is None:
+            easing = settings.get("user.mouse_rig_natural_move_easing")
+        rig = actions.user.mouse_rig()
+        x, y = DIRECTION_MAP[direction]
+        builder = rig.pos.by(x * amount, y * amount).over(over_ms, easing)
+
+        if api is not None:
+            builder = builder.api(api)
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_move_xy(
             dx: float,
             dy: float,
             over_ms: int = None,
@@ -87,14 +178,8 @@ class Actions:
             callback: callable = None,
             api: str = None
         ) -> None:
-        """Move mouse by relative offset, optionally over time. Uses platform api by default.
+        """Move mouse by relative offset. Uses platform api by default.
         If you need screen coordinates precision, use "talon" api instead.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.pos.by(dx, dy).api(api).over(over_ms, easing).then(callback)
-        ```
 
         Args:
             dx: Relative x offset
@@ -115,7 +200,39 @@ class Actions:
             builder = builder.then(callback)
         return builder
 
-    def mouse_rig_pos_by_value(
+    def mouse_rig_move_xy_natural(
+            dx: float,
+            dy: float,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None,
+            api: str = None
+        ) -> None:
+        """Move mouse by relative offset with smooth easing.
+        Defaults from mouse_rig_natural_move_ms and mouse_rig_natural_move_easing settings.
+
+        Args:
+            dx: Relative x offset
+            dy: Relative y offset
+            over_ms: Duration in ms (default: from settings)
+            easing: Easing function (default: from settings)
+            callback: Function to call when movement completes (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+        """
+        if over_ms is None:
+            over_ms = settings.get("user.mouse_rig_natural_move_ms")
+        if easing is None:
+            easing = settings.get("user.mouse_rig_natural_move_easing")
+        rig = actions.user.mouse_rig()
+        builder = rig.pos.by(dx, dy).over(over_ms, easing)
+
+        if api is not None:
+            builder = builder.api(api)
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_move_value(
             value: int | float,
             over_ms: int = None,
             easing: str = None,
@@ -123,14 +240,6 @@ class Actions:
             api: str = None
         ) -> None:
         """Move mouse by value in current direction, optionally over time.
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        dx = rig.state.direction.x * value
-        dy = rig.state.direction.y * value
-        rig.pos.by(dx, dy).api(api).over(over_ms, easing).then(callback)
-        ```
 
         Args:
             value: Distance to move in pixels along current direction
@@ -361,14 +470,19 @@ class Actions:
         speed_ms = int(settings.get("user.mouse_rig_natural_speed_ms") * scale)
         speed_easing = settings.get("user.mouse_rig_natural_speed_easing")
 
-        speed_factor = max(1.0, rig.state.speed / 3.0)
-        turn_ms = int(base_turn_ms * scale * speed_factor)
-
-        rig.direction.to(x, y).over(turn_ms, turn_easing)
-        if force or not rig.state.speed:
+        if not rig.state.speed:
+            # From stopped: snap direction, then ramp speed
+            rig.direction(x, y)
             rig.speed.to(speed).over(speed_ms, speed_easing)
+        else:
+            # Already moving: smooth turn
+            speed_factor = max(1.0, rig.state.speed / 3.0)
+            turn_ms = int(base_turn_ms * scale * speed_factor)
+            rig.direction.to(x, y).over(turn_ms, turn_easing)
+            if force:
+                rig.speed.to(speed).over(speed_ms, speed_easing)
 
-    def mouse_rig_go_vector(x: float, y: float, speed: float = 5, force: bool = False) -> None:
+    def mouse_rig_go_xy(x: float, y: float, speed: float = 5, force: bool = False) -> None:
         """Like go() but with arbitrary direction vector.
 
         Args:
@@ -382,7 +496,7 @@ class Actions:
         if force or not rig.state.speed:
             rig.speed(speed)
 
-    def mouse_rig_go_vector_natural(x: float, y: float, speed: float = 5, force: bool = False, scale: float = 1.0) -> None:
+    def mouse_rig_go_xy_natural(x: float, y: float, speed: float = 5, force: bool = False, scale: float = 1.0) -> None:
         """Like go_natural() but with arbitrary direction vector.
 
         Args:
@@ -398,12 +512,17 @@ class Actions:
         speed_ms = int(settings.get("user.mouse_rig_natural_speed_ms") * scale)
         speed_easing = settings.get("user.mouse_rig_natural_speed_easing")
 
-        speed_factor = max(1.0, rig.state.speed / 3.0)
-        turn_ms = int(base_turn_ms * scale * speed_factor)
-
-        rig.direction.to(x, y).over(turn_ms, turn_easing)
-        if force or not rig.state.speed:
+        if not rig.state.speed:
+            # From stopped: snap direction, then ramp speed
+            rig.direction(x, y)
             rig.speed.to(speed).over(speed_ms, speed_easing)
+        else:
+            # Already moving: smooth turn
+            speed_factor = max(1.0, rig.state.speed / 3.0)
+            turn_ms = int(base_turn_ms * scale * speed_factor)
+            rig.direction.to(x, y).over(turn_ms, turn_easing)
+            if force:
+                rig.speed.to(speed).over(speed_ms, speed_easing)
 
     def mouse_rig_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, max_stacks: int = 1) -> None:
         """One-shot speed boost: ramp up, hold, release.
@@ -580,20 +699,71 @@ class Actions:
             handle.then(callback)
         return handle
 
-    def mouse_rig_scroll_by(
+    def mouse_rig_scroll(
+            direction: str,
+            amount: float = 1,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """One-time scroll in a direction (like scroll wheel ticks).
+        Uses native platform API. 1 amount = 1 physical scroll tick.
+
+        Args:
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            amount: Number of scroll ticks (default: 1)
+            over_ms: Duration in ms to spread scroll over (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional)
+            callback: Function to call when complete (optional)
+        """
+        rig = actions.user.mouse_rig()
+        x, y = DIRECTION_MAP[direction]
+        builder = rig.scroll.by(x * amount, y * amount)
+
+        if over_ms is not None:
+            builder = builder.over(over_ms, easing)
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_scroll_natural(
+            direction: str,
+            amount: float = 1,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """One-time smooth scroll in a direction using native platform API.
+        Defaults from mouse_rig_natural_scroll_ms and mouse_rig_natural_scroll_easing settings.
+
+        Args:
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            amount: Number of scroll ticks (default: 1)
+            over_ms: Duration in ms (default: from settings)
+            easing: Easing function (default: from settings)
+            callback: Function to call when complete (optional)
+        """
+        if over_ms is None:
+            over_ms = settings.get("user.mouse_rig_natural_scroll_ms")
+        if easing is None:
+            easing = settings.get("user.mouse_rig_natural_scroll_easing")
+        rig = actions.user.mouse_rig()
+        x, y = DIRECTION_MAP[direction]
+        builder = rig.scroll.by_pixels.by(x * amount, y * amount).over(over_ms, easing)
+
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_scroll_xy(
             dx: float,
             dy: float,
             over_ms: int = None,
             easing: str = None,
             callback: callable = None
         ) -> None:
-        """One-time scroll by delta amount (like scroll wheel).
-
-        Equivalent to:
-        ```
-        rig = actions.user.mouse_rig()
-        rig.scroll.by(dx, dy).over(over_ms, easing).then(callback)
-        ```
+        """One-time scroll by raw delta (like scroll wheel ticks).
+        Uses native platform API. 1 unit = 1 physical scroll tick.
 
         Args:
             dx: Horizontal scroll amount (positive = right, negative = left)
@@ -607,6 +777,34 @@ class Actions:
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)
+        if callback is not None:
+            builder = builder.then(callback)
+        return builder
+
+    def mouse_rig_scroll_xy_natural(
+            dx: float,
+            dy: float,
+            over_ms: int = None,
+            easing: str = None,
+            callback: callable = None
+        ) -> None:
+        """One-time smooth scroll by raw delta using native platform API.
+        Defaults from mouse_rig_natural_scroll_ms and mouse_rig_natural_scroll_easing settings.
+
+        Args:
+            dx: Horizontal scroll amount (positive = right, negative = left)
+            dy: Vertical scroll amount (positive = down, negative = up)
+            over_ms: Duration in ms (default: from settings)
+            easing: Easing function (default: from settings)
+            callback: Function to call when complete (optional)
+        """
+        if over_ms is None:
+            over_ms = settings.get("user.mouse_rig_natural_scroll_ms")
+        if easing is None:
+            easing = settings.get("user.mouse_rig_natural_scroll_easing")
+        rig = actions.user.mouse_rig()
+        builder = rig.scroll.by_pixels.by(dx, dy).over(over_ms, easing)
+
         if callback is not None:
             builder = builder.then(callback)
         return builder
@@ -786,12 +984,59 @@ class Actions:
         speed_ms = int(settings.get("user.mouse_rig_natural_speed_ms") * scale)
         speed_easing = settings.get("user.mouse_rig_natural_speed_easing")
 
-        speed_factor = max(1.0, rig.state.scroll_speed / 3.0)
-        turn_ms = int(base_turn_ms * scale * speed_factor)
-
-        rig.scroll.direction.to(x, y).over(turn_ms, turn_easing)
-        if force or not rig.state.scroll_speed:
+        if not rig.state.scroll_speed:
+            # From stopped: snap direction, then ramp speed
+            rig.scroll.direction(x, y)
             rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
+        else:
+            # Already scrolling: smooth turn
+            speed_factor = max(1.0, rig.state.scroll_speed / 3.0)
+            turn_ms = int(base_turn_ms * scale * speed_factor)
+            rig.scroll.direction.to(x, y).over(turn_ms, turn_easing)
+            if force:
+                rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
+
+    def mouse_rig_scroll_go_xy(x: float, y: float, speed: float = 5, force: bool = False) -> None:
+        """Like scroll_go() but with arbitrary direction vector.
+
+        Args:
+            x: X direction component (-1.0 to 1.0)
+            y: Y direction component (-1.0 to 1.0)
+            speed: Speed value. Only applied if stopped (or force=True).
+            force: If True, always set speed.
+        """
+        rig = actions.user.mouse_rig()
+        rig.scroll.direction(x, y)
+        if force or not rig.state.scroll_speed:
+            rig.scroll.speed(speed)
+
+    def mouse_rig_scroll_go_xy_natural(x: float, y: float, speed: float = 5, force: bool = False, scale: float = 1.0) -> None:
+        """Like scroll_go_natural() but with arbitrary direction vector.
+
+        Args:
+            x: X direction component (-1.0 to 1.0)
+            y: Y direction component (-1.0 to 1.0)
+            speed: Speed value. Only applied if stopped (or force=True).
+            force: If True, always set speed.
+            scale: Multiplier for all natural timing (0.5 = snappier, 2.0 = smoother).
+        """
+        rig = actions.user.mouse_rig()
+        base_turn_ms = settings.get("user.mouse_rig_natural_turn_ms")
+        turn_easing = settings.get("user.mouse_rig_natural_turn_easing")
+        speed_ms = int(settings.get("user.mouse_rig_natural_speed_ms") * scale)
+        speed_easing = settings.get("user.mouse_rig_natural_speed_easing")
+
+        if not rig.state.scroll_speed:
+            # From stopped: snap direction, then ramp speed
+            rig.scroll.direction(x, y)
+            rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
+        else:
+            # Already scrolling: smooth turn
+            speed_factor = max(1.0, rig.state.scroll_speed / 3.0)
+            turn_ms = int(base_turn_ms * scale * speed_factor)
+            rig.scroll.direction.to(x, y).over(turn_ms, turn_easing)
+            if force:
+                rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
 
     def mouse_rig_scroll_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, max_stacks: int = 1) -> None:
         """One-shot scroll speed boost: ramp up, hold, release.

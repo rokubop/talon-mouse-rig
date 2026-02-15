@@ -1,4 +1,4 @@
-"""Mouse movement API implementations
+"""Mouse movement and scroll API implementations
 
 Supports multiple mouse movement backends:
 - talon: Cross-platform using Talon's ctrl.mouse_move (default)
@@ -10,6 +10,11 @@ Supports multiple mouse movement backends:
 Each API provides two movement modes:
 - Absolute: Move cursor to screen position (for desktop use, pos.to())
 - Relative: Move cursor by delta (for gaming with infinite rotation, pos.by())
+
+Scroll APIs use the same backends with sub-line precision via native platform
+APIs. Talon's actions.mouse_scroll() quantizes small floats to zero, breaking
+smooth direction transitions at low scroll speeds. Native APIs accumulate
+fractional values and emit when crossing integer thresholds.
 """
 
 import platform
@@ -336,3 +341,251 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
     # Default to talon
     abs_func, rel_func = _make_talon_mouse_move()
     return abs_func if is_absolute else rel_func
+
+
+# ============================================================================
+# SCROLL API
+# ============================================================================
+# All scroll functions: signature (dx: float, dy: float) -> None
+# dx/dy are in line units. Native functions accumulate fractionally and
+# emit when crossing integer thresholds.
+# Sign conventions:
+#   positive dy = scroll DOWN, positive dx = scroll RIGHT
+
+
+def _make_talon_mouse_scroll() -> Callable[[float, float], None]:
+    """Cross-platform Talon scroll (fallback)
+
+    Accumulates fractional lines and only calls actions.mouse_scroll when
+    we have >= 1 line, avoiding Talon's quantization of small float values.
+    """
+    from talon import actions
+
+    accum_x = [0.0]
+    accum_y = [0.0]
+
+    def scroll(dx: float, dy: float) -> None:
+        accum_x[0] += dx
+        accum_y[0] += dy
+
+        emit_x = int(accum_x[0])
+        emit_y = int(accum_y[0])
+
+        if emit_x != 0 or emit_y != 0:
+            accum_x[0] -= emit_x
+            accum_y[0] -= emit_y
+            actions.mouse_scroll(x=emit_x, y=emit_y)
+
+    return scroll
+
+
+def _make_windows_send_input_mouse_scroll() -> Callable[[float, float], None]:
+    """Windows SendInput scroll with sub-line accumulation
+
+    Uses MOUSEEVENTF_WHEEL for vertical and MOUSEEVENTF_HWHEEL for horizontal.
+    WHEEL_DELTA = 120 units per line. Accumulates fractional lines in closure.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    INPUT_MOUSE = 0
+    MOUSEEVENTF_WHEEL = 0x0800
+    MOUSEEVENTF_HWHEEL = 0x1000
+    WHEEL_DELTA = 120
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", wintypes.LONG),
+            ("dy", wintypes.LONG),
+            ("mouseData", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG))
+        ]
+
+    class INPUT(ctypes.Structure):
+        class _INPUT(ctypes.Union):
+            _fields_ = [("mi", MOUSEINPUT)]
+        _anonymous_ = ("_input",)
+        _fields_ = [
+            ("type", wintypes.DWORD),
+            ("_input", _INPUT)
+        ]
+
+    accum_x = [0.0]
+    accum_y = [0.0]
+
+    def scroll(dx: float, dy: float) -> None:
+        accum_x[0] += dx * WHEEL_DELTA
+        accum_y[0] += dy * WHEEL_DELTA
+
+        # Vertical scroll
+        delta_y = int(accum_y[0])
+        if delta_y != 0:
+            accum_y[0] -= delta_y
+            input_struct = INPUT(type=INPUT_MOUSE)
+            # WHEEL positive = scroll UP, our positive dy = scroll DOWN → negate
+            input_struct.mi.mouseData = (-delta_y) & 0xFFFFFFFF
+            input_struct.mi.dwFlags = MOUSEEVENTF_WHEEL
+            ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
+
+        # Horizontal scroll
+        delta_x = int(accum_x[0])
+        if delta_x != 0:
+            accum_x[0] -= delta_x
+            input_struct = INPUT(type=INPUT_MOUSE)
+            # HWHEEL positive = scroll RIGHT, matches our positive dx convention
+            input_struct.mi.mouseData = delta_x & 0xFFFFFFFF
+            input_struct.mi.dwFlags = MOUSEEVENTF_HWHEEL
+            ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
+
+    return scroll
+
+
+def _make_windows_mouse_event_mouse_scroll() -> Callable[[float, float], None]:
+    """Windows mouse_event scroll with sub-line accumulation (legacy API)"""
+    import win32api, win32con  # type: ignore
+
+    WHEEL_DELTA = 120
+    accum_x = [0.0]
+    accum_y = [0.0]
+
+    def scroll(dx: float, dy: float) -> None:
+        accum_x[0] += dx * WHEEL_DELTA
+        accum_y[0] += dy * WHEEL_DELTA
+
+        # Vertical scroll
+        delta_y = int(accum_y[0])
+        if delta_y != 0:
+            accum_y[0] -= delta_y
+            # WHEEL positive = scroll UP, our positive dy = scroll DOWN → negate
+            win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, 0, 0, -delta_y)
+
+        # Horizontal scroll
+        delta_x = int(accum_x[0])
+        if delta_x != 0:
+            accum_x[0] -= delta_x
+            # HWHEEL positive = scroll RIGHT, matches our positive dx convention
+            win32api.mouse_event(win32con.MOUSEEVENTF_HWHEEL, 0, 0, delta_x)
+
+    return scroll
+
+
+def _make_macos_warp_mouse_scroll() -> Callable[[float, float], None]:
+    """macOS CoreGraphics scroll with pixel-level precision"""
+    import Quartz  # type: ignore
+
+    accum_x = [0.0]
+    accum_y = [0.0]
+
+    def scroll(dx: float, dy: float) -> None:
+        accum_x[0] += dx
+        accum_y[0] += dy
+
+        # Use pixel units (kCGScrollEventUnitPixel = 1) for sub-line precision
+        # CGEventCreateScrollWheelEvent: positive = scroll UP, our positive dy = DOWN → negate
+        delta_y = int(accum_y[0] * 10)  # Scale lines to pixel-ish units
+        delta_x = int(accum_x[0] * 10)
+
+        if delta_y != 0 or delta_x != 0:
+            if delta_y != 0:
+                accum_y[0] -= delta_y / 10.0
+            if delta_x != 0:
+                accum_x[0] -= delta_x / 10.0
+            event = Quartz.CGEventCreateScrollWheelEvent(
+                None, 1, 2, -delta_y, delta_x  # unit=pixel, axes=2
+            )
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+    return scroll
+
+
+def _make_linux_x11_mouse_scroll() -> Callable[[float, float], None]:
+    """Linux X11 scroll via XTest fake button events
+
+    Buttons: 4=up, 5=down, 6=left, 7=right. Accumulates to whole lines.
+    """
+    from Xlib import display, X  # type: ignore
+    from Xlib.ext import xtest  # type: ignore
+
+    disp = display.Display()
+    accum_x = [0.0]
+    accum_y = [0.0]
+
+    def scroll(dx: float, dy: float) -> None:
+        accum_x[0] += dx
+        accum_y[0] += dy
+
+        # Vertical: button 4=up, 5=down
+        while abs(accum_y[0]) >= 1.0:
+            button = 5 if accum_y[0] > 0 else 4  # positive dy = down = button 5
+            xtest.fake_input(disp, X.ButtonPress, button)
+            xtest.fake_input(disp, X.ButtonRelease, button)
+            accum_y[0] -= 1.0 if accum_y[0] > 0 else -1.0
+
+        # Horizontal: button 6=left, 7=right
+        while abs(accum_x[0]) >= 1.0:
+            button = 7 if accum_x[0] > 0 else 6  # positive dx = right = button 7
+            xtest.fake_input(disp, X.ButtonPress, button)
+            xtest.fake_input(disp, X.ButtonRelease, button)
+            accum_x[0] -= 1.0 if accum_x[0] > 0 else -1.0
+
+        disp.sync()
+
+    return scroll
+
+
+def get_mouse_scroll_function(override: Optional[str] = None) -> Callable[[float, float], None]:
+    """Get the appropriate mouse scroll function based on settings
+
+    Uses mouse_rig_scroll_api setting. If set to "default", falls back to mouse_rig_api.
+
+    Args:
+        override: Optional API override (takes precedence over settings)
+
+    Returns:
+        scroll_func(dx_lines, dy_lines) -> None
+    """
+    if override is not None:
+        api = override
+    else:
+        api = settings.get("user.mouse_rig_scroll_api", "default")
+        if api == "default":
+            api = settings.get("user.mouse_rig_api", "platform")
+
+    if api == "platform":
+        api = _get_platform_api()
+
+    return _get_scroll_function(api)
+
+
+def _get_scroll_function(api_type: str) -> Callable[[float, float], None]:
+    """Get a scroll function for the specified API"""
+    if api_type not in MOUSE_APIS:
+        api_type = "talon"
+
+    if api_type == "windows_send_input":
+        if not _windows_send_input_available:
+            api_type = "talon"
+        else:
+            return _make_windows_send_input_mouse_scroll()
+
+    elif api_type == "windows_mouse_event":
+        if not _windows_mouse_event_available:
+            api_type = "talon"
+        else:
+            return _make_windows_mouse_event_mouse_scroll()
+
+    elif api_type == "macos_warp":
+        if not _macos_warp_available:
+            api_type = "talon"
+        else:
+            return _make_macos_warp_mouse_scroll()
+
+    elif api_type == "linux_x11":
+        if not _linux_x11_available:
+            api_type = "talon"
+        else:
+            return _make_linux_x11_mouse_scroll()
+
+    return _make_talon_mouse_scroll()

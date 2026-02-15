@@ -38,12 +38,12 @@ def test_action_pos_to(on_success, on_failure):
 
 
 def test_action_pos_by(on_success, on_failure):
-    """Test: actions.user.mouse_rig_pos_by(dx, dy, api='talon') - relative position"""
+    """Test: actions.user.mouse_rig_move_xy(dx, dy, api='talon') - relative position"""
     actions.user.mouse_rig_stop()
     ctrl.mouse_move(CENTER_X, CENTER_Y)
 
     dx, dy = 75, -50
-    actions.user.mouse_rig_pos_by(dx, dy, api="talon")
+    actions.user.mouse_rig_move_xy(dx, dy, api="talon")
 
     def check_position():
         x, y = ctrl.mouse_pos()
@@ -77,7 +77,7 @@ def test_action_pos_to_over(on_success, on_failure):
 
 
 def test_action_pos_by_over(on_success, on_failure):
-    """Test: actions.user.mouse_rig_pos_by(dx, dy, over_ms, api='talon') - animated relative"""
+    """Test: actions.user.mouse_rig_move_xy(dx, dy, over_ms, api='talon') - animated relative"""
     actions.user.mouse_rig_stop()
     ctrl.mouse_move(CENTER_X, CENTER_Y)
 
@@ -90,7 +90,7 @@ def test_action_pos_by_over(on_success, on_failure):
             return
         on_success()
 
-    actions.user.mouse_rig_pos_by(dx, dy, 500, "linear", check_position, api="talon")
+    actions.user.mouse_rig_move_xy(dx, dy, 500, "linear", check_position, api="talon")
 
 
 # ============================================================================
@@ -284,9 +284,9 @@ def test_action_direction_by_over(on_success, on_failure):
 # ============================================================================
 
 def test_action_go_vector(on_success, on_failure):
-    """Test: actions.user.mouse_rig_go_vector(x, y, speed) - set direction & speed"""
+    """Test: actions.user.mouse_rig_go_xy(x, y, speed) - set direction & speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_go_vector(1, 0, 5)
+    actions.user.mouse_rig_go_xy(1, 0, 5)
 
     def check_and_stop():
         actions.user.mouse_rig_stop()
@@ -449,9 +449,9 @@ def test_action_stop_over(on_success, on_failure):
 
 ACTIONS_TESTS = [
     ("actions.user.mouse_rig_pos_to()", test_action_pos_to),
-    ("actions.user.mouse_rig_pos_by()", test_action_pos_by),
+    ("actions.user.mouse_rig_move_xy()", test_action_pos_by),
     ("actions.user.mouse_rig_pos_to() over", test_action_pos_to_over),
-    ("actions.user.mouse_rig_pos_by() over", test_action_pos_by_over),
+    ("actions.user.mouse_rig_move_xy() over", test_action_pos_by_over),
     ("actions.user.mouse_rig_speed_to()", test_action_speed_to),
     ("actions.user.mouse_rig_speed_add()", test_action_speed_add),
     ("actions.user.mouse_rig_speed_mul()", test_action_speed_mul),
@@ -462,7 +462,7 @@ ACTIONS_TESTS = [
     ("actions.user.mouse_rig_direction_by()", test_action_direction_by),
     ("actions.user.mouse_rig_direction_to() over", test_action_direction_to_over),
     ("actions.user.mouse_rig_direction_by() over", test_action_direction_by_over),
-    ("actions.user.mouse_rig_go_vector()", test_action_go_vector),
+    ("actions.user.mouse_rig_go_xy()", test_action_go_vector),
     ("actions.user.mouse_rig_go('left')", test_action_go_left),
     ("actions.user.mouse_rig_go('right')", test_action_go_right),
     ("actions.user.mouse_rig_go('up')", test_action_go_up),

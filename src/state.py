@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import Vec2, is_vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, EPSILON
+from .core import Vec2, is_vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, EPSILON
 from .layer_group import LayerGroup
 from .lifecycle import LifecyclePhase
 from . import mode_operations, rate_utils
@@ -1348,8 +1348,6 @@ class RigState:
         Args:
             scroll_pos_delta: Additional scroll from scroll.by() builders
         """
-        from talon import actions
-
         scroll_speed = self.scroll_speed.current
         scroll_direction = self.scroll_direction.current
 
@@ -1364,27 +1362,7 @@ class RigState:
         if abs(scroll_velocity.x) < 0.01 and abs(scroll_velocity.y) < 0.01:
             return
 
-        # Find by_lines setting from first active scroll builder
-        by_lines = True  # Default
-        for group in self._layer_groups.values():
-            if group.input_type == "scroll" and group.property in ("speed", "direction", "vector", "scroll_pos"):
-                # Use by_lines from first active scroll builder
-                if group.builders:
-                    by_lines = group.builders[0].config.by_lines
-                    break
-
-        # Use floats directly - no rounding needed for scroll
-        x = scroll_velocity.x
-        y = scroll_velocity.y
-
-        # Only emit if we have non-zero scroll values
-        if abs(x) > 0.01 or abs(y) > 0.01:
-            if abs(x) > 0.01 and abs(y) > 0.01:
-                actions.mouse_scroll(x=x, y=y, by_lines=by_lines)
-            elif abs(y) > 0.01:
-                actions.mouse_scroll(y, by_lines=by_lines)
-            elif abs(x) > 0.01:
-                actions.mouse_scroll(x=x, y=0, by_lines=by_lines)
+        mouse_scroll_native(scroll_velocity.x, scroll_velocity.y)
 
     def _update_relative_position_tracking(self, relative_position_updates: list, completed_layers: set):
         """Update tracking for relative position builders after removal

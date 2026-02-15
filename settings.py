@@ -30,6 +30,22 @@ mod.setting(
 )
 
 mod.setting(
+    "mouse_rig_scroll_api",
+    type=str,
+    default="default",
+    desc="""API for scroll operations. Uses native platform APIs for sub-line precision.
+    Options:
+    - "default": Use the same API as mouse_rig_api
+    - "platform": Auto-detect best platform-specific API
+    - "talon": Talon actions.mouse_scroll (cross-platform, but quantizes small values)
+    - "windows_send_input": Windows SendInput MOUSEEVENTF_WHEEL/HWHEEL
+    - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
+    - "macos_warp": macOS CGEventCreateScrollWheelEvent (requires pyobjc-framework-Quartz)
+    - "linux_x11": Linux X11 XTest fake button events (requires python-xlib)
+    """
+)
+
+mod.setting(
     "mouse_rig_pause_on_manual_movement",
     type=bool,
     default=True,
@@ -78,4 +94,46 @@ mod.setting(
     type=str,
     default="ease_in_out",
     desc="Easing function for speed changes in go_natural"
+)
+
+mod.setting(
+    "mouse_rig_natural_move_ms",
+    type=int,
+    default=250,
+    desc="Duration in ms for move_natural one-shot movements"
+)
+
+mod.setting(
+    "mouse_rig_natural_move_easing",
+    type=str,
+    default="ease_out2",
+    desc="Easing function for move_natural one-shot movements"
+)
+
+mod.setting(
+    "mouse_rig_natural_scroll_ms",
+    type=int,
+    default=400,
+    desc="Duration in ms for scroll_natural one-shot scrolls"
+)
+
+mod.setting(
+    "mouse_rig_natural_scroll_easing",
+    type=str,
+    default="ease_out2",
+    desc="Easing function for scroll_natural one-shot scrolls"
+)
+
+mod.setting(
+    "mouse_rig_natural_pos_ms",
+    type=int,
+    default=300,
+    desc="Duration in ms for pos_to_natural position moves"
+)
+
+mod.setting(
+    "mouse_rig_natural_pos_easing",
+    type=str,
+    default="ease_in_out",
+    desc="Easing function for pos_to_natural position moves"
 )

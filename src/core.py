@@ -11,7 +11,7 @@ import math
 from typing import Tuple, Union, Optional, Callable
 from dataclasses import dataclass
 from talon import app
-from .mouse_api import get_mouse_move_functions
+from .mouse_api import get_mouse_move_functions, get_mouse_scroll_function
 
 
 # ============================================================================
@@ -21,11 +21,13 @@ from .mouse_api import get_mouse_move_functions
 # Mouse move functions - initialized after Talon is ready
 _mouse_move_absolute = None
 _mouse_move_relative = None
+_mouse_scroll = None
 
 
 def _initialize_mouse_move():
-    global _mouse_move_absolute, _mouse_move_relative
+    global _mouse_move_absolute, _mouse_move_relative, _mouse_scroll
     _mouse_move_absolute, _mouse_move_relative = get_mouse_move_functions()
+    _mouse_scroll = get_mouse_scroll_function()
 
 
 def get_mouse_move_with_overrides(absolute_override: Optional[str] = None, relative_override: Optional[str] = None):
@@ -48,6 +50,25 @@ def get_mouse_move_with_overrides(absolute_override: Optional[str] = None, relat
 
     # Has overrides, create new functions
     return get_mouse_move_functions(absolute_override, relative_override)
+
+
+def get_mouse_scroll_with_override(override: Optional[str] = None):
+    """Get mouse scroll function with optional API override
+
+    Used by builders that have API overrides set via rig.api().
+
+    Args:
+        override: Optional API override
+
+    Returns:
+        scroll_func(dx, dy) -> None
+    """
+    if override is None:
+        if _mouse_scroll is None:
+            _initialize_mouse_move()
+        return _mouse_scroll
+
+    return get_mouse_scroll_function(override)
 
 
 app.register("ready", _initialize_mouse_move)
@@ -73,6 +94,22 @@ def mouse_move_relative(dx: float, dy: float) -> None:
     if _mouse_move_relative is None:
         _initialize_mouse_move()
     _mouse_move_relative(dx, dy)
+
+
+def mouse_scroll_native(dx: float, dy: float) -> None:
+    """Scroll using native platform API with sub-line precision
+
+    Controlled by mouse_rig_scroll_api setting (defaults to mouse_rig_api).
+    Native APIs accumulate fractional line values internally and emit when crossing
+    integer thresholds, enabling smooth direction transitions at low scroll speeds.
+
+    Args:
+        dx: Horizontal scroll in lines (positive = right)
+        dy: Vertical scroll in lines (positive = down)
+    """
+    if _mouse_scroll is None:
+        _initialize_mouse_move()
+    _mouse_scroll(dx, dy)
 
 
 # ============================================================================

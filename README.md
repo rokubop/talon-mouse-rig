@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -48,26 +48,57 @@ This is your file to customize.
 **At a Glance**
 
 ```
-mouse_rig_go_*          direction + speed (continuous)
-mouse_rig_speed_*       speed (continuous)
-mouse_rig_direction_*   absolute or by degrees
-mouse_rig_pos_*         absolute or delta
+Movement:
+  mouse_rig_move              one-shot move (direction, amount)
+  mouse_rig_move_natural      one-shot smooth move (direction, amount)
+  mouse_rig_move_xy           one-shot move (dx, dy)
+  mouse_rig_move_xy_natural   one-shot smooth move (dx, dy)
+  mouse_rig_move_value        one-shot move in current direction
+  mouse_rig_go                continuous move (direction, speed)
+  mouse_rig_go_natural        continuous smooth move (direction, speed)
+  mouse_rig_go_xy             continuous move (x, y, speed)
+  mouse_rig_go_xy_natural     continuous smooth move (x, y, speed)
+  mouse_rig_speed_*           speed control (to, add, mul)
+  mouse_rig_direction_*       direction control (to, by degrees)
+  mouse_rig_pos_to            move to absolute position
+  mouse_rig_boost*            one-shot or sustained speed boost
 
-mouse_rig_scroll_by_*     delta
-mouse_rig_scroll_go_*     direction + speed (continuous)
-mouse_rig_scroll_speed_*  speed (continuous)
-mouse_rig_scroll_direction_* absolute or by degrees
+Scroll:
+  mouse_rig_scroll            one-shot scroll (direction, amount)
+  mouse_rig_scroll_natural    one-shot smooth scroll (direction, amount)
+  mouse_rig_scroll_xy         one-shot scroll (dx, dy)
+  mouse_rig_scroll_xy_natural one-shot smooth scroll (dx, dy)
+  mouse_rig_scroll_go         continuous scroll (direction, speed)
+  mouse_rig_scroll_go_natural continuous smooth scroll (direction, speed)
+  mouse_rig_scroll_go_xy      continuous scroll (x, y, speed)
+  mouse_rig_scroll_go_xy_natural continuous smooth scroll (x, y, speed)
+  mouse_rig_scroll_speed_*    scroll speed control (to, add, mul)
+  mouse_rig_scroll_direction_* scroll direction control (to, by)
+  mouse_rig_scroll_boost*     one-shot or sustained scroll boost
 
-mouse_rig_stop
-mouse_rig_sequence
+Control:
+  mouse_rig_stop            stop movement
+  mouse_rig_scroll_stop     stop scrolling
+  mouse_rig_sequence        chain actions with waits
 ```
 
-**Naming convention:**
-- `_to` = set absolute,
-- `_by` = relative delta,
-
+**Naming patterns:**
+- `_to` = set absolute value
+- `_by` = relative delta
+- `_natural` = smooth transitions with easing
+- `_xy` = raw x,y values instead of direction string
 
 See [mouse_rig.py](mouse_rig.py) for full parameters.
+
+### Native Scroll API
+
+Scroll uses native platform APIs (SendInput on Windows, CGEvent on macOS, XTest on Linux) for sub-line precision. This enables smooth direction transitions at low scroll speeds — e.g., turning from down to right produces a smooth arc instead of "stop Y, start X".
+
+- `mouse_rig_scroll("down", 1)` = 1 physical scroll tick (matches your mouse wheel)
+- `mouse_rig_scroll_natural("down", 8)` = smooth 8-tick scroll with easing (400ms default)
+- Continuous scroll (`scroll_go_natural`) uses native API for smooth velocity scrolling
+
+Controlled by `mouse_rig_scroll_api` setting (defaults to following `mouse_rig_api`).
 
 ## Transitions and Easings
 
@@ -96,6 +127,8 @@ rig.pos.to(960, 540).over(400, "ease_in_out")
 rig.speed(8)
 rig.direction.to(1, 0)
 rig.direction.by(90).over(500)              # rotate
+rig.scroll.by(0, 3)                        # scroll down 3 ticks
+rig.scroll.by_pixels.by(0, 5).over(400)    # smooth scroll via native API
 rig.scroll.speed.to(5)
 rig.scroll.direction.to(0, 1)              # scroll down
 rig.stop()
