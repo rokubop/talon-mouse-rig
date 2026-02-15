@@ -7,7 +7,7 @@ import math
 import time
 from talon import ctrl
 from typing import Optional, Callable, Any, TYPE_CHECKING
-from .core import Vec2, mouse_move, mouse_move_relative
+from .core import Vec2, is_vec2, mouse_move, mouse_move_relative
 from .mouse_api import MOUSE_APIS, get_mouse_move_functions
 from .contracts import (
     BuilderConfig,
@@ -543,7 +543,7 @@ class RigBuilder:
         if group.property == "vector":
             # Get velocity from vector layer's current value (includes active builders)
             current_value = group.get_current_value()
-            velocity = current_value if isinstance(current_value, Vec2) else Vec2(0, 0)
+            velocity = current_value if is_vec2(current_value) else Vec2(0, 0)
         elif group.property == "speed" and group.mode == "offset":
             # Convert speed offset to vector using current direction
             # Use scroll_direction for scroll input_type, direction for move input_type

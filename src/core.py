@@ -83,6 +83,14 @@ def mouse_move_relative(dx: float, dy: float) -> None:
 EPSILON = 1e-10
 
 
+def is_vec2(obj) -> bool:
+    """Check if an object is a Vec2-like value (duck typing).
+    Uses duck typing instead of isinstance to survive Talon hot-reloading,
+    which can cause class identity mismatches between module reload cycles.
+    """
+    return hasattr(obj, 'x') and hasattr(obj, 'y') and not hasattr(obj, 'z')
+
+
 @dataclass
 class Vec2:
     """2D vector"""
@@ -177,8 +185,8 @@ class Vec2:
 
     @staticmethod
     def from_tuple(t: Union[Tuple[float, float], 'Vec2']) -> 'Vec2':
-        if isinstance(t, Vec2):
-            return t
+        if is_vec2(t):
+            return Vec2(t.x, t.y)
         return Vec2(t[0], t[1])
 
 

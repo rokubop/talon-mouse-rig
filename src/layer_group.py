@@ -11,7 +11,7 @@ Groups manage:
 import time
 from typing import Optional, Any, Callable, TYPE_CHECKING
 from collections import deque
-from .core import Vec2, EPSILON
+from .core import Vec2, is_vec2, EPSILON
 from .lifecycle import Lifecycle
 
 if TYPE_CHECKING:
@@ -148,7 +148,7 @@ class LayerGroup:
             else:
                 # Modifier layers that revert clear their accumulated value
                 # Set to zero based on current type, not property default
-                if isinstance(self.accumulated_value, Vec2):
+                if is_vec2(self.accumulated_value):
                     self.accumulated_value = Vec2(0, 0)
                 else:
                     self.accumulated_value = 0.0
@@ -165,7 +165,7 @@ class LayerGroup:
         if self.accumulated_value is None:
             if isinstance(value, (int, float)):
                 self.accumulated_value = 0.0
-            elif isinstance(value, Vec2):
+            elif is_vec2(value):
                 self.accumulated_value = Vec2(0, 0)
             else:
                 self.accumulated_value = value
@@ -175,12 +175,12 @@ class LayerGroup:
         # Handle replace behavior cleanup (pos.offset only)
         if self.replace_target is not None and self.committed_value is not None:
             # Consolidate accumulated into committed (with clamping)
-            if isinstance(self.accumulated_value, Vec2) and isinstance(self.committed_value, Vec2):
+            if is_vec2(self.accumulated_value) and is_vec2(self.committed_value):
                 total_x = self.committed_value.x + self.accumulated_value.x
                 total_y = self.committed_value.y + self.accumulated_value.y
 
                 # Clamp per axis based on direction
-                if isinstance(self.replace_target, Vec2):
+                if is_vec2(self.replace_target):
                     if self.committed_value.x < self.replace_target.x:
                         total_x = min(total_x, self.replace_target.x)
                     elif self.committed_value.x > self.replace_target.x:
@@ -198,7 +198,7 @@ class LayerGroup:
                     self.committed_value = Vec2(total_x, total_y)
 
             # Reset for next operation
-            if isinstance(self.accumulated_value, Vec2):
+            if is_vec2(self.accumulated_value):
                 self.accumulated_value = Vec2(0, 0)
             else:
                 self.accumulated_value = 0.0
@@ -216,12 +216,12 @@ class LayerGroup:
             # Accumulate values (angles add, vectors add)
             if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
                 return current + incoming
-            if isinstance(current, Vec2) and isinstance(incoming, Vec2):
+            if is_vec2(current) and is_vec2(incoming):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
             # Type mismatch: if current is scalar but incoming is Vec2, replace with incoming
-            if isinstance(current, (int, float)) and isinstance(incoming, Vec2):
+            if isinstance(current, (int, float)) and is_vec2(incoming):
                 return incoming
-            if isinstance(current, Vec2) and isinstance(incoming, (int, float)):
+            if is_vec2(current) and isinstance(incoming, (int, float)):
                 # Vec2 + scalar angle: can't mix, keep the Vec2 (or could convert to angle)
                 # For now, treat the scalar as negligible and keep the vector
                 return current
@@ -231,7 +231,7 @@ class LayerGroup:
             # Override replaces
             return incoming
         elif mode == "scale" or mode == "mul":
-            if isinstance(current, Vec2) and isinstance(incoming, (int, float)):
+            if is_vec2(current) and isinstance(incoming, (int, float)):
                 return Vec2(current.x * incoming, current.y * incoming)
             if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
                 return current * incoming
@@ -239,7 +239,7 @@ class LayerGroup:
             return incoming
         else:
             # Default: additive
-            if isinstance(current, Vec2) and isinstance(incoming, Vec2):
+            if is_vec2(current) and is_vec2(incoming):
                 return Vec2(current.x + incoming.x, current.y + incoming.y)
             if isinstance(current, (int, float)) and isinstance(incoming, (int, float)):
                 return current + incoming
@@ -275,7 +275,7 @@ class LayerGroup:
             # Determine the correct zero value from first builder's type
             if self.builders:
                 first_value = self.builders[0].get_interpolated_value()
-                if isinstance(first_value, Vec2):
+                if is_vec2(first_value):
                     result = Vec2(0, 0)
                 else:
                     result = 0.0
@@ -290,14 +290,14 @@ class LayerGroup:
         # Apply replace clamping for pos.offset
         if self.replace_target is not None and self.committed_value is not None:
             # Total = committed + accumulated (with active builders)
-            if isinstance(result, Vec2) and isinstance(self.committed_value, Vec2):
+            if is_vec2(result) and is_vec2(self.committed_value):
                 total = Vec2(
                     self.committed_value.x + result.x,
                     self.committed_value.y + result.y
                 )
 
                 # Clamp based on approach direction (per axis)
-                if isinstance(self.replace_target, Vec2):
+                if is_vec2(self.replace_target):
                     clamped_x = total.x
                     clamped_y = total.y
 
@@ -332,7 +332,7 @@ class LayerGroup:
         # Initialize if None (for direction.offset)
         if result is None:
             first_target = self.builders[0].target_value
-            if isinstance(first_target, Vec2):
+            if is_vec2(first_target):
                 result = Vec2(0, 0)
             else:
                 result = 0.0
@@ -379,7 +379,7 @@ class LayerGroup:
         if self.accumulated_value is None:
             return True
 
-        if isinstance(self.accumulated_value, Vec2):
+        if is_vec2(self.accumulated_value):
             return (abs(self.accumulated_value.x) < EPSILON and
                     abs(self.accumulated_value.y) < EPSILON)
 

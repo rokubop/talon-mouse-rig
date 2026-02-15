@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import Vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, EPSILON
+from .core import Vec2, is_vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, EPSILON
 from .layer_group import LayerGroup
 from .lifecycle import LifecyclePhase
 from . import mode_operations, rate_utils
@@ -359,7 +359,7 @@ class RigState:
                     old_current_value = group.get_current_value()
 
                     # Update builder to start from current (make copy if Vec2)
-                    if isinstance(old_current_value, Vec2):
+                    if is_vec2(old_current_value):
                         builder.base_value = Vec2(old_current_value.x, old_current_value.y)
                     else:
                         builder.base_value = old_current_value
@@ -397,7 +397,7 @@ class RigState:
         # POS.OFFSET: Use committed_value architecture
         if builder.config.property == "pos" and builder.config.mode == "offset":
             # Bake current progress to committed_value
-            if isinstance(current_value, Vec2):
+            if is_vec2(current_value):
                 if group.committed_value is None:
                     group.committed_value = Vec2(0, 0)
 
@@ -426,7 +426,7 @@ class RigState:
                 # - committed = replace_target (from cleanup in on_builder_complete)
                 # - accumulated = 0
                 # Revert needs to go back to (0, 0) total, so revert to 0
-                if isinstance(group.replace_target, Vec2):
+                if is_vec2(group.replace_target):
                     builder.revert_target = Vec2(0, 0)
                 else:
                     builder.revert_target = 0.0
@@ -458,7 +458,7 @@ class RigState:
             # Revert for offset mode: negate the accumulated
             if not group.is_base and builder.config.mode == "offset" and builder.lifecycle.revert_ms:
                 accumulated = group.accumulated_value
-                if isinstance(accumulated, Vec2):
+                if is_vec2(accumulated):
                     builder.revert_target = Vec2(-accumulated.x, -accumulated.y)
                 elif isinstance(accumulated, (int, float)):
                     builder.revert_target = -accumulated
@@ -696,7 +696,7 @@ class RigState:
             return abs(target1 - target2) < EPSILON
         elif isinstance(target1, tuple) and isinstance(target2, tuple):
             return all(abs(a - b) < EPSILON for a, b in zip(target1, target2))
-        elif isinstance(target1, Vec2) and isinstance(target2, Vec2):
+        elif is_vec2(target1) and is_vec2(target2):
             return abs(target1.x - target2.x) < EPSILON and abs(target1.y - target2.y) < EPSILON
         else:
             return target1 == target2
@@ -1820,7 +1820,7 @@ class RigState:
                         if not builder.lifecycle.is_complete():
                             # Get target direction and convert to cardinal
                             target_dir = builder.target_value
-                            if isinstance(target_dir, Vec2):
+                            if is_vec2(target_dir):
                                 return self._rig_state._get_cardinal_direction(target_dir)
             return None
 
@@ -1875,7 +1875,7 @@ class RigState:
         def __repr__(self) -> str:
             # Format values based on type
             def format_value(val):
-                if isinstance(val, Vec2):
+                if is_vec2(val):
                     return f"({val.x:.1f}, {val.y:.1f})"
                 elif isinstance(val, float):
                     return f"{val:.1f}"
@@ -2810,7 +2810,7 @@ class RigState:
                     config.operator = "to"
 
                     # Set target value to current accumulated value
-                    if isinstance(group.accumulated_value, Vec2):
+                    if is_vec2(group.accumulated_value):
                         config.value = (group.accumulated_value.x, group.accumulated_value.y)
                     else:
                         config.value = group.accumulated_value
@@ -2823,7 +2823,7 @@ class RigState:
 
                     # Zero out accumulated value — the revert builder takes sole
                     # ownership of the value during its transition back to zero.
-                    if isinstance(group.accumulated_value, Vec2):
+                    if is_vec2(group.accumulated_value):
                         group.accumulated_value = Vec2(0, 0)
                     else:
                         group.accumulated_value = 0.0

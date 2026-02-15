@@ -68,6 +68,8 @@ rig scroll [speed | slow] down: user.mouse_rig_scroll_speed_mul(0.5)
 rig scroll speed up: user.mouse_rig_scroll_speed_mul(2)
 rig scroll speed <number>: user.mouse_rig_scroll_speed_to(number)
 rig scroll boost: user.mouse_rig_scroll_boost(0.3, 800, 0, 800)
+rig scroll boost start: user.mouse_rig_scroll_boost_start(0.3, 800)
+rig scroll boost stop: user.mouse_rig_scroll_boost_stop(800)
 
 # Pan (middle-click drag)
 rig pan left:
