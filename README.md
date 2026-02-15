@@ -251,7 +251,7 @@ Behaviors control what happens when an action fires again while already active. 
 * **stack** - Add another instance on top (default). Optionally cap with `stack(max)`.
 * **queue** - Wait for the current instance to finish, then run.
 * **throttle** - Ignore repeated fires within a time window.
-* **reset** - Cancel the current instance and restart from scratch.
+* **replace** - Cancel the current instance and restart from scratch.
 * **debounce** - Delay execution until fires stop for a given window.
 
 ```python
@@ -266,7 +266,7 @@ rig.speed.offset.stack(3).add(10).over(200)    # max 3 boost stacks
 # On named layers
 rig.layer("boost").queue.speed.add(10)         # queue until finished
 rig.layer("boost").throttle(500).speed.add(10) # rate-limit
-rig.layer("boost").reset.speed.add(10)         # restart from scratch
+rig.layer("boost").replace.speed.add(10)       # restart from scratch
 ```
 
 ### Quick Reference
@@ -277,7 +277,7 @@ rig.layer("boost").reset.speed.add(10)         # restart from scratch
 
 **Lifecycle:** `.over(ms, easing?)`, `.over(rate=X)`, `.hold(ms)`, `.revert(ms?, easing?)`, `.then(callback)`
 
-**Behaviors:** `.stack(max?)`, `.queue()`, `.throttle(ms?)`, `.reset()`
+**Behaviors:** `.stack(max?)`, `.queue()`, `.throttle(ms?)`, `.replace()`, `.debounce(ms)`
 
 **Easing:** `linear`, `ease_in`, `ease_out`, `ease_in_out`, `ease_in2` … `ease_in_out4`
 
