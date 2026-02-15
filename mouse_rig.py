@@ -821,9 +821,7 @@ class Actions:
             over_ms: Time to ramp up to full amount.
         """
         rig = actions.user.mouse_rig()
-        print(f"[scroll_boost_start] amount={amount}, over_ms={over_ms}, scroll_speed={rig.state.scroll_speed}, layers={list(rig.state.layers.keys())}")
         rig.scroll.speed.offset.add(amount).over(over_ms)
-        print(f"[scroll_boost_start] after apply: scroll_speed={rig.state.scroll_speed}, layers={list(rig.state.layers.keys())}")
 
     def mouse_rig_scroll_boost_stop(release_ms: int = 500) -> None:
         """Stop a sustained scroll boost. Reverts the scroll speed.offset layer back to 0.
@@ -832,7 +830,4 @@ class Actions:
             release_ms: Time to decay back to 0.
         """
         rig = actions.user.mouse_rig()
-        offset_layer = rig.state.scroll_speed.offset if hasattr(rig.state.scroll_speed, 'offset') else None
-        print(f"[scroll_boost_stop] release_ms={release_ms}, scroll_speed={rig.state.scroll_speed}, offset_layer={offset_layer}, layers={list(rig.state.layers.keys())}")
         rig.scroll.speed.offset.revert(release_ms)
-        print(f"[scroll_boost_stop] after revert: scroll_speed={rig.state.scroll_speed}, layers={list(rig.state.layers.keys())}")

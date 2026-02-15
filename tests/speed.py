@@ -478,6 +478,56 @@ def test_layer_speed_offset_from_stopped(on_success, on_failure):
     cron.after("400ms", check_movement)
 
 
+def test_speed_offset_boost_start_stop(on_success, on_failure):
+    """Test: speed.offset.add().over() then separate revert() - boost start/stop pattern"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    base_speed = 3
+    boost_amount = 5
+    expected_boosted = base_speed + boost_amount
+
+    rig.direction.to(1, 0)
+    rig.speed.to(base_speed)
+
+    def start_boost():
+        rig.speed.offset.add(boost_amount).over(300)
+
+    def check_boosted():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - expected_boosted) > 1:
+            on_failure(f"Boosted speed wrong: expected ~{expected_boosted}, got {rig_check.state.speed}")
+            return
+
+        # Now trigger the stop (separate revert)
+        rig_check.speed.offset.revert(300)
+
+    def check_reverting():
+        rig_mid = actions.user.mouse_rig()
+        # Should be between base and boosted (revert animating)
+        if rig_mid.state.speed <= base_speed or rig_mid.state.speed >= expected_boosted:
+            on_failure(f"During revert, speed should be between {base_speed} and {expected_boosted}, got {rig_mid.state.speed}")
+            return
+
+    def check_reverted():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - base_speed) > 1:
+            on_failure(f"After revert, speed should be ~{base_speed}, got {rig_check.state.speed}")
+            return
+        if "speed.offset" in rig_check.state.layers:
+            on_failure(f"speed.offset layer should be gone, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_boost)
+    cron.after("500ms", check_boosted)
+    cron.after("650ms", check_reverting)
+    cron.after("900ms", check_reverted)
+
+
 # ============================================================================
 # TEST LIST
 # ============================================================================
@@ -496,4 +546,5 @@ SPEED_TESTS = [
     ("stop().over().then()", test_stop_over_then_callback),
     ("stop() callback not fired on interrupt", test_stop_callback_not_fired_on_interrupt),
     ("layer().speed.offset.add() from stopped", test_layer_speed_offset_from_stopped),
+    ("speed.offset.add().over() then revert()", test_speed_offset_boost_start_stop),
 ]

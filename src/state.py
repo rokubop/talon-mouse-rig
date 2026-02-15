@@ -2807,6 +2807,7 @@ class RigState:
                     config.layer_type = group.layer_type
                     config.property = group.property
                     config.mode = group.mode
+                    config.input_type = group.input_type
                     config.operator = "to"
 
                     # Set target value to current accumulated value

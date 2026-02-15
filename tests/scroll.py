@@ -524,6 +524,55 @@ def test_scroll_speed_offset_add_revert(on_success, on_failure):
 
 
 
+def test_scroll_speed_offset_boost_start_stop(on_success, on_failure):
+    """Test: scroll.speed.offset.add().over() then separate revert() - scroll boost start/stop"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    base_speed = 0.5
+    boost_amount = 0.3
+    expected_boosted = base_speed + boost_amount
+
+    rig.scroll.direction.to(0, 1)
+    rig.scroll.speed.to(base_speed)
+
+    def start_boost():
+        rig.scroll.speed.offset.add(boost_amount).over(300)
+
+    def check_boosted():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.scroll_speed - expected_boosted) > 0.1:
+            on_failure(f"Boosted scroll speed wrong: expected ~{expected_boosted}, got {rig_check.state.scroll_speed}")
+            return
+
+        # Now trigger the stop (separate revert)
+        rig_check.scroll.speed.offset.revert(300)
+
+    def check_reverting():
+        rig_mid = actions.user.mouse_rig()
+        # Should be between base and boosted (revert animating)
+        if rig_mid.state.scroll_speed <= base_speed or rig_mid.state.scroll_speed >= expected_boosted:
+            on_failure(f"During revert, scroll speed should be between {base_speed} and {expected_boosted}, got {rig_mid.state.scroll_speed}")
+            return
+
+    def check_reverted():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.scroll_speed - base_speed) > 0.1:
+            on_failure(f"After revert, scroll speed should be ~{base_speed}, got {rig_check.state.scroll_speed}")
+            return
+        if "scroll:speed.offset" in rig_check.state.layers:
+            on_failure(f"scroll:speed.offset layer should be gone, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_boost)
+    cron.after("500ms", check_boosted)
+    cron.after("650ms", check_reverting)
+    cron.after("900ms", check_reverted)
+
+
 # Export test list
 SCROLL_TESTS = [
     ("scroll.speed.to()", test_scroll_speed_to),
@@ -541,4 +590,5 @@ SCROLL_TESTS = [
     ("scroll horizontal", test_scroll_horizontal),
     ("scroll.emit()", test_scroll_emit),
     ("scroll.speed.offset.add().revert()", test_scroll_speed_offset_add_revert),
+    ("scroll.speed.offset.add().over() then revert()", test_scroll_speed_offset_boost_start_stop),
 ]
