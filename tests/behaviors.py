@@ -666,8 +666,7 @@ def test_direction_mid_transition_restart(on_success, on_failure):
         direction = rig.state.direction
         # If bug exists: restarts from right(0°), ends at down(90°)
         # If fixed: starts from ~45°, ends at ~135° (down-left area)
-        # The key check: y should be positive (moving downward) and x should be negative
-        # (past 90° means we went beyond straight down)
+        # The key check: x should be < 0.5 (past 90°)
         if direction.x >= 0.5:
             on_failure(f"Direction didn't continue from mid-transition: got ({direction.x:.2f}, {direction.y:.2f}), "
                       f"x should be < 0.5 (past 90°)")

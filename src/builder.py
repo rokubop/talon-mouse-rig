@@ -1427,11 +1427,14 @@ class ActiveBuilder:
         For base layer operations, if there's an active animation on the same layer,
         use its current interpolated value so the new animation starts from where
         the old one is, not from the raw base state.
+
+        For modifier layers (offset/override/scale), always return the normal base
+        value since modifiers accumulate independently.
         """
         layer = self.config.layer_name
         if layer in self.rig_state._layer_groups:
             group = self.rig_state._layer_groups[layer]
-            if group.builders:
+            if group.is_base and group.builders:
                 value = group.get_current_value()
                 if value is not None:
                     return value

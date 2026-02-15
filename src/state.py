@@ -508,11 +508,15 @@ class RigState:
         # If queue is active or has pending, enqueue
         if group.is_queue_active or len(group.pending_queue) > 0:
             def execute_callback():
-                # Recalculate base_value from current state when actually starting
-                builder.base_value = builder._get_current_or_base_value()
-                builder.target_value = builder._calculate_target_value()
+                # Recalculate timing so animation starts fresh
                 builder.creation_time = time.perf_counter()
                 builder.lifecycle.started = False
+                # For base layers, recalculate base from current animated value
+                # so queued operations chain from where the previous one ended.
+                # For modifier layers, keep original base_value (offsets accumulate independently).
+                if group.is_base:
+                    builder.base_value = builder._get_current_or_base_value()
+                    builder.target_value = builder._calculate_target_value()
                 group.add_builder(builder)
                 if not builder.lifecycle.is_complete():
                     self._ensure_frame_loop_running()
