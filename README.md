@@ -180,9 +180,11 @@ Mix and match any combination:
 
 <img src="assets/speed_curve_combos.svg">
 
-Transitions also accept an easing function. Solid = base, faded = 2→4 (sharper).
+Transitions also accept an easing function:
 
 <img src="assets/easing_curves.svg">
+
+Each easing has sharper variants by appending `2`, `3`, or `4` (e.g. `ease_in2`, `ease_in_out3`, `ease_out4`). Higher numbers produce more aggressive curves.
 
 When Talon actions support transitions, you'll see parameters like `over_ms`, `hold_ms`, `revert_ms`, and `easing`.
 
