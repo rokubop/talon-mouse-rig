@@ -54,6 +54,24 @@ class Actions:
         """
         return get_rig()
 
+    def mouse_rig_state() -> Any:
+        """Get rig state for reading computed values.
+
+        ```python
+        state = actions.user.mouse_rig_state()
+        state.pos            # Vec2 - current screen position
+        state.speed          # float - computed speed (base + layers)
+        state.direction      # Vec2 - computed direction
+        state.vector         # Vec2 - speed * direction
+        state.scroll_speed
+        state.scroll_direction
+        state.scroll_vector
+        state.base.speed     # base value only (no layers)
+        state.layers         # dict of active layer states
+        ```
+        """
+        return get_rig().state
+
     def mouse_rig_pos_to(
             x: float,
             y: float,
@@ -337,12 +355,12 @@ class Actions:
         Equivalent to:
         ```
         rig = actions.user.mouse_rig()
-        rig.direction.by(degrees).over(ms, easing)
+        rig.direction.by(degrees).over(over_ms, easing)
         ```
 
         Args:
             degrees: Degrees to rotate (positive = clockwise)
-            ms: Time in ms to curve to the new direction (optional)
+            over_ms: Time in ms to curve to the new direction (optional)
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
         rig = actions.user.mouse_rig()
@@ -362,7 +380,7 @@ class Actions:
         ```
 
         Args:
-            over_ms: Time in ms to curve to the reversed direction (optional)
+            reverse_ms: Time in ms to curve to the reversed direction (optional)
         """
         rig = actions.user.mouse_rig()
         if reverse_ms is not None:

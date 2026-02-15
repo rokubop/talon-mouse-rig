@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -9,16 +9,62 @@
 <td>All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.</td>
 </tr></table>
 
-## What can it do?
+## Talon Actions
 
-- Continuous mouse movement with speed, direction, turns
-- Discrete mouse movement by direction or x,y offset
-- Absolute position movement with easing
-- Speed adjustments, boosts, braking
-- Smooth curves and natural easing transitions
-- Scroll ticks and continuous scroll movement
-- Native platform APIs compatible with games
-- [Ready-to-use voice commands](mouse_rig_user.talon)
+**Movement**
+
+* `mouse_rig_move` - Move a fixed distance in a direction
+* `mouse_rig_move_natural` - Move a fixed distance with smooth easing
+* `mouse_rig_move_value` - Move a fixed distance in the current direction
+* `mouse_rig_go` - Start continuous movement
+* `mouse_rig_go_natural` - Start continuous movement with smooth turns and speed ramp
+* `mouse_rig_pos_to` - Move to an absolute screen position
+* `mouse_rig_pos_to_natural` - Move to an absolute screen position with smooth easing
+
+**Speed and Direction**
+
+* `mouse_rig_speed_to` - Set speed to an absolute value
+* `mouse_rig_speed_add` - Add to the current speed
+* `mouse_rig_speed_mul` - Multiply the current speed
+* `mouse_rig_direction` - Set direction to a cardinal direction
+* `mouse_rig_rotate` - Rotate direction by degrees
+* `mouse_rig_reverse` - Reverse the current direction
+* `mouse_rig_boost` - Speed offset that ramps up and decays
+* `mouse_rig_boost_start` - Start a sustained speed offset
+* `mouse_rig_boost_stop` - Stop a sustained speed offset
+
+**Scroll**
+
+* `mouse_rig_scroll` - Scroll a fixed number of ticks
+* `mouse_rig_scroll_natural` - Scroll with smooth easing via native API
+* `mouse_rig_scroll_go` - Start continuous scrolling
+* `mouse_rig_scroll_go_natural` - Start continuous scrolling with smooth transitions
+* `mouse_rig_scroll_speed_to` - Set scroll speed
+* `mouse_rig_scroll_speed_add` - Add to scroll speed
+* `mouse_rig_scroll_speed_mul` - Multiply scroll speed
+* `mouse_rig_scroll_direction` - Set scroll direction
+* `mouse_rig_scroll_direction_by` - Rotate scroll direction by degrees
+* `mouse_rig_scroll_boost` - Scroll speed offset that ramps up and decays
+* `mouse_rig_scroll_boost_start` - Start a sustained scroll speed offset
+* `mouse_rig_scroll_boost_stop` - Stop a sustained scroll speed offset
+
+**Control**
+
+* `mouse_rig_stop` - Stop movement, optionally with smooth deceleration
+* `mouse_rig_scroll_stop` - Stop scrolling, optionally with smooth deceleration
+* `mouse_rig_button_prime` - Hold a mouse button during the next rig action, release on stop
+* `mouse_rig_sequence` - Chain actions with waits between steps
+* `mouse_rig_reset` - Reset rig to default state
+
+**State**
+
+* `mouse_rig_state` - Get the full state object for reading computed values
+* `mouse_rig_state_speed` - Get the current speed
+* `mouse_rig_state_direction` - Get the current direction as (x, y)
+* `mouse_rig_state_direction_cardinal` - Get the current direction as a string
+* `mouse_rig_state_is_moving` - Check if the mouse is currently moving
+
+See [mouse_rig.py](mouse_rig.py) for full signatures and parameters.
 
 ## Installation
 
@@ -35,68 +81,94 @@ cd ~/AppData/Roaming/talon/user
 git clone https://github.com/rokubop/talon-mouse-rig
 ```
 
-🎉 Done!
+Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands. This is your file to customize.
 
-Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands.
+## Examples
 
-This is your file to customize.
+### Sequences
 
-## Talon Actions
+Chain actions that wait for each animation to finish before continuing:
 
-**At a Glance**
-
-```
-Movement:
-  mouse_rig_move              one-shot move (direction, amount)
-  mouse_rig_move_natural      one-shot smooth move (direction, amount)
-  mouse_rig_move_xy           one-shot move (dx, dy)
-  mouse_rig_move_xy_natural   one-shot smooth move (dx, dy)
-  mouse_rig_move_value        one-shot move in current direction
-  mouse_rig_go                continuous move (direction, speed)
-  mouse_rig_go_natural        continuous smooth move (direction, speed)
-  mouse_rig_go_xy             continuous move (x, y, speed)
-  mouse_rig_go_xy_natural     continuous smooth move (x, y, speed)
-  mouse_rig_speed_*           speed control (to, add, mul)
-  mouse_rig_direction_*       direction control (to, by degrees)
-  mouse_rig_pos_to            move to absolute position
-  mouse_rig_boost*            one-shot or sustained speed boost
-
-Scroll:
-  mouse_rig_scroll            one-shot scroll (direction, amount)
-  mouse_rig_scroll_natural    one-shot smooth scroll (direction, amount)
-  mouse_rig_scroll_xy         one-shot scroll (dx, dy)
-  mouse_rig_scroll_xy_natural one-shot smooth scroll (dx, dy)
-  mouse_rig_scroll_go         continuous scroll (direction, speed)
-  mouse_rig_scroll_go_natural continuous smooth scroll (direction, speed)
-  mouse_rig_scroll_go_xy      continuous scroll (x, y, speed)
-  mouse_rig_scroll_go_xy_natural continuous smooth scroll (x, y, speed)
-  mouse_rig_scroll_speed_*    scroll speed control (to, add, mul)
-  mouse_rig_scroll_direction_* scroll direction control (to, by)
-  mouse_rig_scroll_boost*     one-shot or sustained scroll boost
-
-Control:
-  mouse_rig_stop            stop movement
-  mouse_rig_scroll_stop     stop scrolling
-  mouse_rig_sequence        chain actions with waits
+```python
+actions.user.mouse_rig_sequence([
+    lambda: ctrl.mouse_click(0, down=True),
+    lambda: actions.user.mouse_rig_pos_to(500, 300, 500),
+    lambda: ctrl.mouse_click(0, up=True),
+])
 ```
 
-**Naming patterns:**
-- `_to` = set absolute value
-- `_by` = relative delta
-- `_natural` = smooth transitions with easing
-- `_xy` = raw x,y values instead of direction string
+Use `mouse_rig_wait` to insert pauses:
 
-See [mouse_rig.py](mouse_rig.py) for full parameters.
+```python
+actions.user.mouse_rig_sequence([
+    lambda: actions.user.mouse_rig_go("right", 3),
+    lambda: actions.user.mouse_rig_wait(1000),
+    lambda: actions.user.mouse_rig_stop(),
+])
+```
 
-### Native Scroll API
+### Button Prime
 
-Scroll uses native platform APIs (SendInput on Windows, CGEvent on macOS, XTest on Linux) for sub-line precision. This enables smooth direction transitions at low scroll speeds - e.g., turning from down to right produces a smooth arc instead of "stop Y, start X".
+Prime a mouse button to hold during the next rig action and release on stop. Useful for drag operations in `.talon` files:
 
-- `mouse_rig_scroll("down", 1)` = 1 physical scroll tick (matches your mouse wheel)
-- `mouse_rig_scroll_natural("down", 8)` = smooth 8-tick scroll with easing (400ms default)
-- Continuous scroll (`scroll_go_natural`) uses native API for smooth velocity scrolling
+```talon
+# Pan with middle-click drag
+rig pan left:
+    user.mouse_rig_button_prime("middle")
+    user.mouse_rig_move_natural("left", 200)
 
-Controlled by `mouse_rig_scroll_api` setting (defaults to following `mouse_rig_api`).
+# Continuous pan - button releases when you say "rig stop"
+rig pan go left:
+    user.mouse_rig_button_prime("middle")
+    user.mouse_rig_go("left", 4.0)
+```
+
+### Reading State
+
+Simple checks via Talon actions:
+
+```python
+if actions.user.mouse_rig_state_is_moving():
+    actions.user.mouse_rig_speed_mul(2)
+
+cardinal = actions.user.mouse_rig_state_direction_cardinal()  # "left", "up_right", etc.
+```
+
+The state object gives full access to computed values, base values, and layer introspection:
+
+```python
+state = actions.user.mouse_rig_state()
+
+# Computed values (base + all active layers)
+state.speed            # 6.5
+state.direction        # Vec2(x=0.7, y=-0.7)
+state.vector           # speed * direction
+state.pos              # current screen position
+
+# Base values (without layer effects)
+state.base.speed       # 4.0
+
+# Layer introspection
+state.layers           # dict of active layer states
+if "sprint" in state.layers:
+    print(state.layers["sprint"].speed)  # layer's speed contribution
+```
+
+### Timing
+
+Many actions accept **over/hold/revert** parameters to control transitions:
+
+```python
+# Set speed to 10 over 500ms, hold for 1s, then revert over 500ms
+actions.user.mouse_rig_speed_to(10, over_ms=500, hold_ms=1000, revert_ms=500)
+
+# Boost: speed offset that ramps up over 800ms, then decays over 800ms
+actions.user.mouse_rig_boost(8, over_ms=800, release_ms=800)
+
+# Sustained boost: ramp up, hold until explicitly stopped
+actions.user.mouse_rig_boost_start(8, over_ms=800)
+actions.user.mouse_rig_boost_stop(release_ms=800)
+```
 
 ## Transitions and Easings
 
@@ -172,14 +244,29 @@ rig.layer("boost").bake()        # flatten into base
 rig.layer("boost").emit(1000)    # convert to anonymous layer that fades out
 ```
 
-**Repeat behaviors** control what happens when a layer fires again while active:
+### Behaviors
+
+Behaviors control what happens when an action fires again while already active. They work on any property - base, offset, or named layers:
+
+* **stack** - Add another instance on top (default). Optionally cap with `stack(max)`.
+* **queue** - Wait for the current instance to finish, then run.
+* **throttle** - Ignore repeated fires within a time window.
+* **reset** - Cancel the current instance and restart from scratch.
+* **debounce** - Delay execution until fires stop for a given window.
 
 ```python
-rig.layer("boost").stack.speed.add(10)        # stack (default)
-rig.layer("boost").stack(3).speed.add(10)     # max 3 stacks
-rig.layer("boost").queue.speed.add(10)        # queue until finished
+# On base properties
+rig.speed.queue.to(10).over(500)               # queue speed changes
+rig.direction.queue.by(90).over(500)           # queue rotations
+rig.speed.throttle(200).add(1)                 # rate-limit speed bumps
+
+# On offset layers
+rig.speed.offset.stack(3).add(10).over(200)    # max 3 boost stacks
+
+# On named layers
+rig.layer("boost").queue.speed.add(10)         # queue until finished
 rig.layer("boost").throttle(500).speed.add(10) # rate-limit
-rig.layer("boost").reset.speed.add(10)        # restart from scratch
+rig.layer("boost").reset.speed.add(10)         # restart from scratch
 ```
 
 ### Quick Reference
@@ -212,6 +299,20 @@ Fluent chains execute on garbage collection. If you hold a reference to the buil
 builder = rig.speed.add(10).over(300)
 builder.run()  # execute now instead of waiting for GC
 ```
+
+## Platform APIs
+
+Mouse and scroll use OS-specific APIs for compatibility with games and applications that don't respond to Talon's default mouse movement.
+
+**Mouse** (`mouse_rig_api` setting):
+* `"talon"` - Talon's built-in mouse API (default for absolute movement)
+* `"platform"` - Native OS API: SendInput (Windows), CGEvent (macOS), XTest (Linux). Default for relative movement.
+
+**Scroll** (`mouse_rig_scroll_api` setting):
+* `"default"` - Follows `mouse_rig_api` (default)
+* `"platform"` - Native OS API with sub-line precision, enabling smooth direction transitions at low scroll speeds
+
+Individual actions can also override the API with the `api` parameter.
 
 ## Tests
 

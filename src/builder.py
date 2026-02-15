@@ -1093,12 +1093,6 @@ class PropertyBuilder:
         elif self.rig_builder.config.property == "scroll_pos":
             self.rig_builder.config.is_synchronous = True
             self.rig_builder.config.movement_type = "relative"
-        #     if not self.rig_builder.config._movement_type_explicit:
-        #         self.rig_builder.config.movement_type = "absolute"
-        # else:
-        #     # Other properties default to relative
-        #     if not self.rig_builder.config._movement_type_explicit:
-        #         self.rig_builder.config.movement_type = "relative"
 
         return self.rig_builder
 

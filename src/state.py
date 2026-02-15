@@ -65,9 +65,6 @@ class RigState:
         # Debounce pending builders (debounce_key -> (target_time, config, is_base_layer, cron_job))
         self._debounce_pending: dict[str, tuple[float, 'BuilderConfig', bool, Optional[cron.CronJob]]] = {}
 
-        # Auto-order counter for layers without explicit order
-        self._next_auto_order: int = 0
-
         # Manual mouse movement detection (works in both absolute and relative modes)
         self._last_manual_movement_time: Optional[float] = None
         self._expected_mouse_pos: Optional[tuple[int, int]] = None  # Expected screen position after last rig movement
@@ -88,19 +85,13 @@ class RigState:
         layers = self.layers
         try:
             cardinal = self.direction_cardinal
-        except Exception as e:
+        except Exception:
             cardinal = None
-            print(f"Error getting direction_cardinal: {e}")
-            import traceback
-            traceback.print_exc()
 
         try:
             scroll_cardinal = scroll.direction_cardinal
-        except Exception as e:
+        except Exception:
             scroll_cardinal = None
-            print(f"Error getting scroll.direction_cardinal: {e}")
-            import traceback
-            traceback.print_exc()
 
         lines = [
             "RigState:",

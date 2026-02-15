@@ -75,6 +75,7 @@
       "user.mouse_rig_speed_add",
       "user.mouse_rig_speed_mul",
       "user.mouse_rig_speed_to",
+      "user.mouse_rig_state",
       "user.mouse_rig_state_direction",
       "user.mouse_rig_state_direction_cardinal",
       "user.mouse_rig_state_direction_x",
