@@ -38,14 +38,18 @@ class BehaviorProxy:
         self.builder = builder
         self.behavior_name = behavior_name
         self.has_args = has_args
+        self._property_builder = None  # Set when accessed via PropertyBuilder
 
     def __call__(self, *args, **kwargs):
         method = getattr(self.builder, f'_set_{self.behavior_name}')
-        return method(*args, **kwargs)
+        method(*args, **kwargs)
+        return self._property_builder if self._property_builder else self.builder
 
     def __getattr__(self, name):
         method = getattr(self.builder, f'_set_{self.behavior_name}')
         method()
+        if self._property_builder:
+            return getattr(self._property_builder, name)
         return getattr(self.builder, name)
 
 
@@ -1154,7 +1158,14 @@ class PropertyBuilder:
         return self.to(*args)
 
     def __getattr__(self, name: str):
-        """Provide helpful errors for common mistakes"""
+        """Forward behavior access to RigBuilder, provide helpful errors for common mistakes"""
+        # Forward behaviors to the underlying RigBuilder
+        if name in ('queue', 'stack', 'replace', 'throttle', 'debounce'):
+            result = getattr(self.rig_builder, name)
+            if isinstance(result, BehaviorProxy):
+                result._property_builder = self
+            return result
+
         if name in ('max', 'min'):
             raise ConfigError(
                 f"Cannot call .{name}() before an operation.\n\n"

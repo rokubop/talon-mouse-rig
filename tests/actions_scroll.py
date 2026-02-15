@@ -15,7 +15,7 @@ from talon import actions, cron
 def test_action_scroll_speed_to(on_success, on_failure):
     """Test: actions.user.mouse_rig_scroll_speed_to(value) - instant speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(0, 1)
+    actions.user.mouse_rig_scroll_direction("down")
     actions.user.mouse_rig_scroll_speed_to(5)
 
     def check_speed():
@@ -32,7 +32,7 @@ def test_action_scroll_speed_to(on_success, on_failure):
 def test_action_scroll_speed_add(on_success, on_failure):
     """Test: actions.user.mouse_rig_scroll_speed_add(delta) - add to speed"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(0, -1)
+    actions.user.mouse_rig_scroll_direction("up")
     actions.user.mouse_rig_scroll_speed_to(3)
     actions.user.mouse_rig_scroll_speed_add(2)
 
@@ -51,7 +51,7 @@ def test_action_scroll_speed_to_over(on_success, on_failure):
     """Test: actions.user.mouse_rig_scroll_speed_to(value, over_ms) - animated speed"""
     actions.user.mouse_rig_stop()
     actions.user.mouse_rig_scroll_speed_to(2)
-    actions.user.mouse_rig_scroll_direction_to(0, 1)
+    actions.user.mouse_rig_scroll_direction("down")
 
     target_speed = 8
 
@@ -71,7 +71,7 @@ def test_action_scroll_speed_to_over(on_success, on_failure):
 def test_action_scroll_speed_to_hold_revert(on_success, on_failure):
     """Test: actions.user.mouse_rig_scroll_speed_to(value, over, hold, revert) - full lifecycle"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(0, 1)
+    actions.user.mouse_rig_scroll_direction("down")
     actions.user.mouse_rig_scroll_speed_to(3)
 
     def check_after_revert():
@@ -92,10 +92,10 @@ def test_action_scroll_speed_to_hold_revert(on_success, on_failure):
 # SCROLL DIRECTION ACTION TESTS
 # ============================================================================
 
-def test_action_scroll_direction_to(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_direction_to(x, y) - set direction"""
+def test_action_scroll_direction(on_success, on_failure):
+    """Test: actions.user.mouse_rig_scroll_direction(direction) - set direction"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(1, 0)
+    actions.user.mouse_rig_scroll_direction("right")
     actions.user.mouse_rig_scroll_speed_to(3)
 
     def check_direction():
@@ -113,7 +113,7 @@ def test_action_scroll_direction_to(on_success, on_failure):
 def test_action_scroll_direction_by(on_success, on_failure):
     """Test: actions.user.mouse_rig_scroll_direction_by(degrees) - rotate direction"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(1, 0)  # Start right
+    actions.user.mouse_rig_scroll_direction("right")  # Start right
     actions.user.mouse_rig_scroll_direction_by(90)    # Rotate 90° to down
     actions.user.mouse_rig_scroll_speed_to(3)
 
@@ -129,10 +129,10 @@ def test_action_scroll_direction_by(on_success, on_failure):
     cron.after("100ms", check_direction)
 
 
-def test_action_scroll_direction_to_over(on_success, on_failure):
-    """Test: actions.user.mouse_rig_scroll_direction_to(x, y, over_ms) - animated direction"""
+def test_action_scroll_direction_over(on_success, on_failure):
+    """Test: actions.user.mouse_rig_scroll_direction(direction, over_ms) - animated direction"""
     actions.user.mouse_rig_stop()
-    actions.user.mouse_rig_scroll_direction_to(1, 0)  # Start right
+    actions.user.mouse_rig_scroll_direction("right")  # Start right
 
     def check_direction():
         rig = actions.user.mouse_rig()
@@ -144,7 +144,7 @@ def test_action_scroll_direction_to_over(on_success, on_failure):
         on_success()
 
     # Curve to down over 300ms
-    actions.user.mouse_rig_scroll_direction_to(0, 1, 300, "ease_in_out")
+    actions.user.mouse_rig_scroll_direction("down", 300, "ease_in_out")
     cron.after("400ms", check_direction)
 
 
@@ -246,9 +246,9 @@ ACTIONS_SCROLL_TESTS = [
     ("actions.user.mouse_rig_scroll_speed_add()", test_action_scroll_speed_add),
     ("actions.user.mouse_rig_scroll_speed_to() over", test_action_scroll_speed_to_over),
     ("actions.user.mouse_rig_scroll_speed_to() hold revert", test_action_scroll_speed_to_hold_revert),
-    ("actions.user.mouse_rig_scroll_direction_to()", test_action_scroll_direction_to),
+    ("actions.user.mouse_rig_scroll_direction()", test_action_scroll_direction),
     ("actions.user.mouse_rig_scroll_direction_by()", test_action_scroll_direction_by),
-    ("actions.user.mouse_rig_scroll_direction_to() over", test_action_scroll_direction_to_over),
+    ("actions.user.mouse_rig_scroll_direction() over", test_action_scroll_direction_over),
     ("actions.user.mouse_rig_scroll_go() vector", test_action_scroll_go_vector),
     ("actions.user.mouse_rig_scroll_go('left')", test_action_scroll_go_left),
     ("actions.user.mouse_rig_scroll_go('right')", test_action_scroll_go_right),
