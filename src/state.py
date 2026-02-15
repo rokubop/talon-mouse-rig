@@ -473,7 +473,7 @@ class RigState:
         """
         if builder.config.behavior_args:
             max_count = builder.config.behavior_args[0]
-            if len(group.builders) >= max_count:
+            if max_count > 0 and len(group.builders) >= max_count:
                 return True  # At max, skip
         return False
 

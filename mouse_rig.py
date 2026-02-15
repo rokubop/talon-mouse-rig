@@ -432,35 +432,30 @@ class Actions:
             if force:
                 rig.speed.to(speed).over(speed_ms, speed_easing)
 
-    def mouse_rig_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, max_stacks: int = 1) -> None:
+    def mouse_rig_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0) -> None:
         """One-shot speed boost: ramp up, hold, release.
-        Uses the implicit speed.offset layer. Multiple calls stack as separate builders.
+        Uses the implicit speed.offset layer.
 
         Args:
             amount: Speed to add.
             over_ms: Time to ramp up to full amount.
             hold_ms: Time to hold at full amount before releasing.
             release_ms: Time to decay back to 0.
-            max_stacks: Maximum active boosts allowed. 0 = unlimited.
+            stacks: Max concurrent boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-
-        if max_stacks > 0:
-            layer = rig.state.speed.offset
-            if layer and len(layer._group.builders) >= max_stacks:
-                return
-
-        rig.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms)
+        rig.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained boost. Ramps up and holds until boost_stop is called.
+        Safe for held-input patterns (noise/pedal) — repeated calls are no-ops (.stack(1)).
 
         Args:
             amount: Speed to add.
             over_ms: Time to ramp up to full amount.
         """
         rig = actions.user.mouse_rig()
-        rig.speed.offset.add(amount).over(over_ms)
+        rig.speed.offset.add(amount).over(over_ms).stack(1)
 
     def mouse_rig_boost_stop(release_ms: int = 500) -> None:
         """Stop a sustained boost. Reverts the speed.offset layer back to 0.
@@ -850,7 +845,7 @@ class Actions:
             if force:
                 rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
 
-    def mouse_rig_scroll_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, max_stacks: int = 1) -> None:
+    def mouse_rig_scroll_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0) -> None:
         """One-shot scroll speed boost: ramp up, hold, release.
         Uses the implicit scroll speed.offset layer.
 
@@ -859,26 +854,21 @@ class Actions:
             over_ms: Time to ramp up to full amount.
             hold_ms: Time to hold at full amount before releasing.
             release_ms: Time to decay back to 0.
-            max_stacks: Maximum active boosts allowed. 0 = unlimited.
+            stacks: Max concurrent boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-
-        if max_stacks > 0:
-            layer = rig.state.scroll_speed.offset
-            if layer and len(layer._group.builders) >= max_stacks:
-                return
-
-        rig.scroll.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms)
+        rig.scroll.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_scroll_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained scroll boost. Ramps up and holds until scroll_boost_stop is called.
+        Safe for held-input patterns (noise/pedal) — repeated calls are no-ops (.stack(1)).
 
         Args:
             amount: Scroll speed to add.
             over_ms: Time to ramp up to full amount.
         """
         rig = actions.user.mouse_rig()
-        rig.scroll.speed.offset.add(amount).over(over_ms)
+        rig.scroll.speed.offset.add(amount).over(over_ms).stack(1)
 
     def mouse_rig_scroll_boost_stop(release_ms: int = 500) -> None:
         """Stop a sustained scroll boost. Reverts the scroll speed.offset layer back to 0.
