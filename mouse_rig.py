@@ -344,7 +344,7 @@ class Actions:
             easing: Easing function like "linear", "ease_in_out" (optional)
         """
         rig = actions.user.mouse_rig()
-        builder = rig.direction.by(degrees)
+        builder = rig.direction.queue.by(degrees)
 
         if over_ms is not None:
             builder = builder.over(over_ms, easing)

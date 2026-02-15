@@ -579,8 +579,10 @@ def test_rate_reuse_different_property_independent(on_success, on_failure):
 
 def test_queue_base_operations(on_success, on_failure):
     """Test: queue works with base operations (no layer)"""
-    start_x, start_y = ctrl.mouse_pos()
-    dx = 50
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)  # Start facing right (0°)
+    rig.speed(5)
 
     first_done = {"value": False}
     second_done = {"value": False}
@@ -592,21 +594,20 @@ def test_queue_base_operations(on_success, on_failure):
         second_done["value"] = True
 
     def check_queue():
-        x, y = ctrl.mouse_pos()
+        rig.stop()
         # Both should have executed sequentially
         if not first_done["value"] or not second_done["value"]:
             on_failure(f"Base queue: first={first_done['value']}, second={second_done['value']}, expected both true")
             return
-        # Total movement should be dx * 2
-        expected_x = start_x + (dx * 2)
-        if abs(x - expected_x) > 5:
-            on_failure(f"Base queue position: expected x={expected_x}, got {x}")
+        # Two 90° rotations should end at 180° (facing left)
+        direction = rig.state.direction
+        if abs(direction.x - (-1.0)) > 0.15 or abs(direction.y - 0.0) > 0.15:
+            on_failure(f"Base queue direction: expected (-1.0, 0.0), got ({direction.x:.2f}, {direction.y:.2f})")
             return
         on_success()
 
-    rig = actions.user.mouse_rig()
-    rig.pos.by(dx, 0).queue().api("talon").over(200).then(mark_first)
-    rig.pos.by(dx, 0).queue().api("talon").over(200).then(mark_second)
+    rig.direction.by(90).queue().over(200).then(mark_first)
+    rig.direction.by(90).queue().over(200).then(mark_second)
 
     cron.after("600ms", check_queue)
 
@@ -645,6 +646,61 @@ def test_queue_base_independent_properties(on_success, on_failure):
     cron.after("600ms", check_independent)
 
 
+def test_direction_mid_transition_restart(on_success, on_failure):
+    """Test: direction.by() mid-transition starts from current interpolated value, not base"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)  # Start facing right
+    rig.speed(5)
+
+    # Start rotating 90° down over 400ms
+    rig.direction.by(90).over(400)
+
+    def restart_midway():
+        # At ~200ms, direction should be roughly 45°
+        # Now start a new 90° rotation - should continue from ~45°, not restart from 0°
+        rig.direction.by(90).over(400)
+
+    def check_final():
+        rig.stop()
+        direction = rig.state.direction
+        # If bug exists: restarts from right(0°), ends at down(90°)
+        # If fixed: starts from ~45°, ends at ~135° (down-left area)
+        # The key check: y should be positive (moving downward) and x should be negative
+        # (past 90° means we went beyond straight down)
+        if direction.x >= 0.5:
+            on_failure(f"Direction didn't continue from mid-transition: got ({direction.x:.2f}, {direction.y:.2f}), "
+                      f"x should be < 0.5 (past 90°)")
+            return
+        on_success()
+
+    cron.after("200ms", restart_midway)
+    cron.after("700ms", check_final)
+
+
+def test_queue_direction_recalculates_base(on_success, on_failure):
+    """Test: queued direction.by() uses current value when starting, not creation-time value"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)  # Start facing right (0°)
+    rig.speed(5)
+
+    # Queue two 90° rotations - should end at 180° (facing left)
+    rig.direction.by(90).queue().over(300)
+    rig.direction.by(90).queue().over(300)
+
+    def check_final():
+        rig.stop()
+        direction = rig.state.direction
+        # Should be facing left (-1, 0) after two 90° rotations
+        if abs(direction.x - (-1.0)) > 0.15 or abs(direction.y - 0.0) > 0.15:
+            on_failure(f"Queued rotations wrong: expected (-1.0, 0.0), got ({direction.x:.2f}, {direction.y:.2f})")
+            return
+        on_success()
+
+    cron.after("800ms", check_final)
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -673,4 +729,6 @@ BEHAVIOR_TESTS = [
     ("rate reuse different property independent", test_rate_reuse_different_property_independent),
     ("queue base operations", test_queue_base_operations),
     ("queue base independent properties", test_queue_base_independent_properties),
+    ("direction.by() mid-transition restart", test_direction_mid_transition_restart),
+    ("queue direction.by() recalculates base", test_queue_direction_recalculates_base),
 ]

@@ -1348,9 +1348,8 @@ class ActiveBuilder:
                     # Shouldn't happen (pos.to is always absolute), but handle gracefully
                     self.base_value = Vec2(0, 0)
             else:
-                # speed.to(), direction.to() - use base state (not computed)
-                # This ensures animations start from the actual base state
-                self.base_value = self._get_base_value()
+                # speed.to(), direction.to() - use current animated value if mid-transition
+                self.base_value = self._get_current_or_base_value()
         elif config.operator in ("by", "add"):
             # For relative operations
             if config.property == "pos" and config.movement_type == "relative":
@@ -1358,16 +1357,16 @@ class ActiveBuilder:
                 # Queue accumulated state is tracked separately by the queue system
                 self.base_value = Vec2(0, 0)
             elif is_base_layer:
-                # For base layer operations, use base state (not computed)
-                self.base_value = self._get_base_value()
+                # For base layer operations, use current animated value if mid-transition
+                self.base_value = self._get_current_or_base_value()
             else:
                 # For modifier layers: speed.by(), direction.by() - use base state
                 self.base_value = self._get_base_value()
         else:
             # For all other operations (sub, mul, div)
             if is_base_layer:
-                # For base layer operations, use base state (not computed)
-                self.base_value = self._get_base_value()
+                # For base layer operations, use current animated value if mid-transition
+                self.base_value = self._get_current_or_base_value()
             else:
                 # For modifier layers, use base state
                 self.base_value = self._get_base_value()
@@ -1421,6 +1420,22 @@ class ActiveBuilder:
     def time_alive(self) -> float:
         """Get time in seconds since this builder was created"""
         return time.perf_counter() - self.creation_time
+
+    def _get_current_or_base_value(self) -> Any:
+        """Get current animated value if mid-transition, otherwise base value.
+
+        For base layer operations, if there's an active animation on the same layer,
+        use its current interpolated value so the new animation starts from where
+        the old one is, not from the raw base state.
+        """
+        layer = self.config.layer_name
+        if layer in self.rig_state._layer_groups:
+            group = self.rig_state._layer_groups[layer]
+            if group.builders:
+                value = group.get_current_value()
+                if value is not None:
+                    return value
+        return self._get_base_value()
 
     def _get_base_value(self) -> Any:
         """Get current base value for this property"""
