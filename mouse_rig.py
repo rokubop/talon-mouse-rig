@@ -325,7 +325,7 @@ class Actions:
             builder = builder.over(over_ms, easing)
         return builder
 
-    def mouse_rig_direction_by(
+    def mouse_rig_rotate(
             degrees: int | float,
             over_ms: int = None,
             easing: str = None

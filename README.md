@@ -201,7 +201,7 @@ rig.layer("boost").reset.speed.add(10)        # restart from scratch
 ```python
 rig.state.pos          # computed (base + all effects)
 rig.state.base.speed   # base only
-rig.state.layers       # ["sprint", "drift"]
+rig.state.layers["sprint"]  # LayerState or None
 ```
 
 ### Execution Note

@@ -225,7 +225,7 @@ def test_invalid_layer_state_attribute(on_success, on_failure):
         actions.sleep("100ms")
 
         rig_check = actions.user.mouse_rig()
-        layer_state = rig_check.state.layer("test")
+        layer_state = rig_check.state.layers["test"]
 
         # Try to access invalid attribute
         _ = layer_state.direction_x

@@ -147,9 +147,8 @@ class RigState:
         lines.extend([
             f"  scroll.vector = ({scroll.vector.x:.2f}, {scroll.vector.y:.2f})",
             f"  scroll.vector.current = ({scroll.vector.current.x:.2f}, {scroll.vector.current.y:.2f}), scroll.vector.target = {scroll.vector.target}",
-            f"  layers = {layers}",
+            *[f'  layers["{name}"] = <LayerState>' for name in layers],
             f"  base = <BaseState>",
-            f"  layer(name) = <LayerState | None>",
             f"  frame_loop_active = {self._frame_loop_job is not None}",
         ])
         return "\n".join(lines)
@@ -442,6 +441,8 @@ class RigState:
             if builder.config.property == "pos" and builder.config.mode == "override" and group.is_base:
                 mouse_x, mouse_y = ctrl.mouse_pos()
                 builder.base_value = Vec2(mouse_x, mouse_y)
+            elif builder.config.property in ("direction", "pos", "vector") and not is_vec2(current_value):
+                builder.base_value = Vec2(0, 0)
             else:
                 builder.base_value = current_value
 
@@ -1841,17 +1842,61 @@ class RigState:
         # Use RigState prefix to access nested class
         return RigState.CardinalPropertyState(self, cardinal)
 
-    @property
-    def layers(self) -> list[str]:
-        """List of active layers (including base layers)
+    class LayersView:
+        """Dict-like read-only view of active layers.
 
-        Returns a list of layer names for all currently active layers,
-        including base layers created by base operations with animations.
-
-        Example:
-            rig.state.layers  # ["base.speed", "sprint", "drift"]
+        Returns None for missing keys instead of raising KeyError,
+        since layers are transient and may not be active.
         """
-        return list(self._layer_groups.keys())
+        __slots__ = ('_groups',)
+
+        def __init__(self, groups):
+            self._groups = groups
+
+        def __getitem__(self, name: str) -> Optional['RigState.LayerState']:
+            group = self._groups.get(name)
+            return RigState.LayerState(group) if group is not None else None
+
+        def get(self, name: str, default=None) -> Optional['RigState.LayerState']:
+            group = self._groups.get(name)
+            return RigState.LayerState(group) if group is not None else default
+
+        def keys(self):
+            return self._groups.keys()
+
+        def values(self):
+            return [RigState.LayerState(g) for g in self._groups.values()]
+
+        def items(self):
+            return [(k, RigState.LayerState(g)) for k, g in self._groups.items()]
+
+        def __contains__(self, name: str) -> bool:
+            return name in self._groups
+
+        def __len__(self) -> int:
+            return len(self._groups)
+
+        def __iter__(self):
+            return iter(self._groups)
+
+        def __bool__(self) -> bool:
+            return bool(self._groups)
+
+        def __repr__(self) -> str:
+            return repr(dict(self.items()))
+
+    @property
+    def layers(self) -> 'RigState.LayersView':
+        """Dict-like view of active layers (including base layers)
+
+        Access by name to get LayerState or None:
+            rig.state.layers["sprint"]  # LayerState or None
+
+        Also supports iteration, len, and containment:
+            "sprint" in rig.state.layers
+            for name in rig.state.layers: ...
+        """
+        return RigState.LayersView(self._layer_groups)
 
     # Layer state access
     class LayerState:
@@ -1969,22 +2014,6 @@ class RigState:
                 f"LayerState has no attribute '{name}'. "
                 f"Available attributes: {', '.join(VALID_LAYER_STATE_ATTRS)}"
             )
-
-    def layer(self, layer_name: str) -> Optional['RigState.LayerState']:
-        """Get state information for a specific layer
-
-        Returns a LayerState object with the layer's current state, or None if not active.
-
-        Example:
-            sprint = rig.state.layer("sprint")
-            if sprint:
-                # Access sprint.speed, sprint.phase, etc.
-                pass
-        """
-        if layer_name not in self._layer_groups:
-            return None
-
-        return RigState.LayerState(self._layer_groups[layer_name])
 
     # Base state access
     class BasePropertyState:
@@ -2359,19 +2388,19 @@ class RigState:
         def offset(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .offset mode"""
             layer_name = f"{self._property_name}.offset"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
+            return self._rig_state.layers[layer_name]
 
         @property
         def override(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .override mode"""
             layer_name = f"{self._property_name}.override"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
+            return self._rig_state.layers[layer_name]
 
         @property
         def scale(self) -> Optional['RigState.LayerState']:
             """Get implicit layer state for .scale mode"""
             layer_name = f"{self._property_name}.scale"
-            return self._rig_state.layer(layer_name) if layer_name in self._rig_state._layer_groups else None
+            return self._rig_state.layers[layer_name]
 
         def __repr__(self):
             # Show available properties/methods, not the computed value

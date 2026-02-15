@@ -44,10 +44,10 @@ rig side [down | bottom]: user.mouse_rig_pos_to_natural(1920/2, 1000)
 rig side [up | top]: user.mouse_rig_pos_to_natural(1920/2, 80)
 
 # Direction
-rig curve left: user.mouse_rig_direction_by(-90, 1000)
-rig curve right: user.mouse_rig_direction_by(90, 1000)
-rig turn left: user.mouse_rig_direction_by(-90)
-rig turn right: user.mouse_rig_direction_by(90)
+rig curve left: user.mouse_rig_rotate(-90, 1000)
+rig curve right: user.mouse_rig_rotate(90, 1000)
+rig turn left: user.mouse_rig_rotate(-90)
+rig turn right: user.mouse_rig_rotate(90)
 rig reverse: user.mouse_rig_reverse(1000)
 
 # Scroll
@@ -57,8 +57,6 @@ rig scroll up: user.mouse_rig_scroll_natural("up", 8)
 rig scroll down: user.mouse_rig_scroll_natural("down", 8)
 rig scroll left: user.mouse_rig_scroll_natural("left", 8)
 rig scroll right: user.mouse_rig_scroll_natural("right", 8)
-rig page up: user.mouse_rig_scroll_natural("up", 13)
-rig page down: user.mouse_rig_scroll_natural("down", 13)
 rig scroll go up: user.mouse_rig_scroll_go_natural("up", 0.1)
 rig scroll go down: user.mouse_rig_scroll_go_natural("down", 0.1)
 rig scroll go left: user.mouse_rig_scroll_go_natural("left", 0.1)

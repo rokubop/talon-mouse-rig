@@ -46,7 +46,7 @@
       "user.mouse_rig_boost_start",
       "user.mouse_rig_boost_stop",
       "user.mouse_rig_direction",
-      "user.mouse_rig_direction_by",
+      "user.mouse_rig_rotate",
       "user.mouse_rig_go",
       "user.mouse_rig_go_natural",
       "user.mouse_rig_move",

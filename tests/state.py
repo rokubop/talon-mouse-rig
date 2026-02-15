@@ -32,9 +32,6 @@ def test_rig_state_empty():
     print(f"rig.state.scroll.target = {rig.state.scroll.target}")
     print(f"rig.state.scroll.x = {rig.state.scroll.x}")
     print(f"rig.state.scroll.y = {rig.state.scroll.y}")
-    # print(f"rig.state.scroll.pos = {rig.state.scroll.pos}")
-    # print(f"rig.state.scroll.pos.current = {rig.state.scroll.pos.current}")
-    # print(f"rig.state.scroll.pos.target = {rig.state.scroll.pos.target}")
     print(f"rig.state.scroll.speed = {rig.state.scroll.speed}")
     print(f"rig.state.scroll.speed.current = {rig.state.scroll.speed.current}")
     print(f"rig.state.scroll.speed.target = {rig.state.scroll.speed.target}")
@@ -82,9 +79,6 @@ def test_base_state_empty():
     print(f"rig.state.base.scroll.target = {rig.state.base.scroll.target}")
     print(f"rig.state.base.scroll.x = {rig.state.base.scroll.x}")
     print(f"rig.state.base.scroll.y = {rig.state.base.scroll.y}")
-    # print(f"rig.state.base.scroll.pos = {rig.state.base.scroll.pos}")
-    # print(f"rig.state.base.scroll.pos.current = {rig.state.base.scroll.pos.current}")
-    # print(f"rig.state.base.scroll.pos.target = {rig.state.base.scroll.pos.target}")
     print(f"rig.state.base.scroll.speed = {rig.state.base.scroll.speed}")
     print(f"rig.state.base.scroll.speed.current = {rig.state.base.scroll.speed.current}")
     print(f"rig.state.base.scroll.speed.target = {rig.state.base.scroll.speed.target}")
@@ -148,7 +142,7 @@ def test_layer_state_base_speed():
     rig.speed.to(5).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.speed")
+    layer = rig.state.layers["base.speed"]
     if not layer:
         return False, "base.speed layer not found"
 
@@ -174,7 +168,7 @@ def test_layer_state_offset():
     rig.speed.offset.to(10).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("speed.offset")
+    layer = rig.state.layers["speed.offset"]
     if not layer:
         return False, "speed.offset layer not found"
 
@@ -192,7 +186,7 @@ def test_layer_state_custom_named():
     rig.layer("boost").speed.offset.to(10).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("boost")
+    layer = rig.state.layers["boost"]
     if not layer:
         return False, "boost layer not found"
 
@@ -210,7 +204,7 @@ def test_layer_state_pos_offset():
     rig.pos.offset.to((100, 100)).over(2000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("pos.offset")
+    layer = rig.state.layers["pos.offset"]
     if not layer:
         return False, "pos.offset layer not found"
 
@@ -228,7 +222,7 @@ def test_layer_state_base_scroll():
     rig.scroll.to((100, 50)).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.scroll")
+    layer = rig.state.layers["base.scroll"]
     if not layer:
         return False, "base.scroll layer not found"
 
@@ -254,7 +248,7 @@ def test_layer_state_scroll_offset():
     rig.scroll.offset.to((50, 100)).over(1500)
     time.sleep(0.1)
 
-    layer = rig.state.layer("scroll.offset")
+    layer = rig.state.layers["scroll.offset"]
     if not layer:
         return False, "scroll.offset layer not found"
 
@@ -322,7 +316,7 @@ def test_scroll_layer_custom_named():
     rig.layer("wobble").scroll.offset.to((15, 25)).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("wobble")
+    layer = rig.state.layers["wobble"]
     if not layer:
         return False, "wobble layer not found"
 
@@ -340,7 +334,7 @@ def test_layer_state_scroll_pos():
     rig.scroll.pos.to((200, 150)).over(1200)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.scroll.pos")
+    layer = rig.state.layers["base.scroll.pos"]
     if not layer:
         return False, "base.scroll.pos layer not found"
 
@@ -366,7 +360,7 @@ def test_layer_state_scroll_speed():
     rig.scroll.speed.to(15).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.scroll.speed")
+    layer = rig.state.layers["base.scroll.speed"]
     if not layer:
         return False, "base.scroll.speed layer not found"
 
@@ -392,11 +386,12 @@ def test_layer_state_scroll_direction():
     rig.scroll.direction.to((1, 1)).over(800)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.scroll.direction")
+    layer = rig.state.layers["base.scroll.direction"]
     if not layer:
         return False, "base.scroll.direction layer not found"
 
     print("\nLayerState (base.scroll.direction):")
+    print("test")
     print(layer)
 
     print("\nIndividual property access:")
@@ -418,7 +413,7 @@ def test_layer_state_scroll_vector():
     rig.scroll.vector.to((10, 20)).over(1500)
     time.sleep(0.1)
 
-    layer = rig.state.layer("base.scroll.vector")
+    layer = rig.state.layers["base.scroll.vector"]
     if not layer:
         return False, "base.scroll.vector layer not found"
 
@@ -444,7 +439,7 @@ def test_layer_state_scroll_pos_offset():
     rig.scroll.pos.offset.to((30, 40)).over(1000)
     time.sleep(0.1)
 
-    layer = rig.state.layer("scroll.pos.offset")
+    layer = rig.state.layers["scroll.pos.offset"]
     if not layer:
         return False, "scroll.pos.offset layer not found"
 
@@ -462,7 +457,7 @@ def test_layer_state_scroll_speed_offset():
     rig.scroll.speed.offset.to(5).over(800)
     time.sleep(0.1)
 
-    layer = rig.state.layer("scroll.speed.offset")
+    layer = rig.state.layers["scroll.speed.offset"]
     if not layer:
         return False, "scroll.speed.offset layer not found"
 
@@ -480,7 +475,7 @@ def test_layer_state_scroll_direction_offset():
     rig.scroll.direction.offset.to((0.5, 0.5)).over(600)
     time.sleep(0.1)
 
-    layer = rig.state.layer("scroll.direction.offset")
+    layer = rig.state.layers["scroll.direction.offset"]
     if not layer:
         return False, "scroll.direction.offset layer not found"
 
@@ -498,7 +493,7 @@ def test_layer_state_scroll_vector_offset():
     rig.scroll.vector.offset.to((5, 10)).over(1200)
     time.sleep(0.1)
 
-    layer = rig.state.layer("scroll.vector.offset")
+    layer = rig.state.layers["scroll.vector.offset"]
     if not layer:
         return False, "scroll.vector.offset layer not found"
 
@@ -541,6 +536,77 @@ def test_scroll_state_all_properties():
     return True, "All scroll properties shown"
     return True, "pos.offset layer shown"
 
+def test_layers_view_dict_like():
+    """Test LayersView dict-like behavior"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    # Empty layers
+    layers = rig.state.layers
+    print("\nLayersView (empty):")
+    print(f"repr: {layers}")
+    print(f"len: {len(layers)}")
+    print(f"bool: {bool(layers)}")
+
+    if len(layers) != 0:
+        return False, f"Expected 0 layers, got {len(layers)}"
+    if bool(layers):
+        return False, "Expected empty layers to be falsy"
+
+    # Missing key returns None
+    missing = layers["nonexistent"]
+    print(f"missing key: {missing}")
+    if missing is not None:
+        return False, f"Expected None for missing key, got {missing}"
+
+    # .get() with default
+    default_val = layers.get("nonexistent", "fallback")
+    if default_val != "fallback":
+        return False, f"Expected 'fallback' default, got {default_val}"
+
+    # With active layers
+    rig.speed.to(5).over(1000)
+    rig.layer("sprint").speed.offset.to(3).over(500)
+    time.sleep(0.1)
+
+    layers = rig.state.layers
+    print("\nLayersView (with layers):")
+    print(f"repr: {layers}")
+    print(f"len: {len(layers)}")
+    print(f"bool: {bool(layers)}")
+
+    if not bool(layers):
+        return False, "Expected non-empty layers to be truthy"
+
+    # Containment
+    print(f"'base.speed' in layers: {'base.speed' in layers}")
+    print(f"'sprint' in layers: {'sprint' in layers}")
+    print(f"'missing' in layers: {'missing' in layers}")
+
+    if "base.speed" not in layers:
+        return False, "'base.speed' should be in layers"
+    if "sprint" not in layers:
+        return False, "'sprint' should be in layers"
+    if "missing" in layers:
+        return False, "'missing' should not be in layers"
+
+    # Iteration
+    keys_from_iter = list(layers)
+    print(f"iteration: {keys_from_iter}")
+
+    # .keys(), .values(), .items()
+    print(f"keys: {list(layers.keys())}")
+    print(f"values: {layers.values()}")
+    print(f"items: {layers.items()}")
+
+    if set(layers.keys()) != set(keys_from_iter):
+        return False, "keys() should match iteration"
+    if len(layers.items()) != len(layers):
+        return False, "items() length should match len()"
+
+    rig.stop()
+    return True, "LayersView dict-like behavior verified"
+
 def test_frame_loop_status():
     """Test frame loop status in RigState repr"""
     rig = actions.user.mouse_rig()
@@ -579,5 +645,6 @@ STATE_TESTS = [
     ("Scroll state (with animations)", test_scroll_state_with_animations),
     ("Scroll all properties", test_scroll_state_all_properties),
     ("LayerState - custom scroll", test_scroll_layer_custom_named),
+    ("LayersView - dict-like", test_layers_view_dict_like),
     ("Frame loop status", test_frame_loop_status),
 ]

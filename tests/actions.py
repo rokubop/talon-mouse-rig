@@ -190,10 +190,10 @@ def test_action_direction(on_success, on_failure):
 
 
 def test_action_direction_by(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_by(degrees) - rotate direction"""
+    """Test: actions.user.mouse_rig_rotate(degrees) - rotate direction"""
     actions.user.mouse_rig_stop()
     actions.user.mouse_rig_direction("right")  # Start facing right
-    actions.user.mouse_rig_direction_by(90)    # Rotate 90° clockwise to down
+    actions.user.mouse_rig_rotate(90)    # Rotate 90° clockwise to down
     actions.user.mouse_rig_speed_to(5)
 
     def check_direction():
@@ -225,7 +225,7 @@ def test_action_direction_over(on_success, on_failure):
 
 
 def test_action_direction_by_over(on_success, on_failure):
-    """Test: actions.user.mouse_rig_direction_by(degrees, over_ms) - animated rotation"""
+    """Test: actions.user.mouse_rig_rotate(degrees, over_ms) - animated rotation"""
     actions.user.mouse_rig_stop()
     actions.user.mouse_rig_direction("right")  # Start facing right
 
@@ -237,7 +237,7 @@ def test_action_direction_by_over(on_success, on_failure):
         on_success()
 
     # Rotate 180° over 400ms
-    actions.user.mouse_rig_direction_by(180, 400, "linear")
+    actions.user.mouse_rig_rotate(180, 400, "linear")
     cron.after("500ms", check_direction)
 
 
@@ -396,8 +396,8 @@ ACTIONS_TESTS = [
     ("actions.user.mouse_rig_speed_to() hold revert", test_action_speed_to_hold_revert),
     ("actions.user.mouse_rig_direction()", test_action_direction),
     ("actions.user.mouse_rig_direction() over", test_action_direction_over),
-    ("actions.user.mouse_rig_direction_by()", test_action_direction_by),
-    ("actions.user.mouse_rig_direction_by() over", test_action_direction_by_over),
+    ("actions.user.mouse_rig_rotate()", test_action_direction_by),
+    ("actions.user.mouse_rig_rotate() over", test_action_direction_by_over),
     ("actions.user.mouse_rig_go('left')", test_action_go_left),
     ("actions.user.mouse_rig_go('right')", test_action_go_right),
     ("actions.user.mouse_rig_go('up')", test_action_go_up),
