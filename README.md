@@ -9,18 +9,16 @@
 <td>All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.</td>
 </tr></table>
 
-![Demo](assets/demo.webp)
+## What can it do?
 
-## Overview
-
-Mouse rig gives you
-
-- ~50 actions for controlling mouse position, speed, direction, and scroll
-- Transitions and easing
-- Works with games by using relative movement when possible
-- Ready to use voice commands in [mouse_rig_user.talon](mouse_rig_user.talon)
-- Sequencing actions
-- Offset and override layers for temporary effects
+- Continuous mouse movement with speed, direction, turns
+- Discrete mouse movement by direction or x,y offset
+- Absolute position movement with easing
+- Speed adjustments, boosts, braking
+- Smooth curves and natural easing transitions
+- Scroll ticks and continuous scroll movement
+- Native platform APIs compatible with games
+- [Ready-to-use voice commands](mouse_rig_user.talon)
 
 ## Installation
 
@@ -92,7 +90,7 @@ See [mouse_rig.py](mouse_rig.py) for full parameters.
 
 ### Native Scroll API
 
-Scroll uses native platform APIs (SendInput on Windows, CGEvent on macOS, XTest on Linux) for sub-line precision. This enables smooth direction transitions at low scroll speeds — e.g., turning from down to right produces a smooth arc instead of "stop Y, start X".
+Scroll uses native platform APIs (SendInput on Windows, CGEvent on macOS, XTest on Linux) for sub-line precision. This enables smooth direction transitions at low scroll speeds - e.g., turning from down to right produces a smooth arc instead of "stop Y, start X".
 
 - `mouse_rig_scroll("down", 1)` = 1 physical scroll tick (matches your mouse wheel)
 - `mouse_rig_scroll_natural("down", 8)` = smooth 8-tick scroll with easing (400ms default)
@@ -188,7 +186,7 @@ rig.layer("boost").reset.speed.add(10)        # restart from scratch
 
 **Properties:** `pos`, `speed`, `direction`, `scroll.speed`, `scroll.direction`, `scroll.vector`
 
-**Operators:** `.to()`, `.add()` / `.by()`, `.sub()`, `.mul()`, `.div()` — additive and multiplicative cannot be mixed on the same layer
+**Operators:** `.to()`, `.add()` / `.by()`, `.sub()`, `.mul()`, `.div()` - additive and multiplicative cannot be mixed on the same layer
 
 **Lifecycle:** `.over(ms, easing?)`, `.over(rate=X)`, `.hold(ms)`, `.revert(ms?, easing?)`, `.then(callback)`
 
