@@ -76,6 +76,9 @@ class RigState:
         self._stop_callbacks: list = []
         self._scroll_stop_callbacks: list = []
 
+        # Primed button (pressed on next add_builder, released on stop)
+        self._primed_button: Optional[int] = None
+
     def __repr__(self) -> str:
         pos = self.pos
         speed = self.speed
@@ -621,6 +624,12 @@ class RigState:
             was_enqueued = self._apply_queue_behavior(builder, group)
             if was_enqueued:
                 return
+
+        if self._primed_button is not None:
+            btn = self._primed_button
+            self._primed_button = None
+            ctrl.mouse_click(button=btn, down=True)
+            self.add_stop_callback(lambda: ctrl.mouse_click(button=btn, up=True))
 
         group.add_builder(builder)
 
@@ -2582,6 +2591,14 @@ class RigState:
         """Scroll property container with nested access to pos, speed, direction, vector"""
         return RigState.ScrollPropertyContainer(self)
 
+    def button_prime(self, button: int):
+        """Prime a mouse button to press on next movement and release on stop.
+
+        Args:
+            button: Mouse button index (0=left, 1=right, 2=middle)
+        """
+        self._primed_button = button
+
     def add_stop_callback(self, callback):
         """Add a callback to fire when the frame loop stops"""
         self._stop_callbacks.append(callback)
@@ -2613,6 +2630,9 @@ class RigState:
         self._throttle_times.clear()
         self._rate_builder_cache.clear()
         self._debounce_pending.clear()
+
+        # Clear primed button if unused
+        self._primed_button = None
 
         # 3. Decelerate speed to 0
         if transition_ms is None or transition_ms == 0:
@@ -2787,9 +2807,10 @@ class RigState:
         # Reset auto-order counter
         self._next_auto_order = 0
 
-        # Clear stop callbacks
+        # Clear stop callbacks and primed button
         self._stop_callbacks.clear()
         self._scroll_stop_callbacks.clear()
+        self._primed_button = None
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):
         """Trigger revert on a layer group

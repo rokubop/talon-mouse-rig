@@ -75,37 +75,27 @@ rig scroll boost stop: user.mouse_rig_scroll_boost_stop(800)
 
 # Pan (middle-click drag)
 rig pan left:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_move_natural("left", 200)
-    sleep(300ms)
-    mouse_release(2)
 rig pan right:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_move_natural("right", 200)
-    sleep(300ms)
-    mouse_release(2)
 rig pan up:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_move_natural("up", 200)
-    sleep(300ms)
-    mouse_release(2)
 rig pan down:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_move_natural("down", 200)
-    sleep(300ms)
-    mouse_release(2)
 rig pan go left:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_go("left", 4.0)
 rig pan go right:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_go("right", 4.0)
 rig pan go up:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_go("up", 4.0)
 rig pan go down:
-    mouse_drag(2)
+    user.mouse_rig_button_prime("middle")
     user.mouse_rig_go("down", 4.0)
-rig pan stop:
-    user.mouse_rig_stop()
-    mouse_release(2)
+rig pan stop: user.mouse_rig_stop()

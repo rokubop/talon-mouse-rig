@@ -5,6 +5,8 @@ from .src.sequence import run_sequence, WaitHandle
 
 mod = Module()
 
+BUTTON_MAP = {"left": 0, "right": 1, "middle": 2}
+
 DIRECTION_MAP = {
     "left":       (-1,  0),
     "right":      ( 1,  0),
@@ -518,6 +520,18 @@ class Actions:
         """Reset rig to default state (speed=0, direction=right, clear all layers)"""
         rig = actions.user.mouse_rig()
         rig.reset()
+
+    def mouse_rig_button_prime(button: str) -> None:
+        """Prime a mouse button to press on next rig action and release on stop.
+
+        The button is held down when the next builder starts and released when
+        the frame loop stops (movement completes or stop() is called).
+
+        Args:
+            button: "left", "right", or "middle"
+        """
+        rig = actions.user.mouse_rig()
+        rig.state.button_prime(BUTTON_MAP[button])
 
     def mouse_rig_sequence(steps: list) -> None:
         """Run a sequence of steps, waiting for rig animations between steps.
