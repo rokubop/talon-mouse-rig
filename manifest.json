@@ -81,6 +81,7 @@
       "user.mouse_rig_state_direction_x",
       "user.mouse_rig_state_direction_y",
       "user.mouse_rig_state_is_moving",
+      "user.mouse_rig_state_is_scrolling",
       "user.mouse_rig_state_speed",
       "user.mouse_rig_stop",
       "user.mouse_rig_test_toggle_ui",
