@@ -384,9 +384,9 @@ class Actions:
         """
         rig = actions.user.mouse_rig()
         if reverse_ms is not None:
-            rig.reverse(reverse_ms)
+            return rig.reverse(reverse_ms)
         else:
-            rig.reverse()
+            return rig.reverse()
 
     def mouse_rig_go(direction: str, speed: float = 5, force: bool = False) -> None:
         """Set direction and start moving. Keeps current speed unless force=True.
@@ -444,7 +444,7 @@ class Actions:
             stacks: Max concurrent boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-        rig.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
+        return rig.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained boost. Ramps up and holds until boost_stop is called.
@@ -455,7 +455,7 @@ class Actions:
             over_ms: Time to ramp up to full amount.
         """
         rig = actions.user.mouse_rig()
-        rig.speed.offset.add(amount).over(over_ms).stack(1)
+        return rig.speed.offset.add(amount).over(over_ms).stack(1)
 
     def mouse_rig_boost_stop(release_ms: int = 500) -> None:
         """Stop a sustained boost. Reverts the speed.offset layer back to 0.
@@ -464,7 +464,7 @@ class Actions:
             release_ms: Time to decay back to 0.
         """
         rig = actions.user.mouse_rig()
-        rig.speed.offset.revert(release_ms)
+        return rig.speed.offset.revert(release_ms)
 
     def mouse_rig_state_speed() -> float:
         """Get current speed from rig state"""
@@ -862,7 +862,7 @@ class Actions:
             stacks: Max concurrent boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-        rig.scroll.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
+        return rig.scroll.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_scroll_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained scroll boost. Ramps up and holds until scroll_boost_stop is called.
@@ -873,7 +873,7 @@ class Actions:
             over_ms: Time to ramp up to full amount.
         """
         rig = actions.user.mouse_rig()
-        rig.scroll.speed.offset.add(amount).over(over_ms).stack(1)
+        return rig.scroll.speed.offset.add(amount).over(over_ms).stack(1)
 
     def mouse_rig_scroll_boost_stop(release_ms: int = 500) -> None:
         """Stop a sustained scroll boost. Reverts the scroll speed.offset layer back to 0.
@@ -882,4 +882,4 @@ class Actions:
             release_ms: Time to decay back to 0.
         """
         rig = actions.user.mouse_rig()
-        rig.scroll.speed.offset.revert(release_ms)
+        return rig.scroll.speed.offset.revert(release_ms)
