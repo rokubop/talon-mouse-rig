@@ -491,6 +491,11 @@ class Actions:
         rig = actions.user.mouse_rig()
         return rig.state.speed > 0
 
+    def mouse_rig_state_is_scrolling() -> bool:
+        """Check if mouse is currently scrolling (scroll speed > 0)"""
+        rig = actions.user.mouse_rig()
+        return rig.state.scroll_speed > 0
+
     def mouse_rig_state_direction_cardinal() -> str:
         """Get current direction as cardinal string.
 
