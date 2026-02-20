@@ -585,7 +585,7 @@ class RigState:
         layer = builder.config.layer_name
 
         if builder.config.operator == "bake":
-            self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None)
+            self._bake_property(builder.config.property, layer if not builder.config.is_base_layer() else None, getattr(builder.config, 'input_type', 'move'))
             return
 
         if builder.config.behavior == "debounce":
@@ -943,28 +943,48 @@ class RigState:
         if self._should_frame_loop_be_active():
             self._ensure_frame_loop_running()
 
-    def _bake_property(self, property_name: str, layer: Optional[str] = None):
+    def _bake_property(self, property_name: str, layer: Optional[str] = None, input_type: str = "move"):
         """Bake current computed value of a property into base state
 
         Args:
             property_name: The property to bake ("speed", "direction", "pos")
             layer: Optional layer to bake. If specified, bakes computed state and removes that layer.
-                   If None, bakes computed state and removes all base layers for this property.
+                   If None, bakes computed state and removes all layers for this property.
+            input_type: "move" for mouse movement, "scroll" for scroll
         """
-        # Always bake the current computed value (base + all modifiers)
-        current_value = getattr(self, property_name)
+        is_scroll = input_type == "scroll"
 
+        # Read from the correct computed state
+        if is_scroll:
+            attr_prefix = "scroll_"
+        else:
+            attr_prefix = ""
+        current_value = getattr(self, f"{attr_prefix}{property_name}")
+
+        # Write to the correct base state
         if property_name == "vector":
-            self._base_speed = current_value.magnitude()
-            self._base_direction = current_value.normalized() if current_value.magnitude() > EPSILON else Vec2(1, 0)
+            mag = current_value.magnitude()
+            norm = current_value.normalized() if mag > EPSILON else Vec2(1, 0)
+            if is_scroll:
+                self._base_scroll_speed = mag
+                self._base_scroll_direction = norm
+            else:
+                self._base_speed = mag
+                self._base_direction = norm
         elif property_name == "speed":
-            self._base_speed = float(current_value)
+            if is_scroll:
+                self._base_scroll_speed = float(current_value)
+            else:
+                self._base_speed = float(current_value)
         elif property_name == "direction":
-            self._base_direction = Vec2(current_value.x, current_value.y)
+            if is_scroll:
+                self._base_scroll_direction = Vec2(current_value.x, current_value.y)
+            else:
+                self._base_direction = Vec2(current_value.x, current_value.y)
         elif property_name == "pos":
             self._absolute_base_pos = Vec2(current_value.x, current_value.y) if hasattr(current_value, 'x') else current_value
 
-        # Remove the specified layer or all base layers for this property
+        # Remove the specified layer or all layers for this property
         if layer:
             # Remove specific layer
             if layer in self._layer_groups:
@@ -972,10 +992,10 @@ class RigState:
             if layer in self._layer_orders:
                 del self._layer_orders[layer]
         else:
-            # Remove all base layer groups affecting this property
+            # Remove all layer groups affecting this property and input_type
             layers_to_remove = [
                 l for l, g in self._layer_groups.items()
-                if g.is_base and g.property == property_name
+                if g.property == property_name and getattr(g, 'input_type', 'move') == input_type
             ]
             for l in layers_to_remove:
                 if l in self._layer_groups:
@@ -2733,11 +2753,12 @@ class RigState:
         pass
 
     def bake_all(self):
-        """Bake all active builders immediately"""
-        # Compute final values for all properties that have active layers
+        """Bake all active mouse movement builders immediately (not scroll)"""
+        # Compute final values for all mouse movement properties that have active layers
         properties_to_bake = set()
         for group in self._layer_groups.values():
-            properties_to_bake.add(group.property)
+            if getattr(group, 'input_type', 'move') == 'move':
+                properties_to_bake.add(group.property)
 
         # Bake computed values into base state
         for prop in properties_to_bake:
@@ -2757,9 +2778,11 @@ class RigState:
                 self._base_speed = current_vector.magnitude()
                 self._base_direction = current_vector.normalized() if self._base_speed > EPSILON else Vec2(1, 0)
 
-        # Remove all layers (without trying to bake them individually)
+        # Remove only mouse movement layers
         for layer in list(self._layer_groups.keys()):
-            self.remove_builder(layer, bake=False)
+            group = self._layer_groups.get(layer)
+            if group and getattr(group, 'input_type', 'move') == 'move':
+                self.remove_builder(layer, bake=False)
 
     def reset(self):
         """Reset everything to default state

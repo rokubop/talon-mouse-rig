@@ -968,6 +968,318 @@ def test_reverse_with_speed_add_animation_from_zero(on_success, on_failure):
 
 
 # ============================================================================
+# BAKE TESTS
+# ============================================================================
+
+def test_speed_offset_bake(on_success, on_failure):
+    """Test: rig.speed.offset.bake() - bake offset layer into base and remove it"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+        rig.speed.offset.add(3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        # Computed speed should be 8 (5 base + 3 offset)
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Pre-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # Bake offset into base - should update base and remove offset layer
+        rig.speed.offset.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        # Base speed should now be 8
+        base_speed = float(rig_check.base.speed)
+        if abs(base_speed - 8) > 0.5:
+            on_failure(f"Baked base speed wrong: expected 8, got {base_speed}")
+            return
+
+        # Computed speed should still be 8 (no offset layer left to double-add)
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Post-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # Offset layer should be removed
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after offset bake, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+def test_speed_bake(on_success, on_failure):
+    """Test: rig.speed.bake() - bake all speed layers into base"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+        rig.speed.offset.add(3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        # Computed speed should be 8 (5 base + 3 offset)
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Pre-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # Bake all speed layers into base
+        rig.speed.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        # Base speed should now be 8
+        base_speed = float(rig_check.base.speed)
+        if abs(base_speed - 8) > 0.5:
+            on_failure(f"Baked base speed wrong: expected 8, got {base_speed}")
+            return
+
+        # Computed speed should still be 8
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Post-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # All speed layers should be removed
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after speed bake, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+def test_bake_all(on_success, on_failure):
+    """Test: rig.bake() - bake all layers into base"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+        rig.speed.offset.add(3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        # Computed speed should be 8 (5 base + 3 offset)
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Pre-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # Bake everything into base
+        rig.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        # Base speed should now be 8
+        base_speed = float(rig_check.base.speed)
+        if abs(base_speed - 8) > 0.5:
+            on_failure(f"Baked base speed wrong: expected 8, got {base_speed}")
+            return
+
+        # Computed speed should still be 8
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Post-bake computed speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+
+        # All layers should be removed
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after bake_all, got: {rig_check.state.layers}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+# ============================================================================
+# SCROLL BAKE TESTS
+# ============================================================================
+
+def test_scroll_speed_offset_bake(on_success, on_failure):
+    """Test: rig.scroll.speed.offset.bake() - bake scroll offset layer into scroll base and remove it"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Pre-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        rig.scroll.speed.offset.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        base_scroll_speed = float(rig_check.base.scroll.speed)
+        if abs(base_scroll_speed - expected) > 0.1:
+            on_failure(f"Baked scroll base speed wrong: expected {expected}, got {base_scroll_speed}")
+            return
+
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Post-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after scroll offset bake, got: {rig_check.state.layers}")
+            return
+
+        # Should NOT have affected mouse base speed
+        mouse_base_speed = float(rig_check.base.speed)
+        if mouse_base_speed > 0.1:
+            on_failure(f"Mouse base speed should be 0, got {mouse_base_speed} (scroll bake leaked to mouse)")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+def test_scroll_speed_bake(on_success, on_failure):
+    """Test: rig.scroll.speed.bake() - bake all scroll speed layers into scroll base"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Pre-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        rig.scroll.speed.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        base_scroll_speed = float(rig_check.base.scroll.speed)
+        if abs(base_scroll_speed - expected) > 0.1:
+            on_failure(f"Baked scroll base speed wrong: expected {expected}, got {base_scroll_speed}")
+            return
+
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Post-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after scroll speed bake, got: {rig_check.state.layers}")
+            return
+
+        mouse_base_speed = float(rig_check.base.speed)
+        if mouse_base_speed > 0.1:
+            on_failure(f"Mouse base speed should be 0, got {mouse_base_speed} (scroll bake leaked to mouse)")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+def test_scroll_bake_all(on_success, on_failure):
+    """Test: rig.bake() does NOT bake scroll layers (scroll is separate from mouse)"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        # Set up both mouse and scroll
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+        rig.speed.offset.add(3)
+
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Pre-bake mouse speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Pre-bake scroll speed wrong: expected 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        # rig.bake() should only bake mouse layers
+        rig.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        # Mouse base should be baked
+        mouse_base_speed = float(rig_check.base.speed)
+        if abs(mouse_base_speed - 8) > 0.5:
+            on_failure(f"Baked mouse base speed wrong: expected 8, got {mouse_base_speed}")
+            return
+
+        # Scroll base should be UNCHANGED (still 0.5, not 0.8)
+        scroll_base_speed = float(rig_check.base.scroll.speed)
+        if abs(scroll_base_speed - 0.5) > 0.1:
+            on_failure(f"Scroll base speed should be unchanged at 0.5, got {scroll_base_speed} (rig.bake leaked to scroll)")
+            return
+
+        # Scroll computed should still be 0.8 (offset layer still active)
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Scroll computed speed should still be 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+# ============================================================================
 # TEST LIST
 # ============================================================================
 
@@ -987,4 +1299,10 @@ SPECIAL_TESTS = [
     ("rig.reverse() with speed.add().over() from zero", test_reverse_with_speed_add_animation_from_zero),
     ("rig.reverse()", test_reverse_instant),
     ("rig.reverse(ms)", test_reverse_gradual),
+    ("speed.offset.bake()", test_speed_offset_bake),
+    ("speed.bake()", test_speed_bake),
+    ("rig.bake()", test_bake_all),
+    ("scroll.speed.offset.bake()", test_scroll_speed_offset_bake),
+    ("scroll.speed.bake()", test_scroll_speed_bake),
+    ("scroll rig.bake()", test_scroll_bake_all),
 ]
