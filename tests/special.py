@@ -1223,6 +1223,56 @@ def test_scroll_speed_bake(on_success, on_failure):
     cron.after("100ms", start_test)
 
 
+def test_scroll_bake(on_success, on_failure):
+    """Test: rig.scroll.bake() - bake all scroll layers into scroll base"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_bake)
+
+    def do_bake():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Pre-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        rig.scroll.bake()
+
+        cron.after("100ms", check_baked)
+
+    def check_baked():
+        rig_check = actions.user.mouse_rig()
+        expected = 0.8
+        base_scroll_speed = float(rig_check.base.scroll.speed)
+        if abs(base_scroll_speed - expected) > 0.1:
+            on_failure(f"Baked scroll base speed wrong: expected {expected}, got {base_scroll_speed}")
+            return
+
+        if abs(rig_check.state.scroll_speed - expected) > 0.1:
+            on_failure(f"Post-bake scroll speed wrong: expected {expected}, got {rig_check.state.scroll_speed}")
+            return
+
+        if len(rig_check.state.layers) != 0:
+            on_failure(f"Expected no layers after scroll bake, got: {rig_check.state.layers}")
+            return
+
+        mouse_base_speed = float(rig_check.base.speed)
+        if mouse_base_speed > 0.1:
+            on_failure(f"Mouse base speed should be 0, got {mouse_base_speed} (scroll bake leaked to mouse)")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
 def test_scroll_bake_all(on_success, on_failure):
     """Test: rig.bake() does NOT bake scroll layers (scroll is separate from mouse)"""
     rig = actions.user.mouse_rig()
@@ -1299,10 +1349,11 @@ SPECIAL_TESTS = [
     ("rig.reverse() with speed.add().over() from zero", test_reverse_with_speed_add_animation_from_zero),
     ("rig.reverse()", test_reverse_instant),
     ("rig.reverse(ms)", test_reverse_gradual),
-    ("speed.offset.bake()", test_speed_offset_bake),
-    ("speed.bake()", test_speed_bake),
+    ("rig.speed.offset.bake()", test_speed_offset_bake),
+    ("rig.speed.bake()", test_speed_bake),
     ("rig.bake()", test_bake_all),
-    ("scroll.speed.offset.bake()", test_scroll_speed_offset_bake),
-    ("scroll.speed.bake()", test_scroll_speed_bake),
-    ("scroll rig.bake()", test_scroll_bake_all),
+    ("rig.scroll.speed.offset.bake()", test_scroll_speed_offset_bake),
+    ("rig.scroll.speed.bake()", test_scroll_speed_bake),
+    ("rig.scroll.bake()", test_scroll_bake),
+    ("rig.bake() skips scroll", test_scroll_bake_all),
 ]

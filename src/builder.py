@@ -179,6 +179,14 @@ class ScrollPropertyProxy:
             self.builder.config.mode = self.mode
         return PropertyBuilder(self.builder, "scroll_pos").by(*args)
 
+    def bake(self):
+        """Bake all scroll layers into scroll base state
+
+        Example:
+            rig.scroll.bake()  # Flatten all scroll layers into scroll base
+        """
+        self.builder.rig_state.bake_scroll_all()
+
     def stop(self, ms: float = None, easing: str = "linear"):
         """Stop scrolling: bake scroll layers, clear scroll effects, decelerate to 0
 

@@ -2784,6 +2784,31 @@ class RigState:
             if group and getattr(group, 'input_type', 'move') == 'move':
                 self.remove_builder(layer, bake=False)
 
+    def bake_scroll_all(self):
+        """Bake all active scroll builders immediately (not mouse movement)"""
+        properties_to_bake = set()
+        for group in self._layer_groups.values():
+            if getattr(group, 'input_type', 'move') == 'scroll':
+                properties_to_bake.add(group.property)
+
+        for prop in properties_to_bake:
+            if prop == "speed":
+                self._base_scroll_speed = float(self.scroll_speed)
+            elif prop == "direction":
+                current_dir = self.scroll_direction
+                self._base_scroll_direction = Vec2(current_dir.x, current_dir.y)
+            elif prop == "vector":
+                current_vector = self.scroll_vector
+                mag = current_vector.magnitude()
+                self._base_scroll_speed = mag
+                self._base_scroll_direction = current_vector.normalized() if mag > EPSILON else Vec2(0, 1)
+
+        # Remove only scroll layers
+        for layer in list(self._layer_groups.keys()):
+            group = self._layer_groups.get(layer)
+            if group and getattr(group, 'input_type', 'move') == 'scroll':
+                self.remove_builder(layer, bake=False)
+
     def reset(self):
         """Reset everything to default state
 
