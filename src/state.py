@@ -1170,6 +1170,65 @@ class RigState:
 
         return speed, direction
 
+    def _compute_scroll_velocity(self) -> tuple[float, Vec2]:
+        """Compute current scroll velocity from scroll speed and direction builders.
+
+        Returns:
+            (scroll_speed, scroll_direction) tuple for scroll input_type only
+        """
+        scroll_speed = self._base_scroll_speed
+        scroll_direction = Vec2(self._base_scroll_direction.x, self._base_scroll_direction.y)
+
+        # Separate groups by layer type
+        base_groups = []
+        user_groups = []
+        emit_groups = []
+
+        for layer_name, group in self._layer_groups.items():
+            if group.property in ("speed", "direction", "vector"):
+                if getattr(group, 'input_type', 'move') != 'scroll':
+                    continue  # Skip mouse movement input_types
+
+                if group.is_emit_layer:
+                    emit_groups.append(group)
+                elif group.is_base:
+                    base_groups.append(group)
+                else:
+                    user_groups.append(group)
+
+        # Sort user layers by order
+        def get_layer_order(group: 'LayerGroup') -> int:
+            return group.order if group.order is not None else 999999
+
+        user_groups = sorted(user_groups, key=get_layer_order)
+
+        # Apply all scroll velocity groups (excluding emit layers)
+        for group in base_groups + user_groups:
+            prop = group.property
+            mode = group.mode
+            current_value = group.get_current_value()
+
+            if prop == "speed":
+                scroll_speed = mode_operations.apply_scalar_mode(mode, current_value, scroll_speed)
+            elif prop == "direction":
+                scroll_direction = mode_operations.apply_direction_mode(mode, current_value, scroll_direction)
+            elif prop == "vector":
+                scroll_speed, scroll_direction = mode_operations.apply_vector_mode(mode, current_value, scroll_speed, scroll_direction)
+
+        # Add emit layer contributions as pure vector offsets
+        if emit_groups:
+            base_velocity = scroll_direction * scroll_speed
+            for group in emit_groups:
+                if group.property == "vector" and group.mode == "offset":
+                    emit_offset = group.get_current_value()
+                    base_velocity = base_velocity + emit_offset
+
+            scroll_speed = base_velocity.magnitude()
+            if scroll_speed > EPSILON:
+                scroll_direction = base_velocity.normalized()
+
+        return scroll_speed, scroll_direction
+
     def _apply_velocity_movement(self, speed: float, direction: Vec2):
         """Apply velocity-based movement to absolute position (only used in absolute mode)"""
         if speed == 0:

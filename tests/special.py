@@ -1330,10 +1330,228 @@ def test_scroll_bake_all(on_success, on_failure):
 
 
 # ============================================================================
+# SCROLL EMIT TESTS
+# ============================================================================
+
+def test_scroll_speed_offset_emit(on_success, on_failure):
+    """Test: rig.scroll.speed.offset.emit() via layer - converts scroll offset to decaying scroll offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.layer("scroll_boost").scroll.speed.offset.add(0.3)
+
+        cron.after("300ms", check_during)
+
+    def check_during():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Scroll speed during boost is {rig_check.state.scroll_speed}, expected ~0.8")
+            return
+        if "scroll_boost" not in rig_check.state.layers:
+            on_failure(f"scroll_boost layer not found: {rig_check.state.layers}")
+            return
+
+        # Emit the scroll boost layer
+        rig.layer("scroll_boost").emit(300)
+
+        def check_after_emit():
+            rig_mid = actions.user.mouse_rig()
+            if "scroll_boost" in rig_mid.state.layers:
+                on_failure(f"scroll_boost layer still exists after emit: {rig_mid.state.layers}")
+                return
+            # Should still have elevated scroll speed (from emitted offset)
+            if rig_mid.state.scroll_speed < 0.6:
+                on_failure(f"Scroll speed after emit is {rig_mid.state.scroll_speed}, expected > 0.6")
+                return
+
+            def check_after_fade():
+                rig_final = actions.user.mouse_rig()
+                # Should be back to base scroll speed: 0.5
+                if abs(rig_final.state.scroll_speed - 0.5) > 0.15:
+                    on_failure(f"Scroll speed after fade is {rig_final.state.scroll_speed}, expected ~0.5")
+                    return
+
+                rig_final.stop()
+                on_success()
+
+            cron.after("400ms", check_after_fade)
+
+        cron.after("100ms", check_after_emit)
+
+    cron.after("100ms", start_test)
+
+
+def test_scroll_emit(on_success, on_failure):
+    """Test: rig.scroll.emit() - convert total scroll velocity to decaying offset"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+
+    def start_test():
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("300ms", do_emit)
+
+    def do_emit():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Pre-emit scroll speed wrong: expected 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        # Emit all scroll velocity as decaying offset
+        rig.scroll.emit(300)
+
+        cron.after("100ms", check_after_emit)
+
+    def check_after_emit():
+        rig_check = actions.user.mouse_rig()
+        # Base scroll speed should be zeroed (emit captures and zeros base)
+        base_scroll_speed = float(rig_check.base.scroll.speed)
+        if base_scroll_speed > 0.1:
+            on_failure(f"Base scroll speed should be 0 after emit, got {base_scroll_speed}")
+            return
+
+        # Should still be scrolling (from decaying emit layer)
+        if rig_check.state.scroll_speed < 0.3:
+            on_failure(f"Scroll speed after emit is {rig_check.state.scroll_speed}, expected > 0.3")
+            return
+
+        # All original scroll layers should be gone (baked + zeroed)
+        scroll_layers = [name for name in rig_check.state.layers if "emit" not in name.lower()]
+        if len(scroll_layers) != 0:
+            on_failure(f"Expected only emit layers after scroll.emit(), got non-emit: {scroll_layers}")
+            return
+
+        def check_after_fade():
+            rig_final = actions.user.mouse_rig()
+            # Scroll speed should have decayed to ~0
+            if abs(rig_final.state.scroll_speed) > 0.15:
+                on_failure(f"Scroll speed after fade is {rig_final.state.scroll_speed}, expected ~0")
+                return
+
+            # All layers should be gone
+            if len(rig_final.state.layers) != 0:
+                on_failure(f"Expected no layers after fade, got: {rig_final.state.layers}")
+                return
+
+            rig_final.stop()
+            on_success()
+
+        cron.after("400ms", check_after_fade)
+
+    cron.after("100ms", start_test)
+
+
+def test_scroll_emit_skips_mouse(on_success, on_failure):
+    """Test: rig.scroll.emit() does NOT affect mouse movement"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set up both mouse and scroll
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+        rig.speed.offset.add(3)
+
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_emit)
+
+    def do_emit():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Pre-emit mouse speed wrong: expected 8, got {rig_check.state.speed}")
+            return
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Pre-emit scroll speed wrong: expected 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        # rig.scroll.emit() should only affect scroll
+        rig.scroll.emit(300)
+
+        cron.after("100ms", check_after_emit)
+
+    def check_after_emit():
+        rig_check = actions.user.mouse_rig()
+        # Mouse should be UNCHANGED
+        if abs(rig_check.state.speed - 8) > 0.5:
+            on_failure(f"Mouse speed changed after scroll.emit(): expected 8, got {rig_check.state.speed}")
+            return
+
+        # Mouse base speed should still be 5 (not baked, not zeroed)
+        mouse_base_speed = float(rig_check.base.speed)
+        if abs(mouse_base_speed - 5) > 0.5:
+            on_failure(f"Mouse base speed should be 5, got {mouse_base_speed} (scroll.emit leaked to mouse)")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+def test_rig_emit_skips_scroll(on_success, on_failure):
+    """Test: rig.emit() does NOT affect scroll layers"""
+    rig = actions.user.mouse_rig()
+    rig.pos.to(CENTER_X, CENTER_Y)
+    rig.stop()
+
+    def start_test():
+        # Set up both mouse and scroll
+        rig.direction.to(1, 0)
+        rig.speed.to(5)
+
+        rig.scroll.direction.to(0, 1)
+        rig.scroll.speed.to(0.5)
+        rig.scroll.speed.offset.add(0.3)
+
+        cron.after("100ms", do_emit)
+
+    def do_emit():
+        rig_check = actions.user.mouse_rig()
+        if abs(rig_check.state.speed - 5) > 0.5:
+            on_failure(f"Pre-emit mouse speed wrong: expected 5, got {rig_check.state.speed}")
+            return
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Pre-emit scroll speed wrong: expected 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        # rig.emit() should only affect mouse
+        rig.emit(300)
+
+        cron.after("100ms", check_after_emit)
+
+    def check_after_emit():
+        rig_check = actions.user.mouse_rig()
+        # Scroll should be UNCHANGED
+        scroll_base_speed = float(rig_check.base.scroll.speed)
+        if abs(scroll_base_speed - 0.5) > 0.1:
+            on_failure(f"Scroll base speed should be 0.5, got {scroll_base_speed} (rig.emit leaked to scroll)")
+            return
+
+        if abs(rig_check.state.scroll_speed - 0.8) > 0.1:
+            on_failure(f"Scroll computed speed should still be 0.8, got {rig_check.state.scroll_speed}")
+            return
+
+        rig_check.stop()
+        on_success()
+
+    cron.after("100ms", start_test)
+
+
+# ============================================================================
 # TEST LIST
 # ============================================================================
 
 SPECIAL_TESTS = [
+    # --- Emit ---
     ("layer().vector.emit()", test_layer_vector_emit),
     ("rig.emit() + new operation", test_rig_emit_with_new_operation),
     ("layer().speed.offset.emit()", test_speed_offset_emit),
@@ -1341,14 +1559,21 @@ SPECIAL_TESTS = [
     ("validate layer().direction.emit()", test_emit_on_direction_layer_errors),
     ("validate layer().pos.emit()", test_emit_on_position_layer_errors),
     ("validate layer().speed.override.emit()", test_emit_on_speed_override_errors),
+    ("rig.layer().scroll.speed.offset.emit()", test_scroll_speed_offset_emit),
+    ("rig.scroll.emit()", test_scroll_emit),
+    ("rig.scroll.emit() skips mouse", test_scroll_emit_skips_mouse),
+    ("rig.emit() skips scroll", test_rig_emit_skips_scroll),
+    # --- Copy ---
     ("layer().copy()", test_layer_copy_doubles),
     ("validate layer('nonexistent').copy()", test_validate_nonexistent_layer_copy_errors),
+    # --- Reverse ---
     ("rig.reverse() preserves layers - instant", test_reverse_preserves_layers_instant),
     ("rig.reverse() preserves layers - gradual", test_reverse_preserves_layers_gradual),
     ("rig.reverse() with speed.add().over()", test_reverse_with_speed_add_animation),
     ("rig.reverse() with speed.add().over() from zero", test_reverse_with_speed_add_animation_from_zero),
     ("rig.reverse()", test_reverse_instant),
     ("rig.reverse(ms)", test_reverse_gradual),
+    # --- Bake ---
     ("rig.speed.offset.bake()", test_speed_offset_bake),
     ("rig.speed.bake()", test_speed_bake),
     ("rig.bake()", test_bake_all),

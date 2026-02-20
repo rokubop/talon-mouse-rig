@@ -187,6 +187,46 @@ class ScrollPropertyProxy:
         """
         self.builder.rig_state.bake_scroll_all()
 
+    def emit(self, ms: float = 1000, easing: str = "linear") -> 'RigBuilder':
+        """Convert current total scroll velocity to autonomous decaying offset
+
+        Captures the current computed scroll velocity (including all layers),
+        bakes scroll state, zeros scroll base speed, and creates a decaying
+        scroll vector offset layer that fades over the specified duration.
+
+        Args:
+            ms: Fade duration in milliseconds (default: 1000ms)
+            easing: Easing function for the decay (default: "linear")
+
+        Returns:
+            RigBuilder for the emit layer (supports .then() chaining)
+
+        Example:
+            rig.scroll.emit(500)  # Convert scroll momentum to decaying offset
+            rig.scroll.emit(300, "ease_out").then(lambda: print("Scroll faded"))
+        """
+        state = self.builder.rig_state
+
+        # Capture current total scroll velocity
+        scroll_speed, scroll_direction = state._compute_scroll_velocity()
+        current_velocity = scroll_direction * scroll_speed
+
+        # Bake scroll and zero out scroll base speed
+        state.bake_scroll_all()
+        state._base_scroll_speed = 0.0
+
+        # Create decaying emit layer
+        layer_name = f"emit.scroll.{int(time.perf_counter() * 1000000)}"
+        builder = RigBuilder(state, layer=layer_name).scroll.vector.offset.to(
+            current_velocity.x, current_velocity.y
+        ).revert(ms, easing)
+
+        # Mark as emit layer
+        if layer_name in state._layer_groups:
+            state._layer_groups[layer_name].is_emit_layer = True
+
+        return builder
+
     def stop(self, ms: float = None, easing: str = "linear"):
         """Stop scrolling: bake scroll layers, clear scroll effects, decelerate to 0
 

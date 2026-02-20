@@ -2,7 +2,7 @@
   "name": "talon-mouse-rig",
   "title": "Mouse Rig",
   "description": "All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "status": "preview",
   "namespace": "user.mouse_rig",
   "github": "https://github.com/rokubop/talon-mouse-rig",
