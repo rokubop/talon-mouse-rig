@@ -145,6 +145,22 @@ class ScrollStopHandle:
         return self
 
 
+class MoveStopHandle:
+    """Handle returned by move.stop() that allows adding callbacks via .then()"""
+
+    def __init__(self, state: RigState):
+        self._state = state
+
+    def then(self, callback):
+        """Add a callback to be executed when movement fully stops
+
+        Args:
+            callback: Function to call when movement stopped
+        """
+        self._state.add_move_stop_callback(callback)
+        return self
+
+
 class Rig:
     """Main entry point for mouse rig operations
 
@@ -182,6 +198,11 @@ class Rig:
     def scroll(self):
         """Scroll property accessor (base layer)"""
         return RigBuilder(self._state).scroll
+
+    @property
+    def move(self):
+        """Movement-only proxy — delegates to rig but with movement-only stop()"""
+        return _MoveProxy(self._state)
 
     # ========================================================================
     # LAYER METHOD
@@ -435,6 +456,54 @@ class Rig:
         raise RigAttributeError(msg)
 
 
+class _MoveProxy:
+    """Proxy that delegates to Rig but provides movement-only stop()
+
+    Blocks access to .scroll and .move (no rig.move.move).
+    All other attribute access delegates to a fresh Rig instance.
+    """
+
+    def __init__(self, state: RigState):
+        self._state = state
+
+    def stop(self, ms: Optional[float] = None, easing: str = "linear") -> MoveStopHandle:
+        """Stop movement only: bake movement layers, clear movement effects, decelerate to 0
+
+        Leaves scroll layers and scroll speed untouched.
+
+        Args:
+            ms: Optional duration to decelerate over. If None, stops immediately.
+            easing: Easing function for gradual deceleration
+
+        Returns:
+            MoveStopHandle: Handle that allows chaining .then(callback)
+        """
+        ms = validate_timing(ms, 'ms', method='stop')
+        self._state.move_stop(ms, easing)
+        return MoveStopHandle(self._state)
+
+    _BLOCKED_ATTRS = {
+        "scroll": "Cannot access 'scroll' through rig.move\n\n"
+                  "rig.move is a movement-only namespace. Use rig.scroll instead.",
+        "move": "Cannot access 'move' through rig.move\n\n"
+                "rig.move is already the movement namespace.",
+        "reset": "Cannot call reset() through rig.move\n\n"
+                 "reset() clears all state including scroll. Use rig.reset() instead.",
+        "state": "Cannot access 'state' through rig.move\n\n"
+                 "state exposes both movement and scroll. Use rig.state instead.",
+        "base": "Cannot access 'base' through rig.move\n\n"
+                "base exposes both movement and scroll. Use rig.base instead.",
+    }
+
+    def __getattr__(self, name: str):
+        if name in self._BLOCKED_ATTRS:
+            raise RigAttributeError(self._BLOCKED_ATTRS[name])
+        # Delegate to a Rig instance sharing the same state
+        rig = Rig.__new__(Rig)
+        rig._state = self._state
+        return getattr(rig, name)
+
+
 class _BehaviorAccessor:
     """Helper to allow behavior to be used as property or method"""
 
@@ -486,4 +555,4 @@ def rig() -> Rig:
     return Rig()
 
 # Export public API
-__all__ = ['rig', 'Rig', 'RigBuilder', 'RigState', 'reload_rig']
+__all__ = ['rig', 'Rig', 'RigBuilder', 'RigState', 'reload_rig', 'MoveStopHandle']

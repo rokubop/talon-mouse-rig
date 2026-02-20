@@ -72,6 +72,7 @@ class RigState:
         # Stop callbacks (fired when frame loop stops)
         self._stop_callbacks: list = []
         self._scroll_stop_callbacks: list = []
+        self._move_stop_callbacks: list = []
 
         # Primed button (pressed on next add_builder, released on stop)
         self._primed_button: Optional[int] = None
@@ -225,6 +226,28 @@ class RigState:
             Debounce key string
         """
         return f"{layer}_{config.property}_{config.operator}"
+
+    def _clear_layer_tracking(self, layers: list[str]):
+        """Clean up throttle, rate cache, and debounce entries for given layers"""
+        for layer in layers:
+            group = self._layer_groups.get(layer)
+            if group is None:
+                continue
+            for builder in group.builders:
+                rate_cache_key = self._get_rate_cache_key(layer, builder.config)
+                if rate_cache_key is not None and rate_cache_key in self._rate_builder_cache:
+                    del self._rate_builder_cache[rate_cache_key]
+
+                throttle_key = self._get_throttle_key(layer, builder)
+                if throttle_key in self._throttle_times:
+                    del self._throttle_times[throttle_key]
+
+                debounce_key = self._get_debounce_key(layer, builder.config)
+                if debounce_key in self._debounce_pending:
+                    _, _, _, cron_job = self._debounce_pending[debounce_key]
+                    if cron_job is not None:
+                        cron.cancel(cron_job)
+                    del self._debounce_pending[debounce_key]
 
     def time_alive(self, layer: str) -> Optional[float]:
         """Get time in seconds since builder was created
@@ -2770,7 +2793,8 @@ class RigState:
             if group.is_base:
                 self._bake_group_to_base(group)
 
-        # 2. Clear scroll-related layer groups
+        # 2. Clear scroll-related tracking and layer groups
+        self._clear_layer_tracking(scroll_layers)
         for layer in scroll_layers:
             del self._layer_groups[layer]
             if layer in self._layer_orders:
@@ -2805,6 +2829,80 @@ class RigState:
                 scroll_config.over_easing = easing
                 scroll_builder = ActiveBuilder(scroll_config, self, is_base_layer=True)
                 self.add_builder(scroll_builder)
+
+    def add_move_stop_callback(self, callback):
+        """Add a callback to fire when movement stops"""
+        self._move_stop_callbacks.append(callback)
+
+    def _fire_move_stop_callbacks(self):
+        """Fire and clear movement stop callbacks"""
+        for callback in self._move_stop_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                print(f"Error in move stop callback: {e}")
+        self._move_stop_callbacks.clear()
+
+    def move_stop(self, transition_ms: Optional[float] = None, easing: str = "linear", **kwargs):
+        """Stop movement only: bake movement layers, clear movement effects, decelerate to 0
+
+        Similar to stop() but only affects movement-related state:
+        1. Bake movement layers into base
+        2. Clear movement-related layer groups
+        3. Set movement speed to 0 (with optional smooth deceleration)
+
+        Leaves scroll layers and scroll speed untouched.
+        """
+        # Validate arguments
+        transition_ms = validate_timing(transition_ms, 'transition_ms', method='move_stop')
+
+        config = BuilderConfig()
+        all_kwargs = {'easing': easing, **kwargs}
+        config.validate_method_kwargs('stop', **all_kwargs)
+
+        # 1. Bake movement-related layers into base
+        move_layers = [
+            layer for layer, group in self._layer_groups.items()
+            if group.input_type != "scroll"
+        ]
+        for layer in move_layers:
+            group = self._layer_groups[layer]
+            if group.is_base:
+                self._bake_group_to_base(group)
+
+        # 2. Clear movement-related tracking and layer groups
+        self._clear_layer_tracking(move_layers)
+        for layer in move_layers:
+            del self._layer_groups[layer]
+            if layer in self._layer_orders:
+                del self._layer_orders[layer]
+
+        # Clear primed button if unused
+        self._primed_button = None
+
+        # 3. Decelerate movement speed to 0
+        if transition_ms is None or transition_ms == 0:
+            # Immediate stop
+            self._base_speed = 0.0
+            # Stop frame loop if no active groups remain
+            if len(self._layer_groups) == 0 and self._base_scroll_speed == 0:
+                self._stop_frame_loop()
+            # Defer callback firing so .then() can register first
+            cron.after("1ms", self._fire_move_stop_callbacks)
+        else:
+            # Smooth deceleration
+            from .builder import ActiveBuilder
+
+            if self._base_speed != 0:
+                move_config = BuilderConfig()
+                move_config.property = "speed"
+                move_config.layer_name = f"base.{move_config.property}"
+                move_config.operator = "to"
+                move_config.value = 0
+                move_config.over_ms = transition_ms
+                move_config.over_easing = easing
+                move_builder = ActiveBuilder(move_config, self, is_base_layer=True)
+                self.add_builder(move_builder)
 
     def reverse(self, transition_ms: Optional[float] = None):
         """Reverse direction (180 degrees turn)"""
@@ -2908,6 +3006,7 @@ class RigState:
         # Clear stop callbacks and primed button
         self._stop_callbacks.clear()
         self._scroll_stop_callbacks.clear()
+        self._move_stop_callbacks.clear()
         self._primed_button = None
 
     def trigger_revert(self, layer: str, revert_ms: Optional[float] = None, easing: str = "linear", current_time: Optional[float] = None):

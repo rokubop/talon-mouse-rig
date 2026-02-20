@@ -135,7 +135,7 @@ VALID_RIG_METHODS = [
 
 VALID_RIG_PROPERTIES = [
     'pos', 'speed', 'direction', 'vector',
-    'scroll',
+    'scroll', 'move',
     'state', 'base',
     'stack', 'replace', 'queue', 'throttle', 'debounce',
 ]

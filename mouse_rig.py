@@ -614,6 +614,30 @@ class Actions:
             handle.then(callback)
         return handle
 
+    def mouse_rig_move_stop(stop_ms: float = None, easing: str = None, callback: callable = None) -> None:
+        """Stop movement only (scroll continues), optionally over time.
+
+        Equivalent to:
+        ```
+        rig = actions.user.mouse_rig()
+        rig.move.stop(stop_ms, easing).then(callback)
+        ```
+
+        Args:
+            stop_ms: Time in ms to decelerate to stop
+            easing: Easing function - "linear", "ease_in_out", etc.
+            callback: Function to call when movement fully stops
+        """
+        rig = actions.user.mouse_rig()
+        if easing is not None:
+            handle = rig.move.stop(stop_ms, easing)
+        else:
+            handle = rig.move.stop(stop_ms)
+
+        if callback is not None:
+            handle.then(callback)
+        return handle
+
     def mouse_rig_scroll(
             direction: str,
             amount: float = 1,
