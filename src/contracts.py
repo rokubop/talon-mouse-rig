@@ -94,6 +94,16 @@ METHOD_SIGNATURES = {
         'params': ['value'],
         'signature': 'bake(value=True)',
         'validations': {}
+    },
+    'max': {
+        'params': ['value'],
+        'signature': 'max(value)',
+        'validations': {}
+    },
+    'min': {
+        'params': ['value'],
+        'signature': 'min(value)',
+        'validations': {}
     }
 }
 
@@ -144,6 +154,7 @@ VALID_BUILDER_METHODS = [
     'over', 'hold', 'revert', 'then', 'bake', 'api',
     'stack', 'replace', 'queue', 'throttle', 'debounce',
     'reverse', 'copy', 'emit',
+    'max', 'min',
 ]
 
 # Valid LayerState attributes (properties and methods)
@@ -416,6 +427,10 @@ class BuilderConfig:
 
         # Persistence
         self.bake_value: Optional[bool] = None
+
+        # Constraints
+        self.max_value: Optional[float] = None
+        self.min_value: Optional[float] = None
 
         # Execution mode
         self.is_synchronous: bool = False  # True for instant/sync execution, False for frame loop

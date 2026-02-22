@@ -76,6 +76,10 @@ class LayerGroup:
         self.pending_queue: deque[Callable] = deque()
         self.is_queue_active: bool = False
 
+        # Constraints (max/min clamping on layer output)
+        self.max_value: Optional[float] = None
+        self.min_value: Optional[float] = None
+
         # Group-level lifecycle (for rig.layer("name").revert() operations)
         self.group_lifecycle: Optional[Lifecycle] = None
 
@@ -91,6 +95,37 @@ class LayerGroup:
             return Vec2(0, 0)
         else:
             return 0.0
+
+    def _apply_constraints(self, value: Any) -> Any:
+        """Apply max/min constraints to a value
+
+        For scalars: direct clamp.
+        For Vec2: clamp magnitude (preserving direction).
+        """
+        if self.max_value is None and self.min_value is None:
+            return value
+
+        if isinstance(value, (int, float)):
+            if self.max_value is not None:
+                value = min(value, self.max_value)
+            if self.min_value is not None:
+                value = max(value, self.min_value)
+            return value
+
+        if is_vec2(value):
+            import math
+            mag = math.sqrt(value.x * value.x + value.y * value.y)
+            if mag < EPSILON:
+                return value
+            if self.max_value is not None and mag > self.max_value:
+                scale = self.max_value / mag
+                return Vec2(value.x * scale, value.y * scale)
+            if self.min_value is not None and mag < self.min_value:
+                scale = self.min_value / mag
+                return Vec2(value.x * scale, value.y * scale)
+            return value
+
+        return value
 
     def add_builder(self, builder: 'ActiveBuilder'):
         """Add a builder to this group"""
@@ -126,6 +161,8 @@ class LayerGroup:
         copy_group.committed_value = self.committed_value
         copy_group.replace_target = self.replace_target
         copy_group.final_target = self.final_target
+        copy_group.max_value = self.max_value
+        copy_group.min_value = self.min_value
         return copy_group
 
     def clear_builders(self):
@@ -171,6 +208,7 @@ class LayerGroup:
                 self.accumulated_value = value
 
         self.accumulated_value = self._apply_mode(self.accumulated_value, value, builder.config.mode)
+        self.accumulated_value = self._apply_constraints(self.accumulated_value)
 
         # Handle replace behavior cleanup (pos.offset only)
         if self.replace_target is not None and self.committed_value is not None:
@@ -257,7 +295,7 @@ class LayerGroup:
         # Base layers: ignore accumulated_value (always 0), just use builder value
         if self.is_base:
             if not self.builders:
-                return self.accumulated_value  # Should be 0
+                return self._apply_constraints(self.accumulated_value)  # Should be 0
             # For base layers, return the LAST builder's value (most recent operation)
             # Multiple builders shouldn't normally exist, but can occur with instant operations
             last_value = self.accumulated_value
@@ -265,7 +303,7 @@ class LayerGroup:
                 builder_value = builder.get_interpolated_value()
                 if builder_value is not None:
                     last_value = builder_value
-            return last_value
+            return self._apply_constraints(last_value)
 
         # Modifier layers: start with accumulated value and apply modes
         result = self.accumulated_value
@@ -313,7 +351,7 @@ class LayerGroup:
 
                     result = Vec2(clamped_x - self.committed_value.x, clamped_y - self.committed_value.y)
 
-        return result
+        return self._apply_constraints(result)
 
     def _recalculate_final_target(self):
         """Recalculate cached final target value after all builders complete"""

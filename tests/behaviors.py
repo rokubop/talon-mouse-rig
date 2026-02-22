@@ -56,6 +56,104 @@ def test_behavior_stack_call_syntax_with_max(on_success, on_failure):
     cron.after("400ms", check_result)
 
 
+def test_named_layer_stack_1_no_stacking(on_success, on_failure):
+    """Test: layer('name').stack(1).speed.offset.add() - rapid adds without revert should not stack"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(3)
+
+    boost_amount = 5
+
+    def check_speed():
+        layer = rig.state.layers.get("test_boost")
+        if layer is None:
+            on_failure("Named layer 'test_boost' not found in state")
+            return
+        speed_offset = layer.current
+        if abs(speed_offset - boost_amount) > 0.1:
+            on_failure(f"Stack(1) failed: speed_offset={speed_offset}, expected {boost_amount} (stacked when it shouldn't)")
+            return
+        on_success()
+
+    # Simulate: hiss, hiss, hiss (no hiss_stop/revert between them)
+    rig.layer("test_boost").stack(1).speed.offset.add(boost_amount)
+    cron.after("50ms", lambda: rig.layer("test_boost").stack(1).speed.offset.add(boost_amount))
+    cron.after("100ms", lambda: rig.layer("test_boost").stack(1).speed.offset.add(boost_amount))
+    cron.after("300ms", check_speed)
+
+
+def test_named_layer_stack_1_revert_complete_then_reapply(on_success, on_failure):
+    """Test: add, revert completes fully, then add again - should work"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(3)
+
+    boost_amount = 5
+
+    def revert():
+        rig.layer("test_boost2").revert(200, "ease_out2")
+
+    def reapply():
+        rig.layer("test_boost2").stack(1).speed.offset.add(boost_amount)
+
+    def check_reapplied():
+        layer = rig.state.layers.get("test_boost2")
+        if layer is None:
+            on_failure("Named layer 'test_boost2' not found after reapply")
+            return
+        speed_offset = layer.current
+        if abs(speed_offset - boost_amount) > 0.1:
+            on_failure(f"Reapply after full revert failed: speed_offset={speed_offset}, expected {boost_amount}")
+            return
+        on_success()
+
+    # hiss: apply
+    rig.layer("test_boost2").stack(1).speed.offset.add(boost_amount)
+    # hiss_stop at 100ms: start revert (200ms duration)
+    cron.after("100ms", revert)
+    # hiss again at 400ms: revert should be done (100+200=300ms), reapply should work
+    cron.after("400ms", reapply)
+    cron.after("600ms", check_reapplied)
+
+
+def test_named_layer_stack_1_revert_midway_then_reapply(on_success, on_failure):
+    """Test: add, revert in progress, then add again - should cancel revert and apply fresh"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(3)
+
+    boost_amount = 5
+
+    def revert():
+        rig.layer("test_boost3").revert(400, "ease_out2")
+
+    def reapply_during_revert():
+        # Should cancel the revert and apply fresh
+        rig.layer("test_boost3").stack(1).speed.offset.add(boost_amount)
+
+    def check_reapplied():
+        layer = rig.state.layers.get("test_boost3")
+        if layer is None:
+            on_failure("Named layer 'test_boost3' not found after mid-revert reapply")
+            return
+        speed_offset = layer.current
+        if abs(speed_offset - boost_amount) > 0.1:
+            on_failure(f"Mid-revert reapply failed: speed_offset={speed_offset}, expected {boost_amount}")
+            return
+        on_success()
+
+    # hiss: apply
+    rig.layer("test_boost3").stack(1).speed.offset.add(boost_amount)
+    # hiss_stop at 100ms: start revert (400ms duration)
+    cron.after("100ms", revert)
+    # hiss at 200ms: revert only 100ms in, should cancel revert and reapply
+    cron.after("200ms", reapply_during_revert)
+    cron.after("500ms", check_reapplied)
+
+
 # ============================================================================
 # REPLACE BEHAVIOR TESTS
 # ============================================================================
@@ -701,12 +799,151 @@ def test_queue_direction_recalculates_base(on_success, on_failure):
 
 
 # ============================================================================
+# MAX/MIN CONSTRAINT TESTS
+# ============================================================================
+
+def test_speed_offset_max_clamps_value(on_success, on_failure):
+    """Test: speed.offset.add(50).max(20) - offset clamped to 20"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(5)
+
+    def check_speed():
+        total_speed = rig.state.speed
+        # Base speed 5 + offset clamped to 20 = 25
+        if abs(total_speed - 25) > 0.5:
+            on_failure(f"Max clamp failed: expected total speed ~25, got {total_speed}")
+            return
+        on_success()
+
+    rig.speed.offset.add(50).max(20)
+    cron.after("200ms", check_speed)
+
+
+def test_named_layer_speed_offset_max(on_success, on_failure):
+    """Test: layer('boost').speed.offset.add(50).max(30) - named layer clamped to 30"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(10)
+
+    def check_speed():
+        total_speed = rig.state.speed
+        # Base speed 10 + offset clamped to 30 = 40
+        if abs(total_speed - 40) > 0.5:
+            on_failure(f"Named layer max clamp failed: expected total speed ~40, got {total_speed}")
+            return
+        on_success()
+
+    rig.layer("boost").speed.offset.add(50).max(30)
+    cron.after("200ms", check_speed)
+
+
+def test_speed_offset_max_with_stacking(on_success, on_failure):
+    """Test: 3x speed.offset.add(10).max(25).stack() - offset capped at 25"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(5)
+
+    def check_speed():
+        total_speed = rig.state.speed
+        # Base speed 5 + offset capped at 25 = 30
+        # Without max: 5 + 30 = 35
+        if abs(total_speed - 30) > 0.5:
+            on_failure(f"Max with stacking failed: expected total speed ~30, got {total_speed}")
+            return
+        on_success()
+
+    rig.speed.offset.add(10).max(25).stack()
+    rig.speed.offset.add(10).max(25).stack()
+    rig.speed.offset.add(10).max(25).stack()
+    cron.after("200ms", check_speed)
+
+
+def test_speed_override_max(on_success, on_failure):
+    """Test: layer('cap').speed.override.to(100).max(80) - override clamped to 80"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(5)
+
+    def check_speed():
+        total_speed = rig.state.speed
+        # Override clamped to 80 replaces base
+        if abs(total_speed - 80) > 0.5:
+            on_failure(f"Override max clamp failed: expected speed ~80, got {total_speed}")
+            return
+        on_success()
+
+    rig.layer("cap").speed.override.to(100).max(80)
+    cron.after("200ms", check_speed)
+
+
+def test_speed_offset_min(on_success, on_failure):
+    """Test: speed.offset.add(-20).min(-10) - negative offset clamped to -10"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(15)
+
+    def check_speed():
+        total_speed = rig.state.speed
+        # Base speed 15 + offset clamped to -10 = 5
+        if abs(total_speed - 5) > 0.5:
+            on_failure(f"Min clamp failed: expected total speed ~5, got {total_speed}")
+            return
+        on_success()
+
+    rig.speed.offset.add(-20).min(-10)
+    cron.after("200ms", check_speed)
+
+
+def test_speed_offset_max_with_over(on_success, on_failure):
+    """Test: speed.offset.add(50).max(20).over(500) - clamped during and after animation"""
+    rig = actions.user.mouse_rig()
+    rig.stop()
+    rig.direction(1, 0)
+    rig.speed(5)
+
+    mid_ok = {"value": False}
+
+    def check_mid():
+        total_speed = rig.state.speed
+        # During animation, offset is between 0 and 50, but clamped to max 20
+        # So total speed should be between 5 and 25
+        if total_speed > 25.5:
+            on_failure(f"Max with over mid-animation failed: total speed {total_speed} exceeds 25.5")
+            return
+        mid_ok["value"] = True
+
+    def check_final():
+        if not mid_ok["value"]:
+            on_failure("Mid-animation check didn't run")
+            return
+        total_speed = rig.state.speed
+        # After animation: base 5 + offset clamped to 20 = 25
+        if abs(total_speed - 25) > 0.5:
+            on_failure(f"Max with over final failed: expected ~25, got {total_speed}")
+            return
+        on_success()
+
+    rig.speed.offset.add(50).max(20).over(500)
+    cron.after("250ms", check_mid)
+    cron.after("700ms", check_final)
+
+
+# ============================================================================
 # TEST REGISTRY
 # ============================================================================
 
 BEHAVIOR_TESTS = [
     ("pos.offset.by().stack()", test_behavior_stack_property_syntax),
     ("pos.offset.by().stack(max)", test_behavior_stack_call_syntax_with_max),
+    ("named layer stack(1) no stacking", test_named_layer_stack_1_no_stacking),
+    ("named layer stack(1) revert complete then reapply", test_named_layer_stack_1_revert_complete_then_reapply),
+    ("named layer stack(1) revert midway then reapply", test_named_layer_stack_1_revert_midway_then_reapply),
     ("pos.offset.by().replace()", test_behavior_replace_property_syntax),
     ("pos.offset.by().replace() call", test_behavior_replace_call_syntax),
     ("pos.offset.by().over().revert()", test_behavior_pos_offset_by_over_revert),
@@ -730,4 +967,10 @@ BEHAVIOR_TESTS = [
     ("queue base independent properties", test_queue_base_independent_properties),
     ("direction.by() mid-transition restart", test_direction_mid_transition_restart),
     ("queue direction.by() recalculates base", test_queue_direction_recalculates_base),
+    ("speed.offset.add().max() clamps value", test_speed_offset_max_clamps_value),
+    ("named layer speed.offset.add().max()", test_named_layer_speed_offset_max),
+    ("speed.offset.add().max().stack()", test_speed_offset_max_with_stacking),
+    ("speed.override.to().max()", test_speed_override_max),
+    ("speed.offset.add().min()", test_speed_offset_min),
+    ("speed.offset.add().max().over()", test_speed_offset_max_with_over),
 ]

@@ -432,7 +432,7 @@ class Actions:
             if force:
                 rig.speed.to(speed).over(speed_ms, speed_easing)
 
-    def mouse_rig_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0) -> None:
+    def mouse_rig_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0, max_speed: float = 0) -> None:
         """One-shot speed boost: ramp up, hold, release.
         Uses the implicit speed.offset layer.
 
@@ -442,9 +442,13 @@ class Actions:
             hold_ms: Time to hold at full amount before releasing.
             release_ms: Time to decay back to 0.
             stacks: Max concurrent boosts. 0 = unlimited.
+            max_speed: Max total offset from stacked boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-        return rig.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
+        builder = rig.speed.offset.add(amount)
+        if max_speed:
+            builder = builder.max(max_speed)
+        return builder.over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained boost. Ramps up and holds until boost_stop is called.
@@ -874,7 +878,7 @@ class Actions:
             if force:
                 rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
 
-    def mouse_rig_scroll_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0) -> None:
+    def mouse_rig_scroll_boost(amount: float, over_ms: int = 500, hold_ms: int = 0, release_ms: int = 500, stacks: int = 0, max_speed: float = 0) -> None:
         """One-shot scroll speed boost: ramp up, hold, release.
         Uses the implicit scroll speed.offset layer.
 
@@ -884,9 +888,13 @@ class Actions:
             hold_ms: Time to hold at full amount before releasing.
             release_ms: Time to decay back to 0.
             stacks: Max concurrent boosts. 0 = unlimited.
+            max_speed: Max total offset from stacked boosts. 0 = unlimited.
         """
         rig = actions.user.mouse_rig()
-        return rig.scroll.speed.offset.add(amount).over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
+        builder = rig.scroll.speed.offset.add(amount)
+        if max_speed:
+            builder = builder.max(max_speed)
+        return builder.over(over_ms).hold(hold_ms).revert(release_ms).stack(stacks)
 
     def mouse_rig_scroll_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained scroll boost. Ramps up and holds until scroll_boost_stop is called.

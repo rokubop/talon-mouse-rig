@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import Vec2, is_vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, EPSILON
+from .core import Vec2, is_vec2, SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, EPSILON, SCROLL_EMIT_THRESHOLD
 from .layer_group import LayerGroup
 from .lifecycle import LifecyclePhase
 from . import mode_operations, rate_utils
@@ -496,8 +496,27 @@ class RigState:
         """
         if builder.config.behavior_args:
             max_count = builder.config.behavior_args[0]
-            if max_count > 0 and len(group.builders) >= max_count:
-                return True  # At max, skip
+            if max_count > 0:
+                # Count active builders that are NOT reverting
+                non_revert_builders = sum(
+                    1 for b in group.builders
+                    if not (b.lifecycle.phase == LifecyclePhase.REVERT or
+                            (b.group_lifecycle and b.group_lifecycle.phase == LifecyclePhase.REVERT))
+                )
+                # Accumulated value counts as a slot (for instant adds that already baked)
+                accumulated_slots = 0
+                if not group.is_base and not group._is_reverted_to_zero():
+                    accumulated_slots = 1
+                if non_revert_builders + accumulated_slots >= max_count:
+                    return True  # At max, skip
+                # If allowed and there are reverting builders, cancel them
+                reverting_builders = [
+                    b for b in group.builders
+                    if (b.lifecycle.phase == LifecyclePhase.REVERT or
+                        (b.group_lifecycle and b.group_lifecycle.phase == LifecyclePhase.REVERT))
+                ]
+                for b in reverting_builders:
+                    group.remove_builder(b)
         return False
 
     def _apply_queue_behavior(self, builder: 'ActiveBuilder', group: 'LayerGroup') -> bool:
@@ -535,6 +554,10 @@ class RigState:
                 if group.is_base:
                     builder.base_value = builder._get_current_or_base_value()
                     builder.target_value = builder._calculate_target_value()
+                if builder.config.max_value is not None:
+                    group.max_value = builder.config.max_value
+                if builder.config.min_value is not None:
+                    group.min_value = builder.config.min_value
                 group.add_builder(builder)
                 if not builder.lifecycle.is_complete():
                     self._ensure_frame_loop_running()
@@ -620,6 +643,11 @@ class RigState:
             return
 
         group = self._get_or_create_group(builder)
+
+        if builder.config.max_value is not None:
+            group.max_value = builder.config.max_value
+        if builder.config.min_value is not None:
+            group.min_value = builder.config.min_value
 
         behavior = builder.config.get_effective_behavior()
 
@@ -1471,7 +1499,7 @@ class RigState:
             scroll_velocity = scroll_velocity + scroll_pos_delta
 
         # Skip if no scroll
-        if abs(scroll_velocity.x) < 0.01 and abs(scroll_velocity.y) < 0.01:
+        if abs(scroll_velocity.x) < SCROLL_EMIT_THRESHOLD and abs(scroll_velocity.y) < SCROLL_EMIT_THRESHOLD:
             return
 
         mouse_scroll_native(scroll_velocity.x, scroll_velocity.y)

@@ -119,6 +119,10 @@ def mouse_scroll_native(dx: float, dy: float) -> None:
 # Small value for floating point comparisons (avoid division by zero, etc.)
 EPSILON = 1e-10
 
+# Minimum scroll velocity per axis to emit scroll events (filters noise from
+# decaying glide, floating point drift, etc.)
+SCROLL_EMIT_THRESHOLD = 0.001
+
 
 def is_vec2(obj) -> bool:
     """Check if an object is a Vec2-like value (duck typing).

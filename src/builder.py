@@ -702,6 +702,33 @@ class RigBuilder:
     # BAKE CONTROL
     # ========================================================================
 
+    def max(self, value: float) -> 'RigBuilder':
+        """Set maximum constraint on this operation's layer value
+
+        Args:
+            value: Maximum allowed value. For scalars, clamps directly.
+                   For Vec2, clamps magnitude.
+
+        Examples:
+            rig.speed.offset.add(50).max(20)          # offset capped at 20
+            rig.layer("boost").speed.offset.add(50).max(30)
+        """
+        self.config.max_value = value
+        return self
+
+    def min(self, value: float) -> 'RigBuilder':
+        """Set minimum constraint on this operation's layer value
+
+        Args:
+            value: Minimum allowed value. For scalars, clamps directly.
+                   For Vec2, clamps magnitude.
+
+        Examples:
+            rig.speed.offset.add(-20).min(-10)        # offset clamped to -10
+        """
+        self.config.min_value = value
+        return self
+
     def bake(self, value: bool = True) -> 'RigBuilder':
         self.config.bake_value = value
         return self
