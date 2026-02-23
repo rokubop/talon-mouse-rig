@@ -69,71 +69,71 @@ mod.setting(
 )
 
 mod.setting(
-    "mouse_rig_natural_turn_ms",
+    "mouse_rig_smooth_turn_ms",
     type=int,
     default=500,
-    desc="Base duration in ms for direction changes in go_natural. Scales with speed (faster = smoother turns)."
+    desc="Base duration in ms for direction changes in move_continuous_smooth. Scales with speed (faster = smoother turns)."
 )
 
 mod.setting(
-    "mouse_rig_natural_turn_easing",
+    "mouse_rig_smooth_turn_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for direction changes in go_natural"
+    desc="Easing function for direction changes in move_continuous_smooth"
 )
 
 mod.setting(
-    "mouse_rig_natural_speed_ms",
+    "mouse_rig_smooth_speed_ms",
     type=int,
     default=200,
-    desc="Duration in ms for speed changes in go_natural"
+    desc="Duration in ms for speed changes in move_continuous_smooth"
 )
 
 mod.setting(
-    "mouse_rig_natural_speed_easing",
+    "mouse_rig_smooth_speed_easing",
     type=str,
     default="ease_in_out",
-    desc="Easing function for speed changes in go_natural"
+    desc="Easing function for speed changes in move_continuous_smooth"
 )
 
 mod.setting(
-    "mouse_rig_natural_move_ms",
+    "mouse_rig_smooth_delta_ms",
     type=int,
     default=250,
-    desc="Duration in ms for move_natural one-shot movements"
+    desc="Duration in ms for move_delta_smooth one-shot movements"
 )
 
 mod.setting(
-    "mouse_rig_natural_move_easing",
+    "mouse_rig_smooth_delta_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for move_natural one-shot movements"
+    desc="Easing function for move_delta_smooth one-shot movements"
 )
 
 mod.setting(
-    "mouse_rig_natural_scroll_ms",
+    "mouse_rig_smooth_scroll_ms",
     type=int,
     default=400,
-    desc="Duration in ms for scroll_natural one-shot scrolls"
+    desc="Duration in ms for scroll_delta_smooth one-shot scrolls"
 )
 
 mod.setting(
-    "mouse_rig_natural_scroll_easing",
+    "mouse_rig_smooth_scroll_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for scroll_natural one-shot scrolls"
+    desc="Easing function for scroll_delta_smooth one-shot scrolls"
 )
 
 mod.setting(
-    "mouse_rig_natural_pos_ms",
+    "mouse_rig_smooth_move_to_ms",
     type=int,
     default=300,
-    desc="Duration in ms for pos_to_natural position moves"
+    desc="Duration in ms for move_to_smooth position moves"
 )
 
 mod.setting(
-    "mouse_rig_natural_pos_easing",
+    "mouse_rig_smooth_move_to_easing",
     type=str,
     default="ease_in_out",
-    desc="Easing function for pos_to_natural position moves"
+    desc="Easing function for move_to_smooth position moves"
 )

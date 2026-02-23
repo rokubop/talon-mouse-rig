@@ -47,7 +47,7 @@ def test_sequence_async_step(on_success, on_failure):
     arrived = []
 
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_pos_to(target_x, target_y, 300),
+        lambda: actions.user.mouse_rig_move_to(target_x, target_y, 300),
         lambda: arrived.append(True),
     ])
 
@@ -83,7 +83,7 @@ def test_sequence_sync_then_async(on_success, on_failure):
     actions.user.mouse_rig_sequence([
         lambda: results.append("sync1"),
         lambda: results.append("sync2"),
-        lambda: actions.user.mouse_rig_pos_to(target_x, CENTER_Y, 200),
+        lambda: actions.user.mouse_rig_move_to(target_x, CENTER_Y, 200),
         lambda: results.append("after_async"),
     ])
 
@@ -114,9 +114,9 @@ def test_sequence_multiple_async(on_success, on_failure):
     results = []
 
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_pos_to(CENTER_X + 80, CENTER_Y, 150),
+        lambda: actions.user.mouse_rig_move_to(CENTER_X + 80, CENTER_Y, 150),
         lambda: results.append("first_done"),
-        lambda: actions.user.mouse_rig_pos_to(CENTER_X + 160, CENTER_Y, 150),
+        lambda: actions.user.mouse_rig_move_to(CENTER_X + 160, CENTER_Y, 150),
         lambda: results.append("second_done"),
     ])
 
@@ -160,7 +160,7 @@ def test_sequence_single_step(on_success, on_failure):
 
     target_x = CENTER_X + 100
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_pos_to(target_x, CENTER_Y),
+        lambda: actions.user.mouse_rig_move_to(target_x, CENTER_Y),
     ])
 
     def check():
@@ -215,9 +215,9 @@ def test_wait_between_animations(on_success, on_failure):
     final_x = CENTER_X + 160
 
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_pos_to(mid_x, CENTER_Y, 150),
+        lambda: actions.user.mouse_rig_move_to(mid_x, CENTER_Y, 150),
         lambda: actions.user.mouse_rig_wait(200),
-        lambda: actions.user.mouse_rig_pos_to(final_x, CENTER_Y, 150),
+        lambda: actions.user.mouse_rig_move_to(final_x, CENTER_Y, 150),
     ])
 
     # After first move + part of wait, should be at mid_x
@@ -251,7 +251,7 @@ def test_sequence_with_stop(on_success, on_failure):
     results = []
 
     actions.user.mouse_rig_sequence([
-        lambda: actions.user.mouse_rig_go("right", 5),
+        lambda: actions.user.mouse_rig_move_continuous("right", 5),
         lambda: actions.user.mouse_rig_wait(200),
         lambda: actions.user.mouse_rig_stop(300),
         lambda: results.append("stopped"),
@@ -292,7 +292,7 @@ def test_sequence_drag_pattern(on_success, on_failure):
 
     actions.user.mouse_rig_sequence([
         lambda: results.append("hold"),
-        lambda: actions.user.mouse_rig_pos_to(target_x, CENTER_Y, 300),
+        lambda: actions.user.mouse_rig_move_to(target_x, CENTER_Y, 300),
         lambda: results.append("release"),
     ])
 

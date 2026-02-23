@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-2.2.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![Status](https://img.shields.io/badge/status-preview-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -13,37 +13,33 @@
 
 **Movement**
 
-* `user.mouse_rig_move` - Move a fixed distance in a direction
-* `user.mouse_rig_move_natural` - Move a fixed distance with smooth easing
-* `user.mouse_rig_move_value` - Move a fixed distance in the current direction
-* `user.mouse_rig_go` - Start continuous movement
-* `user.mouse_rig_go_natural` - Start continuous movement with smooth turns and speed ramp
-* `user.mouse_rig_pos_to` - Move to an absolute screen position
-* `user.mouse_rig_pos_to_natural` - Move to an absolute screen position with smooth easing
+* `user.mouse_rig_move_delta` - Move a fixed distance in a direction
+* `user.mouse_rig_move_delta_smooth` - Move a fixed distance with smooth easing
+* `user.mouse_rig_move_continuous` - Start continuous movement
+* `user.mouse_rig_move_continuous_smooth` - Start continuous movement with smooth turns and speed ramp
+* `user.mouse_rig_move_to` - Move to an absolute screen position
+* `user.mouse_rig_move_to_smooth` - Move to an absolute screen position with smooth easing
 
 **Speed and Direction**
 
 * `user.mouse_rig_speed_to` - Set speed to an absolute value
 * `user.mouse_rig_speed_add` - Add to the current speed
 * `user.mouse_rig_speed_mul` - Multiply the current speed
-* `user.mouse_rig_direction` - Set direction to a cardinal direction
-* `user.mouse_rig_rotate` - Rotate direction by degrees
-* `user.mouse_rig_reverse` - Reverse the current direction
+* `user.mouse_rig_move_rotate` - Rotate direction by degrees
+* `user.mouse_rig_move_reverse` - Reverse the current direction
 * `user.mouse_rig_boost` - Speed offset that ramps up and decays
 * `user.mouse_rig_boost_start` - Start a sustained speed offset
 * `user.mouse_rig_boost_stop` - Stop a sustained speed offset
 
 **Scroll**
 
-* `user.mouse_rig_scroll` - Scroll a fixed number of ticks
-* `user.mouse_rig_scroll_natural` - Scroll with smooth easing via native API
-* `user.mouse_rig_scroll_go` - Start continuous scrolling
-* `user.mouse_rig_scroll_go_natural` - Start continuous scrolling with smooth transitions
+* `user.mouse_rig_scroll_delta` - Scroll a fixed number of ticks
+* `user.mouse_rig_scroll_delta_smooth` - Scroll with smooth easing via native API
+* `user.mouse_rig_scroll_continuous` - Start continuous scrolling
+* `user.mouse_rig_scroll_continuous_smooth` - Start continuous scrolling with smooth transitions
 * `user.mouse_rig_scroll_speed_to` - Set scroll speed
 * `user.mouse_rig_scroll_speed_add` - Add to scroll speed
 * `user.mouse_rig_scroll_speed_mul` - Multiply scroll speed
-* `user.mouse_rig_scroll_direction` - Set scroll direction
-* `user.mouse_rig_scroll_direction_by` - Rotate scroll direction by degrees
 * `user.mouse_rig_scroll_boost` - Scroll speed offset that ramps up and decays
 * `user.mouse_rig_scroll_boost_start` - Start a sustained scroll speed offset
 * `user.mouse_rig_scroll_boost_stop` - Stop a sustained scroll speed offset
@@ -92,7 +88,7 @@ Chain actions that wait for each animation to finish before continuing:
 ```python
 actions.user.mouse_rig_sequence([
     lambda: ctrl.mouse_click(0, down=True),
-    lambda: actions.user.mouse_rig_pos_to(500, 300, 500),
+    lambda: actions.user.mouse_rig_move_to(500, 300, 500),
     lambda: ctrl.mouse_click(0, up=True),
 ])
 ```
@@ -101,7 +97,7 @@ Use `user.mouse_rig_wait` to insert pauses:
 
 ```python
 actions.user.mouse_rig_sequence([
-    lambda: actions.user.mouse_rig_go("right", 3),
+    lambda: actions.user.mouse_rig_move_continuous("right", 3),
     lambda: actions.user.mouse_rig_wait(1000),
     lambda: actions.user.mouse_rig_stop(),
 ])
@@ -115,12 +111,12 @@ Prime a mouse button to hold during the next rig action and release on stop. Use
 # Pan with middle-click drag
 rig pan left:
     user.mouse_rig_button_prime("middle")
-    user.mouse_rig_move_natural("left", 200)
+    user.mouse_rig_move_delta_smooth("left", 200)
 
 # Continuous pan - button releases when you say "rig stop"
 rig pan go left:
     user.mouse_rig_button_prime("middle")
-    user.mouse_rig_go("left", 4.0)
+    user.mouse_rig_move_continuous("left", 4.0)
 ```
 
 ### Reading State
