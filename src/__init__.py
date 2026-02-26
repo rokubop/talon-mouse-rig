@@ -22,25 +22,53 @@ Example usage:
 from typing import Optional
 import os
 import time
-from .state import RigState
-from .builder import RigBuilder
+from talon import actions, app
+
 from .contracts import (
-    validate_timing,
-    RigAttributeError,
-    find_closest_match,
     VALID_RIG_METHODS,
     VALID_RIG_PROPERTIES
 )
 from .ui import show_reloading_notification
 
-_global_state: Optional[RigState] = None
+# Module-level references — set by _on_ready via _build_classes
+# Contracts symbols (used in class method bodies, safe to be None at import time)
+from . import contracts as _contracts_mod
+from . import state as _state_mod
+from . import builder as _builder_mod
+
+_global_state = None
+_ready = False
 
 
-def _get_global_state() -> RigState:
+def _on_ready():
+    """Initialize all modules by getting rig-core and calling _build_classes in order"""
+    global _ready
+    core = actions.user.rig_core()
+
+    # Import all submodules
+    from . import core as _core_mod
+    from . import mode_operations as _mode_ops_mod
+    from . import layer_group as _layer_group_mod
+
+    # Call _build_classes in dependency order
+    _core_mod._build_classes(core)
+    _contracts_mod._build_classes(core)
+    _mode_ops_mod._build_classes(core)
+    _layer_group_mod._build_classes(core)
+    _state_mod._build_classes(core)
+    _builder_mod._build_classes(core)
+
+    _ready = True
+
+
+app.register("ready", _on_ready)
+
+
+def _get_global_state():
     """Get or create the global rig state"""
     global _global_state
     if _global_state is None:
-        _global_state = RigState()
+        _global_state = _state_mod.RigState()
     return _global_state
 
 
@@ -108,10 +136,12 @@ def reload_rig():
                     touched_count += 1
                 except Exception as e:
                     pass
+
+
 class StopHandle:
     """Handle returned by stop() that allows adding callbacks via .then()"""
 
-    def __init__(self, state: RigState):
+    def __init__(self, state):
         self._state = state
 
     def then(self, callback):
@@ -132,7 +162,7 @@ class StopHandle:
 class ScrollStopHandle:
     """Handle returned by scroll.stop() that allows adding callbacks via .then()"""
 
-    def __init__(self, state: RigState):
+    def __init__(self, state):
         self._state = state
 
     def then(self, callback):
@@ -148,7 +178,7 @@ class ScrollStopHandle:
 class MoveStopHandle:
     """Handle returned by move.stop() that allows adding callbacks via .then()"""
 
-    def __init__(self, state: RigState):
+    def __init__(self, state):
         self._state = state
 
     def then(self, callback):
@@ -177,27 +207,27 @@ class Rig:
     @property
     def pos(self):
         """Position property accessor (base layer)"""
-        return RigBuilder(self._state).pos
+        return _builder_mod.RigBuilder(self._state).pos
 
     @property
     def speed(self):
         """Speed property accessor (base layer)"""
-        return RigBuilder(self._state).speed
+        return _builder_mod.RigBuilder(self._state).speed
 
     @property
     def direction(self):
         """Direction property accessor (base layer)"""
-        return RigBuilder(self._state).direction
+        return _builder_mod.RigBuilder(self._state).direction
 
     @property
     def vector(self):
         """Vector property accessor (base layer)"""
-        return RigBuilder(self._state).vector
+        return _builder_mod.RigBuilder(self._state).vector
 
     @property
     def scroll(self):
         """Scroll property accessor (base layer)"""
-        return RigBuilder(self._state).scroll
+        return _builder_mod.RigBuilder(self._state).scroll
 
     @property
     def move(self):
@@ -208,16 +238,16 @@ class Rig:
     # LAYER METHOD
     # ========================================================================
 
-    def layer(self, name: str, order: Optional[int] = None) -> RigBuilder:
+    def layer(self, name: str, order: Optional[int] = None):
         """Create a user layer
 
         Args:
             name: Layer name
             order: Optional execution order (lower numbers execute first)
         """
-        return RigBuilder(self._state, layer=name, order=order)
+        return _builder_mod.RigBuilder(self._state, layer=name, order=order)
 
-    def api(self, api: str) -> RigBuilder:
+    def api(self, api: str):
         """Set API override for mouse operations
 
         Args:
@@ -229,7 +259,7 @@ class Rig:
         Example:
             rig.api("talon").pos.by(100, 0)
         """
-        return RigBuilder(self._state).api(api)
+        return _builder_mod.RigBuilder(self._state).api(api)
 
     # ========================================================================
     # BEHAVIOR SUGAR (returns builder with behavior pre-set)
@@ -275,7 +305,7 @@ class Rig:
             StopHandle: Handle that allows chaining .then(callback) to execute
                        when the system fully stops
         """
-        ms = validate_timing(ms, 'ms', method='stop')
+        ms = _contracts_mod.validate_timing(ms, 'ms', method='stop')
         self._state.stop(ms, easing)
         return StopHandle(self._state)
 
@@ -302,7 +332,7 @@ class Rig:
             rig.reverse()         # Instant 180° turn
             rig.reverse(1000)     # Smooth turn over 1 second
         """
-        ms = validate_timing(ms, 'ms', method='reverse') if ms is not None else None
+        ms = _contracts_mod.validate_timing(ms, 'ms', method='reverse') if ms is not None else None
 
         if ms is not None:
             # Gradual reverse: emit copies to bridge transition
@@ -383,27 +413,17 @@ class Rig:
 
         Only reverses user-named layers, not emit layers (which should fade in their original direction).
         """
+        # Core handles layer groups (direction/vector property_kind, skip emit layers)
+        self._state.reverse_all_directions()
+
+        # Mouse-specific: flip base direction fields
         self._state._base_direction = self._state._base_direction * -1
-
-        for layer_group in self._state._layer_groups.values():
-            # Skip emit/copy layers - they should fade in their original direction
-            if layer_group.is_emit_layer:
-                continue
-
-            if layer_group.property in ("direction", "vector") and layer_group.accumulated_value is not None:
-                layer_group.accumulated_value = layer_group.accumulated_value * -1
-
-            for builder in layer_group.builders:
-                if builder.config.property in ("direction", "vector") and builder.target_value is not None:
-                    builder.target_value = builder.target_value * -1
-                    if builder.base_value is not None:
-                        builder.base_value = builder.base_value * -1
 
     def bake(self):
         """Bake all active builders to base state"""
         self._state.bake_all()
 
-    def emit(self, ms: float = 1000, easing: str = "linear") -> RigBuilder:
+    def emit(self, ms: float = 1000, easing: str = "linear"):
         """Convert current total velocity to autonomous decaying offset
 
         Args:
@@ -444,7 +464,7 @@ class Rig:
         all_valid = VALID_RIG_METHODS + VALID_RIG_PROPERTIES
 
         # Find closest match
-        suggestion = find_closest_match(name, all_valid)
+        suggestion = _contracts_mod.find_closest_match(name, all_valid)
 
         msg = f"Rig has no attribute '{name}'"
         if suggestion:
@@ -453,7 +473,7 @@ class Rig:
             msg += f"\n\nAvailable properties: {', '.join(VALID_RIG_PROPERTIES)}"
             msg += f"\nAvailable methods: {', '.join(VALID_RIG_METHODS)}"
 
-        raise RigAttributeError(msg)
+        raise _contracts_mod.RigAttributeError(msg)
 
 
 class _MoveProxy:
@@ -463,7 +483,7 @@ class _MoveProxy:
     All other attribute access delegates to a fresh Rig instance.
     """
 
-    def __init__(self, state: RigState):
+    def __init__(self, state):
         self._state = state
 
     def stop(self, ms: Optional[float] = None, easing: str = "linear") -> MoveStopHandle:
@@ -478,7 +498,7 @@ class _MoveProxy:
         Returns:
             MoveStopHandle: Handle that allows chaining .then(callback)
         """
-        ms = validate_timing(ms, 'ms', method='stop')
+        ms = _contracts_mod.validate_timing(ms, 'ms', method='stop')
         self._state.move_stop(ms, easing)
         return MoveStopHandle(self._state)
 
@@ -497,23 +517,23 @@ class _MoveProxy:
 
     def __getattr__(self, name: str):
         if name in self._BLOCKED_ATTRS:
-            raise RigAttributeError(self._BLOCKED_ATTRS[name])
+            raise _contracts_mod.RigAttributeError(self._BLOCKED_ATTRS[name])
         # Delegate to a Rig instance sharing the same state
-        rig = Rig.__new__(Rig)
-        rig._state = self._state
-        return getattr(rig, name)
+        rig_inst = Rig.__new__(Rig)
+        rig_inst._state = self._state
+        return getattr(rig_inst, name)
 
 
 class _BehaviorAccessor:
     """Helper to allow behavior to be used as property or method"""
 
-    def __init__(self, state: RigState, behavior: str):
+    def __init__(self, state, behavior: str):
         self._state = state
         self._behavior = behavior
 
-    def __call__(self, *args) -> RigBuilder:
+    def __call__(self, *args):
         """Called when used as method: rig.stack(3)"""
-        builder = RigBuilder(self._state)
+        builder = _builder_mod.RigBuilder(self._state)
         builder.config.behavior = self._behavior
         builder.config.behavior_args = args
         return builder
@@ -521,21 +541,21 @@ class _BehaviorAccessor:
     @property
     def pos(self):
         """Property access: rig.stack.pos"""
-        builder = RigBuilder(self._state)
+        builder = _builder_mod.RigBuilder(self._state)
         builder.config.behavior = self._behavior
         return builder.pos
 
     @property
     def speed(self):
         """Property access: rig.stack.speed"""
-        builder = RigBuilder(self._state)
+        builder = _builder_mod.RigBuilder(self._state)
         builder.config.behavior = self._behavior
         return builder.speed
 
     @property
     def direction(self):
         """Property access: rig.stack.direction"""
-        builder = RigBuilder(self._state)
+        builder = _builder_mod.RigBuilder(self._state)
         builder.config.behavior = self._behavior
         return builder.direction
 
@@ -555,4 +575,4 @@ def rig() -> Rig:
     return Rig()
 
 # Export public API
-__all__ = ['rig', 'Rig', 'RigBuilder', 'RigState', 'reload_rig', 'MoveStopHandle']
+__all__ = ['rig', 'Rig', 'reload_rig', 'MoveStopHandle', 'StopHandle', 'ScrollStopHandle']
