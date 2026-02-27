@@ -1022,12 +1022,8 @@ class RigBuilder:
                 return value
             elif operator in ("by", "add"):
                 return current + value
-            elif operator == "sub":
-                return current - value
             elif operator == "mul":
                 return current * value
-            elif operator == "div":
-                return current / value if value != 0 else current
 
         elif self.config.property == "direction":
             if operator == "to":
@@ -1198,23 +1194,9 @@ class PropertyBuilder:
     def by(self, *args) -> RigBuilder:
         return self.add(*args)
 
-    def sub(self, *args) -> RigBuilder:
-        self._check_duplicate_operator("sub")
-        self.rig_builder.config.operator = "sub"
-        self.rig_builder.config.value = args[0] if len(args) == 1 else args
-        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
-        return self.rig_builder
-
     def mul(self, value: float) -> RigBuilder:
         self._check_duplicate_operator("mul")
         self.rig_builder.config.operator = "mul"
-        self.rig_builder.config.value = value
-        self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
-        return self.rig_builder
-
-    def div(self, value: float) -> RigBuilder:
-        self._check_duplicate_operator("div")
-        self.rig_builder.config.operator = "div"
         self.rig_builder.config.value = value
         self.rig_builder.config.validate_property_operator(self.rig_builder._mark_invalid)
         return self.rig_builder

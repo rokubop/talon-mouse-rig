@@ -110,7 +110,7 @@ def test_property_operators_complete(on_success, on_failure):
         from ..src.builder import PropertyBuilder
 
         # Valid operators that should exist as methods
-        valid_operator_methods = ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake']
+        valid_operator_methods = ['to', 'add', 'by', 'mul', 'bake']
 
         for prop in VALID_PROPERTIES:
             if prop not in VALID_OPERATORS:

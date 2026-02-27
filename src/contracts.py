@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 VALID_PROPERTIES = ['pos', 'speed', 'direction', 'vector', 'scroll_pos']
 
 VALID_OPERATORS = {
-    'speed': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
-    'direction': ['to', 'add', 'by', 'sub', 'mul', 'div', 'bake'],
-    'pos': ['to', 'add', 'by', 'sub', 'bake'],
-    'vector': ['to', 'add', 'by', 'sub', 'bake'],
+    'speed': ['to', 'add', 'by', 'mul', 'bake'],
+    'direction': ['to', 'add', 'by', 'mul', 'bake'],
+    'pos': ['to', 'add', 'by', 'bake'],
+    'vector': ['to', 'add', 'by', 'bake'],
     'scroll_pos': ['add', 'by'],
 }
 
@@ -185,13 +185,11 @@ def _build_classes(core):
 # ============================================================================
 
 class PropertyOperations(Protocol):
-    """Contract for property operations (to, add, sub, mul, div)"""
+    """Contract for property operations (to, add, mul)"""
     def to(self, *args): ...
     def add(self, *args): ...
     def by(self, *args): ...
-    def sub(self, *args): ...
     def mul(self, value: float): ...
-    def div(self, value: float): ...
 
 
 class LifecycleMethods(Protocol):
