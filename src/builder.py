@@ -138,15 +138,7 @@ def _build_classes(core):
                 else:
                     return self._get_base_value()
 
-        def _is_same_axis_reversal(self, base_dir, target_dir) -> bool:
-            base_x_zero = abs(base_dir.x) < 0.01
-            base_y_zero = abs(base_dir.y) < 0.01
-            target_x_zero = abs(target_dir.x) < 0.01
-            target_y_zero = abs(target_dir.y) < 0.01
-
-            opposite_direction = base_dir.dot(target_dir) < -0.9
-
-            return ((base_x_zero and target_x_zero) or (base_y_zero and target_y_zero)) and opposite_direction
+        # _is_same_axis_reversal() inherited from BaseActiveBuilder (rig-core)
 
         # ====================================================================
         # ABSTRACT METHOD IMPLEMENTATIONS (3)

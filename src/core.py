@@ -17,17 +17,20 @@ Vec2 = None
 is_vec2 = None
 EPSILON = None
 get_easing_function = None
+EASING_FUNCTIONS = None
 lerp = None
 clamp = None
 normalize_vector = None
 
 
 def _build_classes(core):
-    global Vec2, is_vec2, EPSILON, get_easing_function, lerp, clamp, normalize_vector
+    global Vec2, is_vec2, EPSILON, get_easing_function, EASING_FUNCTIONS
+    global lerp, clamp, normalize_vector
     Vec2 = core.Vec2
     is_vec2 = core.is_vec2
     EPSILON = core.EPSILON
     get_easing_function = core.get_easing_function
+    EASING_FUNCTIONS = core.EASING_FUNCTIONS
     lerp = core.lerp
     clamp = core.clamp
     normalize_vector = core.normalize_vector
