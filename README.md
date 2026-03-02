@@ -64,20 +64,38 @@ See [mouse_rig.py](mouse_rig.py) for full signatures and parameters.
 
 ## Installation
 
-Clone this repo into your [Talon](https://talonvoice.com/) user directory:
+### Dependencies
+
+- [**talon-rig-core**](https://github.com/rokubop/talon-rig-core) (v0.5.0+)
+
+### Install
+
+Clone the dependencies and this repo into your [Talon](https://talonvoice.com/) user directory:
 
 ```sh
-# mac and linux
+# Mac/Linux
 cd ~/.talon/user
 
-# windows
+# Windows
 cd ~/AppData/Roaming/talon/user
+
+# Dependencies
+git clone https://github.com/rokubop/talon-rig-core
 
 # This repo
 git clone https://github.com/rokubop/talon-mouse-rig
 ```
 
-Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands. This is your file to customize.
+Done! Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands. This is your file to customize.
+
+### Development Dependencies
+
+Optional dependencies for development and testing:
+- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.14.0+)
+
+```sh
+git clone https://github.com/rokubop/talon-ui-elements
+```
 
 ## Examples
 

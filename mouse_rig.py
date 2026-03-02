@@ -106,24 +106,20 @@ class Actions:
     def mouse_rig_move_to_smooth(
             x: float,
             y: float,
-            over_ms: int = None,
-            easing: str = None,
+            scale: float = 1.0,
             callback: callable = None
         ) -> None:
         """Move mouse to absolute position with smooth easing.
-        Defaults from mouse_rig_smooth_move_to_ms and mouse_rig_smooth_move_to_easing settings.
+        Timing/easing from mouse_rig_smooth_move_to_ms and mouse_rig_smooth_move_to_easing settings.
 
         Args:
             x: Target x coordinate
             y: Target y coordinate
-            over_ms: Duration in ms (default: from settings)
-            easing: Easing function (default: from settings)
+            scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when movement completes (optional)
         """
-        if over_ms is None:
-            over_ms = settings.get("user.mouse_rig_smooth_move_to_ms")
-        if easing is None:
-            easing = settings.get("user.mouse_rig_smooth_move_to_easing")
+        over_ms = int(settings.get("user.mouse_rig_smooth_move_to_ms") * scale)
+        easing = settings.get("user.mouse_rig_smooth_move_to_easing")
         rig = actions.user.mouse_rig()
         builder = rig.pos.to(x, y).over(over_ms, easing)
 
@@ -164,26 +160,22 @@ class Actions:
     def mouse_rig_move_delta_smooth(
             direction: str,
             amount: float = 1,
-            over_ms: int = None,
-            easing: str = None,
+            scale: float = 1.0,
             callback: callable = None,
             api: str = None
         ) -> None:
         """Move mouse in a direction with smooth easing.
-        Defaults from mouse_rig_smooth_delta_ms and mouse_rig_smooth_delta_easing settings.
+        Timing/easing from mouse_rig_smooth_delta_ms and mouse_rig_smooth_delta_easing settings.
 
         Args:
             direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
             amount: Distance in pixels (default: 1)
-            over_ms: Duration in ms (default: from settings)
-            easing: Easing function (default: from settings)
+            scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when movement completes (optional)
             api: Mouse API to use, e.g. "talon" or "platform" (optional)
         """
-        if over_ms is None:
-            over_ms = settings.get("user.mouse_rig_smooth_delta_ms")
-        if easing is None:
-            easing = settings.get("user.mouse_rig_smooth_delta_easing")
+        over_ms = int(settings.get("user.mouse_rig_smooth_delta_ms") * scale)
+        easing = settings.get("user.mouse_rig_smooth_delta_easing")
         rig = actions.user.mouse_rig()
         x, y = _parse_direction(direction)
         builder = rig.pos.by(x * amount, y * amount).over(over_ms, easing)
@@ -623,24 +615,20 @@ class Actions:
     def mouse_rig_scroll_delta_smooth(
             direction: str,
             amount: float = 1,
-            over_ms: int = None,
-            easing: str = None,
+            scale: float = 1.0,
             callback: callable = None
         ) -> None:
         """One-time smooth scroll in a direction using native platform API.
-        Defaults from mouse_rig_smooth_scroll_ms and mouse_rig_smooth_scroll_easing settings.
+        Timing/easing from mouse_rig_smooth_scroll_ms and mouse_rig_smooth_scroll_easing settings.
 
         Args:
             direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
             amount: Number of scroll ticks (default: 1)
-            over_ms: Duration in ms (default: from settings)
-            easing: Easing function (default: from settings)
+            scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when complete (optional)
         """
-        if over_ms is None:
-            over_ms = settings.get("user.mouse_rig_smooth_scroll_ms")
-        if easing is None:
-            easing = settings.get("user.mouse_rig_smooth_scroll_easing")
+        over_ms = int(settings.get("user.mouse_rig_smooth_scroll_ms") * scale)
+        easing = settings.get("user.mouse_rig_smooth_scroll_easing")
         rig = actions.user.mouse_rig()
         x, y = _parse_direction(direction)
         builder = rig.scroll.by_pixels.by(x * amount, y * amount).over(over_ms, easing)
