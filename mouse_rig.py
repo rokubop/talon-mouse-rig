@@ -395,7 +395,7 @@ class Actions:
 
     def mouse_rig_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained boost. Ramps up and holds until boost_stop is called.
-        Safe for held-input patterns (noise/pedal) — repeated calls are no-ops (.stack(1)).
+        Safe for held-input patterns (noise/pedal) - repeated calls are no-ops (.stack(1)).
 
         Args:
             amount: Speed to add.
@@ -792,7 +792,7 @@ class Actions:
 
     def mouse_rig_scroll_boost_start(amount: float, over_ms: int = 500) -> None:
         """Start a sustained scroll boost. Ramps up and holds until scroll_boost_stop is called.
-        Safe for held-input patterns (noise/pedal) — repeated calls are no-ops (.stack(1)).
+        Safe for held-input patterns (noise/pedal) - repeated calls are no-ops (.stack(1)).
 
         Args:
             amount: Scroll speed to add.

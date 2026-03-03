@@ -75,7 +75,7 @@ def _build_classes(core):
     rate_utils = core.rate_utils
 
     # ========================================================================
-    # MouseActiveBuilder — extends BaseActiveBuilder
+    # MouseActiveBuilder - extends BaseActiveBuilder
     # ========================================================================
 
     class _MouseActiveBuilder(core.BaseActiveBuilder):

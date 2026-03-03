@@ -49,7 +49,7 @@ VALID_LAYER_STATE_ATTRS = [
 
 
 # ============================================================================
-# SHARED IMPORTS — set by _build_classes()
+# SHARED IMPORTS - set by _build_classes()
 # ============================================================================
 
 BaseBuilderConfig = None
@@ -70,7 +70,7 @@ VALID_INTERPOLATIONS = None
 VALID_BEHAVIORS = None
 PARAMETER_SUGGESTIONS = None
 
-# Mouse-specific config — set by _build_classes()
+# Mouse-specific config - set by _build_classes()
 BuilderConfig = None
 
 
@@ -181,7 +181,7 @@ def _build_classes(core):
 
 
 # ============================================================================
-# PROTOCOLS (stay here — mouse-specific)
+# PROTOCOLS (stay here - mouse-specific)
 # ============================================================================
 
 class PropertyOperations(Protocol):

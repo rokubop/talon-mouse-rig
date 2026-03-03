@@ -10,7 +10,7 @@ from .mouse_api import get_mouse_move_functions, get_mouse_scroll_function
 
 
 # ============================================================================
-# RIG-CORE IMPORTS — set by _build_classes()
+# RIG-CORE IMPORTS - set by _build_classes()
 # ============================================================================
 
 Vec2 = None

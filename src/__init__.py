@@ -30,7 +30,7 @@ from .contracts import (
 )
 from .ui import show_reloading_notification
 
-# Module-level references — set by _on_ready via _build_classes
+# Module-level references - set by _on_ready via _build_classes
 # Contracts symbols (used in class method bodies, safe to be None at import time)
 from . import contracts as _contracts_mod
 from . import state as _state_mod
@@ -231,7 +231,7 @@ class Rig:
 
     @property
     def move(self):
-        """Movement-only proxy — delegates to rig but with movement-only stop()"""
+        """Movement-only proxy - delegates to rig but with movement-only stop()"""
         return _MoveProxy(self._state)
 
     # ========================================================================
