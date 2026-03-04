@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-4.0.0-blue)
+![Version](https://img.shields.io/badge/version-4.1.0-blue)
 ![Status](https://img.shields.io/badge/status-preview-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -8,6 +8,8 @@
 <td width="150"><img src="preview.svg"></td>
 <td>All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.</td>
 </tr></table>
+
+Included in [talon-gamekit](https://github.com/rokubop/talon-gamekit), but can be used standalone.
 
 ## Talon Actions
 
