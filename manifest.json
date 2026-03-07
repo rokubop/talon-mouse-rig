@@ -107,8 +107,9 @@
   },
   "validateDependencies": true,
   "_generator": "talon-pack",
-  "_generatorVersion": "3.0.0",
+  "_generatorVersion": "3.2.0",
   "_generatorRequiresVersionAction": true,
   "_generatorStrictNamespace": true,
-  "_generatorFrozenFields": []
+  "_generatorFrozenFields": [],
+  "_generatorDuplicateCheck": true
 }
