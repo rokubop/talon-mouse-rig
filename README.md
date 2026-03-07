@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-4.1.0-blue)
+![Version](https://img.shields.io/badge/version-4.1.1-blue)
 ![Status](https://img.shields.io/badge/status-preview-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -68,7 +68,7 @@ See [mouse_rig.py](mouse_rig.py) for full signatures and parameters.
 
 ### Dependencies
 
-- [**talon-rig-core**](https://github.com/rokubop/talon-rig-core) (v0.5.0+)
+- [**talon-rig-core**](https://github.com/rokubop/talon-rig-core) (v0.6.3+)
 
 ### Install
 
