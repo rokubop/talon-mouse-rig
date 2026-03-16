@@ -341,3 +341,6 @@ Uncomment [mouse_rig_dev.talon](mouse_rig_dev.talon) to enable.
 Requires [talon-ui-elements](https://github.com/rokubop/talon-ui-elements) (v0.14.0+).
 
 ![Tests](assets/tests.png)
+
+## More Talon packages
+Check out my other Talon packages for UI, input mapping, parrot, and more at [talon-hub-roku](https://github.com/rokubop/talon-hub-roku).
