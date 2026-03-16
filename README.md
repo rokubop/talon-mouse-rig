@@ -68,7 +68,7 @@ See [mouse_rig.py](mouse_rig.py) for full signatures and parameters.
 
 ### Dependencies
 
-- [**talon-rig-core**](https://github.com/rokubop/talon-rig-core) (v0.6.3+)
+- [**talon-rig-core**](https://github.com/rokubop/talon-rig-core) (v0.6.5+)
 
 ### Install
 
@@ -93,7 +93,7 @@ Done! Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out
 ### Development Dependencies
 
 Optional dependencies for development and testing:
-- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.14.0+)
+- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.15.0+)
 
 ```sh
 git clone https://github.com/rokubop/talon-ui-elements
