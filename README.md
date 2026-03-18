@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-4.1.1-blue)
+![Version](https://img.shields.io/badge/version-4.1.2-blue)
 ![Status](https://img.shields.io/badge/status-preview-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -93,7 +93,7 @@ Done! Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out
 ### Development Dependencies
 
 Optional dependencies for development and testing:
-- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.15.0+)
+- [**talon-ui-elements**](https://github.com/rokubop/talon-ui-elements) (v0.16.0+)
 
 ```sh
 git clone https://github.com/rokubop/talon-ui-elements
