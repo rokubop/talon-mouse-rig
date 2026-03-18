@@ -45,19 +45,7 @@ mod.setting(
     """
 )
 
-mod.setting(
-    "mouse_rig_pause_on_manual_movement",
-    type=bool,
-    default=True,
-    desc="Whether manual mouse movement should pause the rig temporarily"
-)
 
-mod.setting(
-    "mouse_rig_manual_movement_timeout_ms",
-    type=int,
-    default=300,
-    desc="Timeout in milliseconds after manual mouse movement before rig resumes control"
-)
 
 mod.setting(
     "mouse_rig_scale",

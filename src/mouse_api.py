@@ -89,15 +89,10 @@ def _get_platform_api() -> str:
     return "talon"
 
 
-def _sync_expected_pos() -> Tuple[int, int]:
-    """Read actual cursor position after a synchronous move"""
-    return ctrl.mouse_pos()
-
-
-def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None], Callable[[], Tuple[int, int]]]:
+def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """Cross-platform Talon mouse movement
 
-    Returns (absolute_func, relative_func, get_expected_pos)
+    Returns (absolute_func, relative_func)
     Uses ctrl.mouse_move for absolute and actions.mouse_nudge for relative.
 
     Note: int() wrapping is required because Talon's mouse APIs work in integer pixels.
@@ -112,7 +107,7 @@ def _make_talon_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[
     def move_relative(dx: float, dy: float) -> None:
         actions.mouse_nudge(int(dx), int(dy))
 
-    return move_absolute, move_relative, _sync_expected_pos
+    return move_absolute, move_relative
 
 
 def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
@@ -150,7 +145,7 @@ def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], Non
             int(dy * scale)
         )
 
-    return move_absolute, move_relative, _sync_expected_pos
+    return move_absolute, move_relative
 
 
 def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
@@ -215,18 +210,15 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
 
         ctypes.windll.user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
 
-    return move_absolute, move_relative, _sync_expected_pos
+    return move_absolute, move_relative
 
 
-def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None], None]:
+def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """macOS CoreGraphics mouse movement
 
-    Returns (absolute_func, relative_func, None)
+    Returns (absolute_func, relative_func)
     Uses CGEventCreateMouseEvent with delta fields for proper relative movement.
     Games read kCGMouseEventDeltaX/DeltaY from events, not absolute position.
-
-    CGEventPost is async — ctrl.mouse_pos() won't reflect the new position
-    immediately, so manual movement detection is not supported for this API.
     """
     import Quartz  # type: ignore
 
@@ -249,7 +241,7 @@ def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Ca
         Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaY, sdy)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
-    return move_absolute, move_relative, None
+    return move_absolute, move_relative
 
 
 def _make_linux_x11_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
@@ -275,22 +267,19 @@ def _make_linux_x11_mouse_move() -> Tuple[Callable[[float, float], None], Callab
         root.warp_pointer(int(current_x + dx), int(current_y + dy))
         disp.sync()
 
-    return move_absolute, move_relative, _sync_expected_pos
+    return move_absolute, move_relative
 
 
-def get_mouse_move_functions(absolute_override: Optional[str] = None, relative_override: Optional[str] = None) -> Tuple[Callable[[float, float], None], Callable[[float, float], None], Callable[[], Tuple[int, int]]]:
+def get_mouse_move_functions(absolute_override: Optional[str] = None, relative_override: Optional[str] = None) -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """Get the appropriate mouse move functions based on settings
 
     Args:
         absolute_override: Optional override for absolute API (rarely needed)
         relative_override: Optional override for relative API (takes precedence over settings)
 
-    Returns tuple of (absolute_func, relative_func, get_expected_pos) where:
+    Returns tuple of (absolute_func, relative_func) where:
     - absolute_func: Takes (x, y) screen coordinates (always uses Talon's ctrl.mouse_move)
     - relative_func: Takes (dx, dy) delta for relative movement (uses mouse_rig_api setting)
-    - get_expected_pos: Returns (x, y) expected cursor position after a relative move.
-      For sync APIs, reads ctrl.mouse_pos(). For async APIs (macOS CGEvent),
-      returns the calculated target position.
 
     Falls back to Talon's mouse_move if the requested API is unavailable.
     """
@@ -305,28 +294,23 @@ def get_mouse_move_functions(absolute_override: Optional[str] = None, relative_o
         relative_api = _get_platform_api()
 
     # Get absolute function (always Talon)
-    absolute_func = _get_api_function(absolute_api)
+    absolute_func = _get_api_function(absolute_api, is_absolute=True)
 
-    # Get relative function and expected pos from the relative API
-    _, relative_func, get_expected_pos = _get_api_functions(relative_api)
+    # Get relative function
+    relative_func = _get_api_function(relative_api, is_absolute=False)
 
-    return absolute_func, relative_func, get_expected_pos
-
-
-def _get_api_function(api_type: str) -> Callable[[float, float], None]:
-    """Get the absolute mouse move function for the specified API"""
-    abs_func, _, _ = _get_api_functions(api_type)
-    return abs_func
+    return absolute_func, relative_func
 
 
-def _get_api_functions(api_type: str) -> Tuple[Callable[[float, float], None], Callable[[float, float], None], Callable[[], Tuple[int, int]]]:
-    """Get all mouse move functions for the specified API
+def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, float], None]:
+    """Get a single mouse move function for the specified API
 
     Args:
         api_type: The API type string
+        is_absolute: True for absolute positioning, False for relative movement
 
     Returns:
-        Tuple of (absolute_func, relative_func, get_expected_pos)
+        The appropriate mouse move function
     """
     # Validate API type
     if api_type not in MOUSE_APIS:
@@ -338,31 +322,36 @@ def _get_api_functions(api_type: str) -> Tuple[Callable[[float, float], None], C
             print("[Mouse Rig] windows_mouse_event API requires pywin32, falling back to talon")
             api_type = "talon"
         else:
-            return _make_windows_mouse_event_mouse_move()
+            abs_func, rel_func = _make_windows_mouse_event_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "windows_send_input":
         if not _windows_send_input_available:
             print("[Mouse Rig] windows_send_input API not available, falling back to talon")
             api_type = "talon"
         else:
-            return _make_windows_send_input_mouse_move()
+            abs_func, rel_func = _make_windows_send_input_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "macos_cgevent":
         if not _macos_cgevent_available:
             print("[Mouse Rig] macos_cgevent API requires pyobjc-framework-Quartz, falling back to talon")
             api_type = "talon"
         else:
-            return _make_macos_cgevent_mouse_move()
+            abs_func, rel_func = _make_macos_cgevent_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     elif api_type == "linux_x11":
         if not _linux_x11_available:
             print("[Mouse Rig] linux_x11 API requires python-xlib, falling back to talon")
             api_type = "talon"
         else:
-            return _make_linux_x11_mouse_move()
+            abs_func, rel_func = _make_linux_x11_mouse_move()
+            return abs_func if is_absolute else rel_func
 
     # Default to talon
-    return _make_talon_mouse_move()
+    abs_func, rel_func = _make_talon_mouse_move()
+    return abs_func if is_absolute else rel_func
 
 
 # ============================================================================

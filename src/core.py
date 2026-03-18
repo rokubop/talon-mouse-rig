@@ -42,13 +42,12 @@ def _build_classes(core):
 
 _mouse_move_absolute = None
 _mouse_move_relative = None
-_mouse_get_expected_pos = None
 _mouse_scroll = None
 
 
 def _initialize_mouse_move():
-    global _mouse_move_absolute, _mouse_move_relative, _mouse_get_expected_pos, _mouse_scroll
-    _mouse_move_absolute, _mouse_move_relative, _mouse_get_expected_pos = get_mouse_move_functions()
+    global _mouse_move_absolute, _mouse_move_relative, _mouse_scroll
+    _mouse_move_absolute, _mouse_move_relative = get_mouse_move_functions()
     _mouse_scroll = get_mouse_scroll_function()
 
 
@@ -62,12 +61,12 @@ def get_mouse_move_with_overrides(absolute_override: Optional[str] = None, relat
         relative_override: Override for relative API
 
     Returns:
-        Tuple of (absolute_func, relative_func, get_expected_pos)
+        Tuple of (absolute_func, relative_func)
     """
     if absolute_override is None and relative_override is None:
         if _mouse_move_absolute is None:
             _initialize_mouse_move()
-        return _mouse_move_absolute, _mouse_move_relative, _mouse_get_expected_pos
+        return _mouse_move_absolute, _mouse_move_relative
 
     return get_mouse_move_functions(absolute_override, relative_override)
 
@@ -104,17 +103,6 @@ def mouse_move_relative(dx: float, dy: float) -> None:
     if _mouse_move_relative is None:
         _initialize_mouse_move()
     _mouse_move_relative(dx, dy)
-
-
-def mouse_get_expected_pos():
-    """Get expected cursor position after the last relative move.
-
-    For sync APIs (Windows, Linux, Talon), reads ctrl.mouse_pos().
-    For async APIs (macOS CGEvent), returns None (detection not supported).
-    """
-    if _mouse_get_expected_pos is None:
-        return None
-    return _mouse_get_expected_pos()
 
 
 def mouse_scroll_native(dx: float, dy: float) -> None:

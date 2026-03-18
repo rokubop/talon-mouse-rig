@@ -273,7 +273,7 @@ def _build_classes(core):
                     self.rig_state._base_pos = Vec2(new_pos.x, new_pos.y)
 
                     if self.config.api_override is not None:
-                        move_absolute, _, _ = get_mouse_move_functions(self.config.api_override, None)
+                        move_absolute, _ = get_mouse_move_functions(self.config.api_override, None)
                         move_absolute(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
                     else:
                         mouse_move(int(self.rig_state._internal_pos.x), int(self.rig_state._internal_pos.y))
@@ -281,7 +281,7 @@ def _build_classes(core):
                     delta = self.target_value
 
                     if self.config.api_override is not None:
-                        _, move_relative, _ = get_mouse_move_functions(None, self.config.api_override)
+                        _, move_relative = get_mouse_move_functions(None, self.config.api_override)
                         move_relative(int(delta.x), int(delta.y))
                     else:
                         mouse_move_relative(int(delta.x), int(delta.y))
