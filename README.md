@@ -88,7 +88,23 @@ git clone https://github.com/rokubop/talon-rig-core
 git clone https://github.com/rokubop/talon-mouse-rig
 ```
 
-Done! Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands. This is your file to customize.
+Done! 🎉 Go to **[mouse_rig_user.talon](mouse_rig_user.talon)** to start trying out commands. This is your file to customize.
+
+Sample commands you can say right away:
+
+| Voice Command | Action |
+|---|---|
+| `"rig left"` | `user.mouse_rig_move_continuous("left", 4.0)` |
+| `"rig right"` | `user.mouse_rig_move_continuous("right", 4.0)` |
+| `"rig up"` | `user.mouse_rig_move_continuous("up", 4.0)` |
+| `"rig down"` | `user.mouse_rig_move_continuous("down", 4.0)` |
+| `"rig stop"` | `user.mouse_rig_stop()` |
+| `"rig slow"` | `user.mouse_rig_speed_to(1.0)` |
+| `"rig speed up"` | `user.mouse_rig_speed_mul(2)` |
+| `"rig scroll down"` | `user.mouse_rig_scroll_delta_smooth("down", 8)` |
+| `"rig scroll go down"` | `user.mouse_rig_scroll_continuous_smooth("down", 0.1)` |
+| `"rig scroll stop"` | `user.mouse_rig_scroll_stop()` |
+| `"rig center"` | `user.mouse_rig_move_to_smooth(1920/2, 1080/2)` |
 
 ### Development Dependencies
 

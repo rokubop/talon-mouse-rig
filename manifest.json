@@ -19,12 +19,9 @@
       "namespace": "user.rig_core",
       "github": "https://github.com/rokubop/talon-rig-core"
     },
-    },
     "talon-ui-elements": {
       "min_version": "0.16.0",
       "namespace": "user.ui_elements",
-      "github": "https://github.com/rokubop/talon-ui-elements",
-      "dev_only": true
       "github": "https://github.com/rokubop/talon-ui-elements",
       "dev_only": true
     }
@@ -33,8 +30,6 @@
     "settings": [
       "user.mouse_rig_api",
       "user.mouse_rig_frame_interval",
-      "user.mouse_rig_manual_movement_timeout_ms",
-      "user.mouse_rig_pause_on_manual_movement",
       "user.mouse_rig_scale",
       "user.mouse_rig_scroll_api",
       "user.mouse_rig_smooth_delta_easing",
@@ -109,7 +104,6 @@
   },
   "validateDependencies": true,
   "_generator": "talon-pack",
-  "_generatorVersion": "3.3.0",
   "_generatorVersion": "3.3.0",
   "_generatorRequiresVersionAction": true,
   "_generatorStrictNamespace": true,
