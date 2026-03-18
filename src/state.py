@@ -49,8 +49,6 @@ def _build_classes(core):
             # Mouse-specific tracking
             self._subpixel_adjuster = SubpixelAdjuster()
             self._absolute_current_pos: Optional[Vec2] = None
-            self._last_manual_movement_time: Optional[float] = None
-            self._expected_mouse_pos: Optional[tuple[int, int]] = None
 
             # Mouse-specific stop callbacks
             self._scroll_stop_callbacks: list = []
@@ -432,7 +430,6 @@ def _build_classes(core):
                 self._frame_loop_job = None
                 self._last_frame_time = None
                 self._subpixel_adjuster.reset()
-                self._expected_mouse_pos = None
 
                 if self._absolute_current_pos is not None:
                     current_mouse = Vec2(*ctrl.mouse_pos())
@@ -598,14 +595,7 @@ def _build_classes(core):
 
             self._check_debounce_pending(current_time)
 
-            manual_movement_detected = self._sync_to_manual_mouse_movement()
             phase_transitions = self._advance_all_builders(current_time)
-
-            if manual_movement_detected:
-                self._remove_completed_builders(current_time)
-                self._execute_phase_callbacks(phase_transitions)
-                self._stop_frame_loop_if_done()
-                return
 
             frame_delta = Vec2(0, 0)
             frame_delta += self._compute_velocity_delta()
@@ -1180,14 +1170,14 @@ def _build_classes(core):
                         move_absolute_override(new_x, new_y)
                     else:
                         mouse_move(new_x, new_y)
-                    self._expected_mouse_pos = (new_x, new_y)
             else:
                 if frame_delta.x != 0 or frame_delta.y != 0:
+                    dx = round(frame_delta.x)
+                    dy = round(frame_delta.y)
                     if move_relative_override is not None:
-                        move_relative_override(round(frame_delta.x), round(frame_delta.y))
+                        move_relative_override(dx, dy)
                     else:
-                        mouse_move_relative(round(frame_delta.x), round(frame_delta.y))
-                    self._expected_mouse_pos = ctrl.mouse_pos()
+                        mouse_move_relative(dx, dy)
 
         def _emit_scroll(self, scroll_pos_delta=None):
             """Emit scroll events"""
@@ -1210,37 +1200,6 @@ def _build_classes(core):
                 if builder.config.layer_name not in completed_layers:
                     builder._last_emitted_relative_pos = new_value
                     builder._total_emitted_int = new_int_value
-
-        def _sync_to_manual_mouse_movement(self) -> bool:
-            """Detect and sync to manual mouse movements"""
-            if not settings.get("user.mouse_rig_pause_on_manual_movement", True):
-                return False
-
-            if self._last_manual_movement_time is not None:
-                timeout_ms = settings.get("user.mouse_rig_manual_movement_timeout_ms", 200)
-                elapsed_ms = (time.perf_counter() - self._last_manual_movement_time) * 1000
-                if elapsed_ms < timeout_ms:
-                    return True
-                else:
-                    self._last_manual_movement_time = None
-                    self._expected_mouse_pos = None
-
-            expected = self._expected_mouse_pos
-            if expected is not None:
-                current_x, current_y = ctrl.mouse_pos()
-                expected_x, expected_y = expected
-
-                if current_x != expected_x or current_y != expected_y:
-                    if self._absolute_current_pos is not None:
-                        manual_pos = Vec2(current_x, current_y)
-                        self._absolute_current_pos = manual_pos
-                        self._absolute_base_pos = manual_pos
-
-                    self._last_manual_movement_time = time.perf_counter()
-                    self._expected_mouse_pos = None
-                    return True
-
-            return False
 
         def _has_movement(self) -> bool:
             """Check if there's any movement happening"""
@@ -2170,8 +2129,6 @@ def _build_classes(core):
             self._absolute_current_pos = None
 
             self._subpixel_adjuster.reset()
-            self._last_manual_movement_time = None
-            self._expected_mouse_pos = None
             self._next_auto_order = 0
 
             self._stop_callbacks.clear()

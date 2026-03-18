@@ -4,7 +4,7 @@ Supports multiple mouse movement backends:
 - talon: Cross-platform using Talon's ctrl.mouse_move (default)
 - windows_mouse_event: Windows win32api.mouse_event (legacy API)
 - windows_send_input: Windows SendInput (modern, recommended for Windows)
-- macos_warp: macOS CGWarpMouseCursorPosition
+- macos_cgevent: macOS CGEventCreateMouseEvent
 - linux_x11: Linux X11 XWarpPointer
 
 Each API provides two movement modes:
@@ -28,14 +28,14 @@ MOUSE_APIS = {
     'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
     'windows_mouse_event': 'Windows win32api.mouse_event (legacy API)',
     'windows_send_input': 'Windows SendInput (modern, recommended)',
-    'macos_warp': 'macOS CGWarpMouseCursorPosition',
+    'macos_cgevent': 'macOS CGEventCreateMouseEvent',
     'linux_x11': 'Linux X11 XWarpPointer',
 }
 
 # Track availability of each API
 _windows_mouse_event_available = False
 _windows_send_input_available = False
-_macos_warp_available = False
+_macos_cgevent_available = False
 _linux_x11_available = False
 
 # Check platform-specific availability
@@ -56,7 +56,7 @@ if platform.system() == "Windows":
 elif platform.system() == "Darwin":
     try:
         import Quartz  # type: ignore
-        _macos_warp_available = True
+        _macos_cgevent_available = True
     except ImportError:
         pass
 
@@ -80,8 +80,8 @@ def _get_platform_api() -> str:
         elif _windows_mouse_event_available:
             return "windows_mouse_event"
     elif platform.system() == "Darwin":
-        if _macos_warp_available:
-            return "macos_warp"
+        if _macos_cgevent_available:
+            return "macos_cgevent"
     elif platform.system() == "Linux":
         if _linux_x11_available:
             return "linux_x11"
@@ -213,22 +213,33 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
     return move_absolute, move_relative
 
 
-def _make_macos_warp_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
+def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
     """macOS CoreGraphics mouse movement
 
     Returns (absolute_func, relative_func)
-    Note: macOS only supports absolute positioning, so relative mode
-    implements relative movement on top of absolute positioning.
+    Uses CGEventCreateMouseEvent with delta fields for proper relative movement.
+    Games read kCGMouseEventDeltaX/DeltaY from events, not absolute position.
     """
     import Quartz  # type: ignore
 
     def move_absolute(x: float, y: float) -> None:
-        Quartz.CGWarpMouseCursorPosition((x, y))
+        event = Quartz.CGEventCreateMouseEvent(
+            None, Quartz.kCGEventMouseMoved, (x, y), Quartz.kCGMouseButtonLeft
+        )
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
     def move_relative(dx: float, dy: float) -> None:
-        # Get current position and add delta
+        scale = settings.get("user.mouse_rig_scale", 1.0)
+        sdx = int(dx * scale)
+        sdy = int(dy * scale)
         current_x, current_y = ctrl.mouse_pos()
-        Quartz.CGWarpMouseCursorPosition((current_x + dx, current_y + dy))
+        event = Quartz.CGEventCreateMouseEvent(
+            None, Quartz.kCGEventMouseMoved,
+            (current_x + sdx, current_y + sdy), Quartz.kCGMouseButtonLeft
+        )
+        Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaX, sdx)
+        Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaY, sdy)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
     return move_absolute, move_relative
 
@@ -322,12 +333,12 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
             abs_func, rel_func = _make_windows_send_input_mouse_move()
             return abs_func if is_absolute else rel_func
 
-    elif api_type == "macos_warp":
-        if not _macos_warp_available:
-            print("[Mouse Rig] macos_warp API requires pyobjc-framework-Quartz, falling back to talon")
+    elif api_type == "macos_cgevent":
+        if not _macos_cgevent_available:
+            print("[Mouse Rig] macos_cgevent API requires pyobjc-framework-Quartz, falling back to talon")
             api_type = "talon"
         else:
-            abs_func, rel_func = _make_macos_warp_mouse_move()
+            abs_func, rel_func = _make_macos_cgevent_mouse_move()
             return abs_func if is_absolute else rel_func
 
     elif api_type == "linux_x11":
@@ -471,7 +482,7 @@ def _make_windows_mouse_event_mouse_scroll() -> Callable[[float, float], None]:
     return scroll
 
 
-def _make_macos_warp_mouse_scroll() -> Callable[[float, float], None]:
+def _make_macos_cgevent_mouse_scroll() -> Callable[[float, float], None]:
     """macOS CoreGraphics scroll with pixel-level precision"""
     import Quartz  # type: ignore
 
@@ -576,11 +587,11 @@ def _get_scroll_function(api_type: str) -> Callable[[float, float], None]:
         else:
             return _make_windows_mouse_event_mouse_scroll()
 
-    elif api_type == "macos_warp":
-        if not _macos_warp_available:
+    elif api_type == "macos_cgevent":
+        if not _macos_cgevent_available:
             api_type = "talon"
         else:
-            return _make_macos_warp_mouse_scroll()
+            return _make_macos_cgevent_mouse_scroll()
 
     elif api_type == "linux_x11":
         if not _linux_x11_available:
