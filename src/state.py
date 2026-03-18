@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, SCROLL_EMIT_THRESHOLD
+from .core import SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_get_expected_pos, mouse_scroll_native, SCROLL_EMIT_THRESHOLD
 from .mouse_api import get_mouse_move_functions
 
 if TYPE_CHECKING:
@@ -683,7 +683,7 @@ def _build_classes(core):
                             final_delta_int = final_target_int - builder._total_emitted_int
 
                             if final_delta_int.x != 0 or final_delta_int.y != 0:
-                                _, move_relative_override = self._get_override_functions()
+                                _, move_relative_override, _ = self._get_override_functions()
                                 if move_relative_override is not None:
                                     move_relative_override(int(final_delta_int.x), int(final_delta_int.y))
                                 else:
@@ -932,7 +932,7 @@ def _build_classes(core):
                 will_be_active = self._has_movement() or active_count > 0
                 is_relative = builder.config.movement_type == "relative"
                 if not will_be_active and not is_relative and self._absolute_base_pos is not None:
-                    move_absolute_override, _ = self._get_override_functions()
+                    move_absolute_override, _, _ = self._get_override_functions()
                     if move_absolute_override is not None:
                         move_absolute_override(int(self._absolute_base_pos.x), int(self._absolute_base_pos.y))
                     else:
@@ -1155,7 +1155,7 @@ def _build_classes(core):
         def _get_override_functions(self):
             """Get override functions if any builder has overrides"""
             if not self._has_api_overrides():
-                return None, None
+                return None, None, None
 
             api_override = None
             for group in self._layer_groups.values():
@@ -1167,7 +1167,7 @@ def _build_classes(core):
 
         def _emit_mouse_movement(self, has_absolute_position: bool, absolute_target, frame_delta):
             """Emit mouse movement based on accumulated deltas"""
-            move_absolute_override, move_relative_override = self._get_override_functions()
+            move_absolute_override, move_relative_override, get_expected_pos_override = self._get_override_functions()
 
             if has_absolute_position:
                 final_pos = absolute_target + frame_delta
@@ -1183,14 +1183,14 @@ def _build_classes(core):
                     self._expected_mouse_pos = (new_x, new_y)
             else:
                 if frame_delta.x != 0 or frame_delta.y != 0:
-                    pre_x, pre_y = ctrl.mouse_pos()
                     dx = round(frame_delta.x)
                     dy = round(frame_delta.y)
                     if move_relative_override is not None:
                         move_relative_override(dx, dy)
+                        self._expected_mouse_pos = get_expected_pos_override()
                     else:
                         mouse_move_relative(dx, dy)
-                    self._expected_mouse_pos = (pre_x + dx, pre_y + dy)
+                        self._expected_mouse_pos = mouse_get_expected_pos()
 
         def _emit_scroll(self, scroll_pos_delta=None):
             """Emit scroll events"""
