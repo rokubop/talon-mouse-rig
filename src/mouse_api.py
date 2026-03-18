@@ -21,8 +21,6 @@ import platform
 from typing import Callable, Tuple, Optional
 from talon import ctrl, settings
 
-print("[mouse_api] MODULE LOADED")
-
 
 # Available mouse APIs
 MOUSE_APIS = {
@@ -381,7 +379,6 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
             print("[Mouse Rig] macos_cgevent API: CoreGraphics not available, falling back to talon")
             api_type = "talon"
         else:
-            print(f"[mouse_api] _get_api_function: using macos_cgevent (is_absolute={is_absolute})")
             abs_func, rel_func = _make_macos_cgevent_mouse_move()
             return abs_func if is_absolute else rel_func
 
@@ -527,50 +524,33 @@ def _make_windows_mouse_event_mouse_scroll() -> Callable[[float, float], None]:
 
 
 def _make_macos_cgevent_mouse_scroll() -> Callable[[float, float], None]:
-    """macOS CoreGraphics scroll via ctypes — emulates trackpad events
+    """macOS CoreGraphics scroll via ctypes
 
-    Marks events as continuous (trackpad-like) with scroll phases so macOS
-    bypasses discrete scroll acceleration. Uses CGEventCreateScrollWheelEvent2
-    (non-variadic) for Apple Silicon compatibility.
+    Uses CGEventCreateScrollWheelEvent2 (non-variadic, required for ARM64
+    Apple Silicon) with line units. Scales input to emit frequently enough
+    for smooth continuous scrolling.
     """
     import ctypes
 
     cg = _cg
 
-    # Try non-variadic version first (ARM64), fall back to variadic
+    # Non-variadic Event2 required for ARM64 — variadic version drops
+    # horizontal arg due to ABI mismatch with ctypes on Apple Silicon
     _has_event2 = hasattr(cg, 'CGEventCreateScrollWheelEvent2')
-    print(f"[scroll] CGEventCreateScrollWheelEvent2 available: {_has_event2}")
 
     if _has_event2:
         cg.CGEventCreateScrollWheelEvent2.argtypes = [
-            ctypes.c_void_p,  # source
-            ctypes.c_uint32,  # units
-            ctypes.c_uint32,  # wheelCount
-            ctypes.c_int32,   # wheel1 (vertical)
-            ctypes.c_int32,   # wheel2 (horizontal)
-            ctypes.c_int32,   # wheel3
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
         ]
         cg.CGEventCreateScrollWheelEvent2.restype = ctypes.c_void_p
 
-    # Also set up variadic version as fallback
+    # Variadic fallback for older macOS
     cg.CGEventCreateScrollWheelEvent.argtypes = [
-        ctypes.c_void_p,  # source
-        ctypes.c_uint32,  # units
-        ctypes.c_uint32,  # wheelCount
-        ctypes.c_int32,   # wheel1 (vertical)
-        ctypes.c_int32,   # wheel2 (horizontal)
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+        ctypes.c_int32, ctypes.c_int32,
     ]
     cg.CGEventCreateScrollWheelEvent.restype = ctypes.c_void_p
-
-    cg.CGEventSetIntegerValueField.argtypes = [
-        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int64
-    ]
-    cg.CGEventSetIntegerValueField.restype = None
-
-    cg.CGEventSetDoubleValueField.argtypes = [
-        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_double
-    ]
-    cg.CGEventSetDoubleValueField.restype = None
 
     cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
     cg.CGEventPost.restype = None
@@ -578,9 +558,6 @@ def _make_macos_cgevent_mouse_scroll() -> Callable[[float, float], None]:
     cg.CFRelease.argtypes = [ctypes.c_void_p]
     cg.CFRelease.restype = None
 
-    # Line units work. Now multiply to emit more frequently.
-    # With dy=0.03 per tick, we need a multiplier so we cross integer thresholds faster.
-    # 30x means 0.03 * 30 = 0.9 lines/tick → emit ~1 line every tick
     kCGScrollEventUnitLine = 0
     kCGHIDEventTap = 0
     SCALE = 30
@@ -601,9 +578,16 @@ def _make_macos_cgevent_mouse_scroll() -> Callable[[float, float], None]:
             if delta_x != 0:
                 accum_x[0] -= delta_x
 
-            event = cg.CGEventCreateScrollWheelEvent(
-                None, kCGScrollEventUnitLine, 2, -delta_y, delta_x
-            )
+            # Use non-variadic Event2 for ARM64 compatibility (horizontal arg
+            # gets lost with variadic CGEventCreateScrollWheelEvent on Apple Silicon)
+            if _has_event2:
+                event = cg.CGEventCreateScrollWheelEvent2(
+                    None, kCGScrollEventUnitLine, 2, -delta_y, -delta_x, 0
+                )
+            else:
+                event = cg.CGEventCreateScrollWheelEvent(
+                    None, kCGScrollEventUnitLine, 2, -delta_y, -delta_x
+                )
             if event:
                 cg.CGEventPost(kCGHIDEventTap, event)
                 cg.CFRelease(event)
@@ -672,7 +656,6 @@ def get_mouse_scroll_function(override: Optional[str] = None) -> Callable[[float
 
 def _get_scroll_function(api_type: str) -> Callable[[float, float], None]:
     """Get a scroll function for the specified API"""
-    print(f"[mouse_api] _get_scroll_function: api_type={api_type}, macos_available={_macos_cgevent_available}, _cg={_cg}")
     if api_type not in MOUSE_APIS:
         api_type = "talon"
 

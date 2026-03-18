@@ -112,14 +112,6 @@ def mouse_scroll_native(dx: float, dy: float) -> None:
     _mouse_scroll(dx, dy)
 
 
-def mouse_scroll_end() -> None:
-    """End scroll gesture (needed for macOS trackpad-style events)"""
-    if _mouse_scroll is None:
-        return
-    end_fn = getattr(_mouse_scroll, 'end', None)
-    if end_fn:
-        end_fn()
-
 
 # ============================================================================
 # MOUSE-SPECIFIC: SCROLL EMIT THRESHOLD
