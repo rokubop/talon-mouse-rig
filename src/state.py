@@ -11,7 +11,7 @@ import time
 import math
 from typing import Optional, TYPE_CHECKING, Union, Any
 from talon import cron, ctrl, settings
-from .core import SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, SCROLL_EMIT_THRESHOLD
+from .core import SubpixelAdjuster, mouse_move, mouse_move_relative, mouse_scroll_native, mouse_scroll_end, SCROLL_EMIT_THRESHOLD
 from .mouse_api import get_mouse_move_functions
 
 if TYPE_CHECKING:
@@ -1991,6 +1991,7 @@ def _build_classes(core):
 
             if transition_ms is None or transition_ms == 0:
                 self._base_scroll_speed = 0.0
+                mouse_scroll_end()
                 for callback in self._scroll_stop_callbacks:
                     try:
                         callback()
