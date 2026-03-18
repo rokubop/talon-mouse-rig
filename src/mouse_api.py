@@ -218,26 +218,23 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
     return move_absolute, move_relative, _sync_expected_pos
 
 
-def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None], Callable[[], Tuple[int, int]]]:
+def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None], None]:
     """macOS CoreGraphics mouse movement
 
-    Returns (absolute_func, relative_func, get_expected_pos)
+    Returns (absolute_func, relative_func, None)
     Uses CGEventCreateMouseEvent with delta fields for proper relative movement.
     Games read kCGMouseEventDeltaX/DeltaY from events, not absolute position.
 
     CGEventPost is async — ctrl.mouse_pos() won't reflect the new position
-    immediately. get_expected_pos returns the calculated target position instead.
+    immediately, so manual movement detection is not supported for this API.
     """
     import Quartz  # type: ignore
-
-    _last_expected_pos = [None]
 
     def move_absolute(x: float, y: float) -> None:
         event = Quartz.CGEventCreateMouseEvent(
             None, Quartz.kCGEventMouseMoved, (x, y), Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-        _last_expected_pos[0] = (int(x), int(y))
 
     def move_relative(dx: float, dy: float) -> None:
         scale = settings.get("user.mouse_rig_scale", 1.0)
@@ -251,14 +248,8 @@ def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Ca
         Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaX, sdx)
         Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaY, sdy)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
-        _last_expected_pos[0] = (current_x + sdx, current_y + sdy)
 
-    def get_expected_pos() -> Tuple[int, int]:
-        if _last_expected_pos[0] is not None:
-            return _last_expected_pos[0]
-        return ctrl.mouse_pos()
-
-    return move_absolute, move_relative, get_expected_pos
+    return move_absolute, move_relative, None
 
 
 def _make_linux_x11_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:

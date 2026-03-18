@@ -110,10 +110,10 @@ def mouse_get_expected_pos():
     """Get expected cursor position after the last relative move.
 
     For sync APIs (Windows, Linux, Talon), reads ctrl.mouse_pos().
-    For async APIs (macOS CGEvent), returns the calculated target position.
+    For async APIs (macOS CGEvent), returns None (detection not supported).
     """
     if _mouse_get_expected_pos is None:
-        _initialize_mouse_move()
+        return None
     return _mouse_get_expected_pos()
 
 

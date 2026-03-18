@@ -1187,10 +1187,13 @@ def _build_classes(core):
                     dy = round(frame_delta.y)
                     if move_relative_override is not None:
                         move_relative_override(dx, dy)
-                        self._expected_mouse_pos = get_expected_pos_override()
+                        if get_expected_pos_override is not None:
+                            self._expected_mouse_pos = get_expected_pos_override()
                     else:
                         mouse_move_relative(dx, dy)
-                        self._expected_mouse_pos = mouse_get_expected_pos()
+                        expected = mouse_get_expected_pos()
+                        if expected is not None:
+                            self._expected_mouse_pos = expected
 
         def _emit_scroll(self, scroll_pos_delta=None):
             """Emit scroll events"""
