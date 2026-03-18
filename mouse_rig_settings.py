@@ -22,7 +22,7 @@ mod.setting(
     - "talon": Talon actions.mouse_nudge for relative movement and ctrl.mouse_move for absolute movement
     - "windows_send_input": Windows SendInput (modern, recommended for Windows)
     - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
-    - "macos_cgevent": macOS CGEventCreateMouseEvent (requires pyobjc-framework-Quartz)
+    - "macos_cgevent": macOS CGEventCreateMouseEvent (via CoreGraphics ctypes)
     - "linux_x11": Linux X11 XWarpPointer (requires python-xlib)
 
     To override this, chain .api("name") to force a specific API for an individual action.
@@ -40,7 +40,7 @@ mod.setting(
     - "talon": Talon actions.mouse_scroll (cross-platform, but quantizes small values)
     - "windows_send_input": Windows SendInput MOUSEEVENTF_WHEEL/HWHEEL
     - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
-    - "macos_cgevent": macOS CGEventCreateScrollWheelEvent (requires pyobjc-framework-Quartz)
+    - "macos_cgevent": macOS CGEventCreateScrollWheelEvent (via CoreGraphics ctypes)
     - "linux_x11": Linux X11 XTest fake button events (requires python-xlib)
     """
 )

@@ -55,10 +55,16 @@ if platform.system() == "Windows":
 
 elif platform.system() == "Darwin":
     try:
-        import Quartz  # type: ignore
-        _macos_cgevent_available = True
-    except ImportError:
-        pass
+        import ctypes
+        import ctypes.util
+        _cg_path = ctypes.util.find_library("CoreGraphics")
+        if _cg_path:
+            _cg = ctypes.cdll.LoadLibrary(_cg_path)
+            _macos_cgevent_available = True
+        else:
+            _cg = None
+    except (ImportError, OSError):
+        _cg = None
 
 elif platform.system() == "Linux":
     try:
@@ -214,32 +220,67 @@ def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None
 
 
 def _make_macos_cgevent_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
-    """macOS CoreGraphics mouse movement
+    """macOS CoreGraphics mouse movement via ctypes
 
     Returns (absolute_func, relative_func)
     Uses CGEventCreateMouseEvent with delta fields for proper relative movement.
     Games read kCGMouseEventDeltaX/DeltaY from events, not absolute position.
     """
-    import Quartz  # type: ignore
+    import ctypes
+
+    cg = _cg
+
+    # CGPoint struct
+    class CGPoint(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+    # CGEventCreateMouseEvent(source, mouseType, mouseCursorPosition, mouseButton)
+    cg.CGEventCreateMouseEvent.argtypes = [
+        ctypes.c_void_p,  # source
+        ctypes.c_uint32,  # mouseType
+        CGPoint,          # mouseCursorPosition
+        ctypes.c_uint32,  # mouseButton
+    ]
+    cg.CGEventCreateMouseEvent.restype = ctypes.c_void_p
+
+    cg.CGEventSetIntegerValueField.argtypes = [
+        ctypes.c_void_p,  # event
+        ctypes.c_uint32,  # field
+        ctypes.c_int64,   # value
+    ]
+    cg.CGEventSetIntegerValueField.restype = None
+
+    cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+    cg.CGEventPost.restype = None
+
+    cg.CFRelease.argtypes = [ctypes.c_void_p]
+    cg.CFRelease.restype = None
+
+    kCGEventMouseMoved = 5
+    kCGMouseButtonLeft = 0
+    kCGMouseEventDeltaX = 56
+    kCGMouseEventDeltaY = 57
+    kCGHIDEventTap = 0
 
     def move_absolute(x: float, y: float) -> None:
-        event = Quartz.CGEventCreateMouseEvent(
-            None, Quartz.kCGEventMouseMoved, (x, y), Quartz.kCGMouseButtonLeft
-        )
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        point = CGPoint(x, y)
+        event = cg.CGEventCreateMouseEvent(None, kCGEventMouseMoved, point, kCGMouseButtonLeft)
+        if event:
+            cg.CGEventPost(kCGHIDEventTap, event)
+            cg.CFRelease(event)
 
     def move_relative(dx: float, dy: float) -> None:
         scale = settings.get("user.mouse_rig_scale", 1.0)
         sdx = int(dx * scale)
         sdy = int(dy * scale)
         current_x, current_y = ctrl.mouse_pos()
-        event = Quartz.CGEventCreateMouseEvent(
-            None, Quartz.kCGEventMouseMoved,
-            (current_x + sdx, current_y + sdy), Quartz.kCGMouseButtonLeft
-        )
-        Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaX, sdx)
-        Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaY, sdy)
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        point = CGPoint(current_x + sdx, current_y + sdy)
+        event = cg.CGEventCreateMouseEvent(None, kCGEventMouseMoved, point, kCGMouseButtonLeft)
+        if event:
+            cg.CGEventSetIntegerValueField(event, kCGMouseEventDeltaX, sdx)
+            cg.CGEventSetIntegerValueField(event, kCGMouseEventDeltaY, sdy)
+            cg.CGEventPost(kCGHIDEventTap, event)
+            cg.CFRelease(event)
 
     return move_absolute, move_relative
 
@@ -335,7 +376,7 @@ def _get_api_function(api_type: str, is_absolute: bool) -> Callable[[float, floa
 
     elif api_type == "macos_cgevent":
         if not _macos_cgevent_available:
-            print("[Mouse Rig] macos_cgevent API requires pyobjc-framework-Quartz, falling back to talon")
+            print("[Mouse Rig] macos_cgevent API: CoreGraphics not available, falling back to talon")
             api_type = "talon"
         else:
             abs_func, rel_func = _make_macos_cgevent_mouse_move()
@@ -483,30 +524,73 @@ def _make_windows_mouse_event_mouse_scroll() -> Callable[[float, float], None]:
 
 
 def _make_macos_cgevent_mouse_scroll() -> Callable[[float, float], None]:
-    """macOS CoreGraphics scroll with pixel-level precision"""
-    import Quartz  # type: ignore
+    """macOS CoreGraphics scroll via ctypes
+
+    Uses CGEventCreateScrollWheelEvent2 (non-variadic, required for ARM64
+    Apple Silicon) with line units. Scales input to emit frequently enough
+    for smooth continuous scrolling.
+    """
+    import ctypes
+
+    cg = _cg
+
+    # Non-variadic Event2 required for ARM64 — variadic version drops
+    # horizontal arg due to ABI mismatch with ctypes on Apple Silicon
+    _has_event2 = hasattr(cg, 'CGEventCreateScrollWheelEvent2')
+
+    if _has_event2:
+        cg.CGEventCreateScrollWheelEvent2.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ]
+        cg.CGEventCreateScrollWheelEvent2.restype = ctypes.c_void_p
+
+    # Variadic fallback for older macOS
+    cg.CGEventCreateScrollWheelEvent.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+        ctypes.c_int32, ctypes.c_int32,
+    ]
+    cg.CGEventCreateScrollWheelEvent.restype = ctypes.c_void_p
+
+    cg.CGEventPost.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+    cg.CGEventPost.restype = None
+
+    cg.CFRelease.argtypes = [ctypes.c_void_p]
+    cg.CFRelease.restype = None
+
+    kCGScrollEventUnitLine = 0
+    kCGHIDEventTap = 0
+    SCALE = 30
 
     accum_x = [0.0]
     accum_y = [0.0]
 
     def scroll(dx: float, dy: float) -> None:
-        accum_x[0] += dx
-        accum_y[0] += dy
+        accum_x[0] += dx * SCALE
+        accum_y[0] += dy * SCALE
 
-        # Use pixel units (kCGScrollEventUnitPixel = 1) for sub-line precision
-        # CGEventCreateScrollWheelEvent: positive = scroll UP, our positive dy = DOWN → negate
-        delta_y = int(accum_y[0] * 10)  # Scale lines to pixel-ish units
-        delta_x = int(accum_x[0] * 10)
+        delta_y = int(accum_y[0])
+        delta_x = int(accum_x[0])
 
         if delta_y != 0 or delta_x != 0:
             if delta_y != 0:
-                accum_y[0] -= delta_y / 10.0
+                accum_y[0] -= delta_y
             if delta_x != 0:
-                accum_x[0] -= delta_x / 10.0
-            event = Quartz.CGEventCreateScrollWheelEvent(
-                None, 1, 2, -delta_y, delta_x  # unit=pixel, axes=2
-            )
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+                accum_x[0] -= delta_x
+
+            # Use non-variadic Event2 for ARM64 compatibility (horizontal arg
+            # gets lost with variadic CGEventCreateScrollWheelEvent on Apple Silicon)
+            if _has_event2:
+                event = cg.CGEventCreateScrollWheelEvent2(
+                    None, kCGScrollEventUnitLine, 2, -delta_y, -delta_x, 0
+                )
+            else:
+                event = cg.CGEventCreateScrollWheelEvent(
+                    None, kCGScrollEventUnitLine, 2, -delta_y, -delta_x
+                )
+            if event:
+                cg.CGEventPost(kCGHIDEventTap, event)
+                cg.CFRelease(event)
 
     return scroll
 
