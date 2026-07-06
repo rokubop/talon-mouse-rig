@@ -40,11 +40,11 @@ _linux_x11_available = False
 
 # Check platform-specific availability
 if platform.system() == "Windows":
-    try:
-        import win32api, win32con  # type: ignore
-        _windows_mouse_event_available = True
-    except ImportError:
-        pass
+    # Probe with find_spec instead of importing: loading pywin32's C
+    # extensions re-enables the GIL on free-threaded Python builds, so they
+    # must only be imported if the windows_mouse_event backend is selected.
+    import importlib.util
+    _windows_mouse_event_available = importlib.util.find_spec("win32api") is not None
 
     try:
         import ctypes
