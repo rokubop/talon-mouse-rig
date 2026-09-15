@@ -22,6 +22,15 @@ def _parse_direction(direction: str) -> tuple:
     key = direction.replace(" ", "_").replace("-", "_").lower()
     return DIRECTION_MAP[key]
 
+TURN_SPEED_BASE = 3.0
+TURN_SPEED_KNEE = 2.0
+
+def _turn_speed_factor(speed: float) -> float:
+    factor = max(1.0, speed / TURN_SPEED_BASE)
+    if factor > TURN_SPEED_KNEE:
+        factor = TURN_SPEED_KNEE + (factor - TURN_SPEED_KNEE) ** 0.5
+    return factor
+
 @mod.action_class
 class Actions:
     def mouse_rig() -> Any:
@@ -369,7 +378,7 @@ class Actions:
             rig.speed.to(speed).over(speed_ms, speed_easing)
         else:
             # Already moving: smooth turn
-            speed_factor = max(1.0, rig.state.speed / 3.0)
+            speed_factor = _turn_speed_factor(rig.state.speed)
             turn_ms = int(base_turn_ms * scale * speed_factor)
             rig.direction.to(x, y).over(turn_ms, turn_easing)
             if force:
@@ -766,7 +775,7 @@ class Actions:
             rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
         else:
             # Already scrolling: smooth turn
-            speed_factor = max(1.0, rig.state.scroll_speed / 3.0)
+            speed_factor = _turn_speed_factor(rig.state.scroll_speed)
             turn_ms = int(base_turn_ms * scale * speed_factor)
             rig.scroll.direction.to(x, y).over(turn_ms, turn_easing)
             if force:
