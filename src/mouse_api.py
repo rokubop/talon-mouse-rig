@@ -24,12 +24,23 @@ from talon import ctrl, settings
 
 # Available mouse APIs
 MOUSE_APIS = {
-    'platform': 'Auto-detect best platform-specific API',
-    'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
-    'windows_mouse_event': 'Windows win32api.mouse_event (legacy API)',
-    'windows_send_input': 'Windows SendInput (modern, recommended)',
-    'macos_cgevent': 'macOS CGEventCreateMouseEvent',
-    'linux_x11': 'Linux X11 XWarpPointer',
+    'platform': 'The best API for this platform: windows_send_input, macos_cgevent or linux_x11.',
+    'talon': 'Talon: actions.mouse_nudge to move by, ctrl.mouse_move to move to. Every platform.',
+    'windows_send_input': 'Windows SendInput. The one to use on Windows.',
+    'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
+    'macos_cgevent': 'macOS CGEventCreateMouseEvent, through CoreGraphics.',
+    'linux_x11': 'Linux X11 XWarpPointer. Needs python-xlib.',
+}
+
+# Scroll takes the same names, plus 'default'. What each does to a wheel.
+SCROLL_APIS = {
+    'default': 'Whatever mouse_rig_api is.',
+    'platform': 'The best API for this platform.',
+    'talon': 'Talon actions.mouse_scroll. Every platform, but small amounts round to whole steps.',
+    'windows_send_input': 'Windows SendInput wheel events.',
+    'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
+    'macos_cgevent': 'macOS CGEventCreateScrollWheelEvent, through CoreGraphics.',
+    'linux_x11': 'Linux X11 XTest button events. Needs python-xlib.',
 }
 
 # Track availability of each API

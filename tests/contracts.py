@@ -211,6 +211,41 @@ def test_interpolations_are_valid(on_success, on_failure):
         on_failure(f"Unexpected error: {e}")
 
 
+def test_type_links_resolve(on_success, on_failure):
+    """Test: every `Type: ns.name` in the docstrings and settings names a set
+    in that package's types, and every value quoted beside it is in the set"""
+    try:
+        import re
+        from pathlib import Path
+
+        sets = {"mouse_rig": actions.user.mouse_rig_types(),
+                "rig_core": actions.user.rig_core_types()}
+        root = Path(__file__).parent.parent
+        problems = []
+        for name in ("mouse_rig.py", "mouse_rig_settings.py"):
+            for line in (root / name).read_text(encoding="utf-8").splitlines():
+                link = re.search(r"Type: (\w+)\.(\w+)", line)
+                if not link:
+                    continue
+                ns, type_name = link.groups()
+                found = sets.get(ns, {}).get(type_name)
+                if found is None:
+                    problems.append(f"{name}: Type: {ns}.{type_name} is in no set")
+                    continue
+                ids = {v["id"] for v in found["values"]}
+                for quoted in re.findall(r'"(\w+)"', line[:link.start()]):
+                    if quoted not in ids:
+                        problems.append(f"{name}: '{quoted}' is not a {ns}.{type_name}")
+
+        if problems:
+            on_failure("; ".join(problems))
+            return
+        on_success()
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -224,4 +259,5 @@ CONTRACTS_TESTS = [
     ("no extra schemas", test_no_extra_schemas),
     ("easings implemented", test_easings_are_implemented),
     ("interpolations valid", test_interpolations_are_valid),
+    ("type links resolve", test_type_links_resolve),
 ]
