@@ -27,7 +27,8 @@ def types() -> dict:
         "button": {"desc": "A mouse button.", "values": _values(BUTTONS)},
         "mouse_api": {"desc": "What moves the cursor. pos.to always uses ctrl.mouse_move.",
                       "values": _values(MOUSE_APIS)},
-        "scroll_api": {"desc": "What scrolls. The native APIs scroll by less than a line.",
+        "scroll_api": {"desc": "What scrolls, for the mouse_rig_scroll_api setting. The native "
+                               "APIs scroll by less than a line.",
                        "values": _values(SCROLL_APIS)},
     }
 

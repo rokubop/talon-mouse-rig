@@ -24,7 +24,7 @@ from talon import ctrl, settings
 
 # Available mouse APIs
 MOUSE_APIS = {
-    'platform': 'The best API for this platform: windows_send_input, macos_cgevent or linux_x11.',
+    'platform': 'The best API for this platform: windows_send_input, macos_cgevent or linux_x11, else windows_mouse_event, else talon.',
     'talon': 'Talon: actions.mouse_nudge to move by, ctrl.mouse_move to move to. Every platform.',
     'windows_send_input': 'Windows SendInput. The one to use on Windows.',
     'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
