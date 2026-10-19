@@ -211,6 +211,21 @@ def test_interpolations_are_valid(on_success, on_failure):
         on_failure(f"Unexpected error: {e}")
 
 
+def test_scroll_apis_are_mouse_apis(on_success, on_failure):
+    """Test: scroll takes the mouse APIs, plus 'default'"""
+    try:
+        from ..src.mouse_api import MOUSE_APIS, SCROLL_APIS
+
+        if set(SCROLL_APIS) != set(MOUSE_APIS) | {"default"}:
+            on_failure(f"SCROLL_APIS and MOUSE_APIS differ: "
+                       f"{sorted(set(SCROLL_APIS) ^ (set(MOUSE_APIS) | {'default'}))}")
+            return
+        on_success()
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
 def test_type_links_resolve(on_success, on_failure):
     """Test: every `Type: ns.name` in the docstrings and settings names a set
     in that package's types, and every value quoted beside it is in the set"""
@@ -259,5 +274,6 @@ CONTRACTS_TESTS = [
     ("no extra schemas", test_no_extra_schemas),
     ("easings implemented", test_easings_are_implemented),
     ("interpolations valid", test_interpolations_are_valid),
+    ("scroll apis are mouse apis", test_scroll_apis_are_mouse_apis),
     ("type links resolve", test_type_links_resolve),
 ]
