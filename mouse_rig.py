@@ -5,22 +5,22 @@ from .src.sequence import run_sequence, WaitHandle
 
 mod = Module()
 
-# name: (value, what it is). mouse_rig_types() describes them from here.
+# name: (value, description)
 BUTTONS = {
-    "left":   (0, "The left button."),
-    "right":  (1, "The right button."),
-    "middle": (2, "The middle button, or wheel click."),
+    "left":   (0, ""),
+    "right":  (1, ""),
+    "middle": (2, "Or wheel click."),
 }
 
 DIRECTIONS = {
-    "left":       ((-1,  0), "Left."),
-    "right":      (( 1,  0), "Right."),
-    "up":         (( 0, -1), "Up."),
-    "down":       (( 0,  1), "Down."),
-    "up_left":    ((-1, -1), "Up and left together."),
-    "up_right":   (( 1, -1), "Up and right together."),
-    "down_left":  ((-1,  1), "Down and left together."),
-    "down_right": (( 1,  1), "Down and right together."),
+    "left":       ((-1,  0), ""),
+    "right":      (( 1,  0), ""),
+    "up":         (( 0, -1), ""),
+    "down":       (( 0,  1), ""),
+    "up_left":    ((-1, -1), ""),
+    "up_right":   (( 1, -1), ""),
+    "down_left":  ((-1,  1), ""),
+    "down_right": (( 1,  1), ""),
 }
 
 BUTTON_MAP = {name: n for name, (n, _desc) in BUTTONS.items()}

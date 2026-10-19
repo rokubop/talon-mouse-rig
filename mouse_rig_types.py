@@ -1,10 +1,4 @@
-"""user.mouse_rig_types(): the named sets of values the mouse rig takes,
-each value described. A param or setting that takes one says so:
-`Type: mouse_rig.direction`. Easings are rig_core's.
-
-Read from the tables the code runs on, so there is no list to keep in
-step.
-"""
+"""Value sets for user.mouse_rig_types(), built from the tables the code runs on. Easings are rig_core's."""
 
 from talon import Module
 
@@ -45,6 +39,6 @@ def types() -> dict:
 @mod.action_class
 class Actions:
     def mouse_rig_types() -> dict:
-        """Named sets of values the mouse rig takes, each value described:
+        """Named sets of values the mouse rig takes:
         {name: {"desc": str, "values": [{"id": str, "desc": str}]}}"""
         return types()
