@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "user.mouse_rig",
+  "x-format": 1,
+  "description": "What the mouse rig accepts beyond its actions' signatures. Easings are rig_core's.",
+  "$defs": {
+    "direction": {
+      "description": "Which way to move or scroll. Spaces, hyphens and capitals are also taken: 'up left', 'Up-Left'.",
+      "oneOf": [
+        {
+          "const": "left"
+        },
+        {
+          "const": "right"
+        },
+        {
+          "const": "up"
+        },
+        {
+          "const": "down"
+        },
+        {
+          "const": "up_left",
+          "description": "Up and left together."
+        },
+        {
+          "const": "up_right",
+          "description": "Up and right together."
+        },
+        {
+          "const": "down_left",
+          "description": "Down and left together."
+        },
+        {
+          "const": "down_right",
+          "description": "Down and right together."
+        }
+      ]
+    },
+    "button": {
+      "description": "A mouse button.",
+      "oneOf": [
+        {
+          "const": "left",
+          "description": "The left button."
+        },
+        {
+          "const": "right",
+          "description": "The right button."
+        },
+        {
+          "const": "middle",
+          "description": "The middle button, or wheel click."
+        }
+      ]
+    },
+    "mouse_api": {
+      "description": "What moves the cursor. pos.to always uses ctrl.mouse_move.",
+      "oneOf": [
+        {
+          "const": "platform",
+          "description": "The best API for this platform: windows_send_input, macos_cgevent or linux_x11."
+        },
+        {
+          "const": "talon",
+          "description": "Talon: actions.mouse_nudge to move by, ctrl.mouse_move to move to. Every platform."
+        },
+        {
+          "const": "windows_send_input",
+          "description": "Windows SendInput. The one to use on Windows."
+        },
+        {
+          "const": "windows_mouse_event",
+          "description": "Windows win32api.mouse_event, the older API. Needs pywin32."
+        },
+        {
+          "const": "macos_cgevent",
+          "description": "macOS CGEventCreateMouseEvent, through CoreGraphics."
+        },
+        {
+          "const": "linux_x11",
+          "description": "Linux X11 XWarpPointer. Needs python-xlib."
+        }
+      ]
+    },
+    "scroll_api": {
+      "description": "What scrolls. The native APIs scroll by less than a line.",
+      "oneOf": [
+        {
+          "const": "default",
+          "description": "Whatever mouse_rig_api is."
+        },
+        {
+          "const": "platform",
+          "description": "The best API for this platform."
+        },
+        {
+          "const": "talon",
+          "description": "Talon actions.mouse_scroll. Every platform, but small amounts round to whole steps."
+        },
+        {
+          "const": "windows_send_input",
+          "description": "Windows SendInput wheel events."
+        },
+        {
+          "const": "windows_mouse_event",
+          "description": "Windows win32api.mouse_event, the older API. Needs pywin32."
+        },
+        {
+          "const": "macos_cgevent",
+          "description": "macOS CGEventCreateScrollWheelEvent, through CoreGraphics."
+        },
+        {
+          "const": "linux_x11",
+          "description": "Linux X11 XTest button events. Needs python-xlib."
+        }
+      ]
+    }
+  }
+}

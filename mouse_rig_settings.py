@@ -1,8 +1,15 @@
 """Talon settings for mouse rig"""
 
 from talon import Module
+from ._schema import SCHEMA
 
 mod = Module()
+
+
+def _options(type_name: str) -> str:
+    """The values a setting takes, each described, from schema.json"""
+    return "\n".join(f'    - "{c["const"]}": {c.get("description", "")}'
+                     for c in SCHEMA["$defs"][type_name]["oneOf"])
 
 mod.setting(
     "mouse_rig_frame_interval",
@@ -16,15 +23,11 @@ mod.setting(
     "mouse_rig_api",
     type=str,
     default="platform",
-    desc="""API for all mouse rig movement, except `pos.to` which uses ctrl.mouse_move)
+    desc=f"""API for all mouse rig movement, except `pos.to` which uses ctrl.mouse_move)
     Options:
-    - "platform": Auto-detect best platform-specific API (windows_send_input, macos_cgevent, or linux_x11)
-    - "talon": Talon actions.mouse_nudge for relative movement and ctrl.mouse_move for absolute movement
-    - "windows_send_input": Windows SendInput (modern, recommended for Windows)
-    - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
-    - "macos_cgevent": macOS CGEventCreateMouseEvent (via CoreGraphics ctypes)
-    - "linux_x11": Linux X11 XWarpPointer (requires python-xlib)
+{_options("mouse_api")}
 
+    Type: mouse_rig.mouse_api
     To override this, chain .api("name") to force a specific API for an individual action.
     """
 )
@@ -33,15 +36,11 @@ mod.setting(
     "mouse_rig_scroll_api",
     type=str,
     default="default",
-    desc="""API for scroll operations. Uses native platform APIs for sub-line precision.
+    desc=f"""API for scroll operations. Uses native platform APIs for sub-line precision.
     Options:
-    - "default": Use the same API as mouse_rig_api
-    - "platform": Auto-detect best platform-specific API
-    - "talon": Talon actions.mouse_scroll (cross-platform, but quantizes small values)
-    - "windows_send_input": Windows SendInput MOUSEEVENTF_WHEEL/HWHEEL
-    - "windows_mouse_event": Windows win32api.mouse_event (legacy, requires pywin32)
-    - "macos_cgevent": macOS CGEventCreateScrollWheelEvent (via CoreGraphics ctypes)
-    - "linux_x11": Linux X11 XTest fake button events (requires python-xlib)
+{_options("scroll_api")}
+
+    Type: mouse_rig.scroll_api
     """
 )
 
@@ -67,7 +66,7 @@ mod.setting(
     "mouse_rig_smooth_turn_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for direction changes in move_continuous_smooth"
+    desc="Easing function for direction changes in move_continuous_smooth. Type: rig_core.easing"
 )
 
 mod.setting(
@@ -81,7 +80,7 @@ mod.setting(
     "mouse_rig_smooth_speed_easing",
     type=str,
     default="ease_in_out",
-    desc="Easing function for speed changes in move_continuous_smooth"
+    desc="Easing function for speed changes in move_continuous_smooth. Type: rig_core.easing"
 )
 
 mod.setting(
@@ -95,7 +94,7 @@ mod.setting(
     "mouse_rig_smooth_delta_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for move_delta_smooth one-shot movements"
+    desc="Easing function for move_delta_smooth one-shot movements. Type: rig_core.easing"
 )
 
 mod.setting(
@@ -109,7 +108,7 @@ mod.setting(
     "mouse_rig_smooth_scroll_easing",
     type=str,
     default="ease_out2",
-    desc="Easing function for scroll_delta_smooth one-shot scrolls"
+    desc="Easing function for scroll_delta_smooth one-shot scrolls. Type: rig_core.easing"
 )
 
 mod.setting(
@@ -123,5 +122,5 @@ mod.setting(
     "mouse_rig_smooth_move_to_easing",
     type=str,
     default="ease_in_out",
-    desc="Easing function for move_to_smooth position moves"
+    desc="Easing function for move_to_smooth position moves. Type: rig_core.easing"
 )

@@ -20,17 +20,11 @@ fractional values and emit when crossing integer thresholds.
 import platform
 from typing import Callable, Tuple, Optional
 from talon import ctrl, settings
+from .._schema import SCHEMA
 
 
-# Available mouse APIs
-MOUSE_APIS = {
-    'platform': 'Auto-detect best platform-specific API',
-    'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
-    'windows_mouse_event': 'Windows win32api.mouse_event (legacy API)',
-    'windows_send_input': 'Windows SendInput (modern, recommended)',
-    'macos_cgevent': 'macOS CGEventCreateMouseEvent',
-    'linux_x11': 'Linux X11 XWarpPointer',
-}
+# Available mouse APIs, from schema.json
+MOUSE_APIS = {c["const"]: c.get("description", "") for c in SCHEMA["$defs"]["mouse_api"]["oneOf"]}
 
 # Track availability of each API
 _windows_mouse_event_available = False

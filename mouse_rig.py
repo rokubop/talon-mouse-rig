@@ -91,7 +91,7 @@ class Actions:
             x: Target x coordinate
             y: Target y coordinate
             over_ms: Duration in ms (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: How it paces itself (optional). Type: rig_core.easing
             callback: Function to call when movement completes (optional)
         """
         rig = actions.user.mouse_rig()
@@ -138,12 +138,12 @@ class Actions:
         """Move mouse in a direction by amount.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             amount: Distance in pixels (default: 1)
             over_ms: Duration in ms (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: How it paces itself (optional). Type: rig_core.easing
             callback: Function to call when movement completes (optional)
-            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+            api: Mouse API to use (optional). Type: mouse_rig.mouse_api
         """
         rig = actions.user.mouse_rig()
         x, y = _parse_direction(direction)
@@ -168,11 +168,11 @@ class Actions:
         Timing/easing from mouse_rig_smooth_delta_ms and mouse_rig_smooth_delta_easing settings.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             amount: Distance in pixels (default: 1)
             scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when movement completes (optional)
-            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+            api: Mouse API to use (optional). Type: mouse_rig.mouse_api
         """
         over_ms = int(settings.get("user.mouse_rig_smooth_delta_ms") * scale)
         easing = settings.get("user.mouse_rig_smooth_delta_easing")
@@ -304,7 +304,7 @@ class Actions:
         Args:
             degrees: Degrees to rotate (positive = clockwise)
             over_ms: Time in ms to curve to the new direction (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: How it paces itself (optional). Type: rig_core.easing
         """
         rig = actions.user.mouse_rig()
         builder = rig.direction.queue.by(degrees)
@@ -335,7 +335,7 @@ class Actions:
         """Set direction and start moving. Keeps current speed unless force=True.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
         """
@@ -351,7 +351,7 @@ class Actions:
         Easing controlled by settings, timing scaled by `scale`.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
             scale: Multiplier for all smooth timing (0.5 = snappier, 2.0 = smoother).
@@ -464,7 +464,7 @@ class Actions:
 
         Args:
             ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: How it paces itself. Type: rig_core.easing
             callback: Function to call when system fully stops
         """
         rig = actions.user.mouse_rig()
@@ -493,7 +493,7 @@ class Actions:
         the frame loop stops (movement completes or stop() is called).
 
         Args:
-            button: "left", "right", or "middle"
+            button: Which button. Type: mouse_rig.button
         """
         rig = actions.user.mouse_rig()
         rig.state.button_prime(BUTTON_MAP[button])
@@ -551,7 +551,7 @@ class Actions:
 
         Args:
             stop_ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: How it paces itself. Type: rig_core.easing
             callback: Function to call when scroll fully stops
         """
         rig = actions.user.mouse_rig()
@@ -572,7 +572,7 @@ class Actions:
 
         Args:
             stop_ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: How it paces itself. Type: rig_core.easing
             callback: Function to call when movement fully stops
         """
         rig = actions.user.mouse_rig()
@@ -596,10 +596,10 @@ class Actions:
         Uses native platform API. 1 amount = 1 physical scroll tick.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             amount: Number of scroll ticks (default: 1)
             over_ms: Duration in ms to spread scroll over (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: How it paces itself (optional). Type: rig_core.easing
             callback: Function to call when complete (optional)
         """
         rig = actions.user.mouse_rig()
@@ -622,7 +622,7 @@ class Actions:
         Timing/easing from mouse_rig_smooth_scroll_ms and mouse_rig_smooth_scroll_easing settings.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             amount: Number of scroll ticks (default: 1)
             scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when complete (optional)
@@ -734,7 +734,7 @@ class Actions:
         """Set scroll direction and start scrolling. Same semantics as mouse_rig_move_continuous.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
         """
@@ -748,7 +748,7 @@ class Actions:
         """Like scroll_continuous() but with smooth transitions. Same semantics as mouse_rig_move_continuous_smooth.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: Which way. Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
             scale: Multiplier for all smooth timing (0.5 = snappier, 2.0 = smoother).

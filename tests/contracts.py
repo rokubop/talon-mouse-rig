@@ -170,18 +170,17 @@ def test_no_extra_schemas(on_success, on_failure):
 
 
 def test_easings_are_implemented(on_success, on_failure):
-    """Test: All VALID_EASINGS are implemented in EASING_FUNCTIONS"""
+    """Test: rig_core's easings and EASING_FUNCTIONS name the same set"""
     try:
-        from ..src.contracts import VALID_EASINGS
-        from ..src.core import EASING_FUNCTIONS
+        core = actions.user.rig_core()
+        VALID_EASINGS, EASING_FUNCTIONS = core.VALID_EASINGS, core.EASING_FUNCTIONS
 
-        for easing in VALID_EASINGS:
-            if easing not in EASING_FUNCTIONS:
-                on_failure(
-                    f"Easing '{easing}' is in VALID_EASINGS but not implemented in EASING_FUNCTIONS.\n"
-                    f"Available easings: {list(EASING_FUNCTIONS.keys())}"
-                )
-                return
+        if set(VALID_EASINGS) != set(EASING_FUNCTIONS):
+            on_failure(
+                f"rig_core's schema.json easings and EASING_FUNCTIONS differ: "
+                f"{sorted(set(VALID_EASINGS) ^ set(EASING_FUNCTIONS))}"
+            )
+            return
 
         on_success()
     except Exception as e:
@@ -211,6 +210,40 @@ def test_interpolations_are_valid(on_success, on_failure):
         on_failure(f"Unexpected error: {e}")
 
 
+def test_schema_matches_code(on_success, on_failure):
+    """Test: schema.json lists what the code takes, and every Type: link resolves"""
+    try:
+        import re
+        from pathlib import Path
+        from .._schema import ids
+        from ..mouse_rig import DIRECTION_MAP, BUTTON_MAP
+        from ..src.mouse_api import MOUSE_APIS
+
+        problems = []
+        if set(DIRECTION_MAP) != set(ids("direction")):
+            problems.append("directions differ from DIRECTION_MAP")
+        if set(BUTTON_MAP) != set(ids("button")):
+            problems.append("buttons differ from BUTTON_MAP")
+        if set(ids("scroll_api")) != set(MOUSE_APIS) | {"default"}:
+            problems.append("scroll_api is not mouse_api plus 'default'")
+
+        schemas = {"mouse_rig": actions.user.mouse_rig_schema(),
+                   "rig_core": actions.user.rig_core_schema()}
+        root = Path(__file__).parent.parent
+        for name in ("mouse_rig.py", "mouse_rig_settings.py"):
+            for ns, type_name in re.findall(r"Type: (\w+)\.(\w+)", (root / name).read_text(encoding="utf-8")):
+                if type_name not in schemas.get(ns, {}).get("$defs", {}):
+                    problems.append(f"{name}: Type: {ns}.{type_name} is in no schema")
+
+        if problems:
+            on_failure("; ".join(problems))
+            return
+        on_success()
+    except Exception as e:
+        print(f"  Error message: {e}")
+        on_failure(f"Unexpected error: {e}")
+
+
 # ============================================================================
 # TEST REGISTRY
 # ============================================================================
@@ -224,4 +257,5 @@ CONTRACTS_TESTS = [
     ("no extra schemas", test_no_extra_schemas),
     ("easings implemented", test_easings_are_implemented),
     ("interpolations valid", test_interpolations_are_valid),
+    ("schema matches code", test_schema_matches_code),
 ]
