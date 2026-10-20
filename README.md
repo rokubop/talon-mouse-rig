@@ -1,5 +1,5 @@
-![Version](https://img.shields.io/badge/version-4.2.1-blue)
-![Status](https://img.shields.io/badge/status-preview-orange)
+![Version](https://img.shields.io/badge/version-4.3.0-blue)
+![Status](https://img.shields.io/badge/status-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 # Talon Mouse Rig
@@ -339,12 +339,12 @@ builder.run()  # execute now instead of waiting for GC
 Mouse and scroll use OS-specific APIs for compatibility with games and applications that don't respond to Talon's default mouse movement.
 
 **Mouse** (`user.mouse_rig_api` setting):
-* `"talon"` - Talon's built-in mouse API (default for absolute movement)
-* `"platform"` - Native OS API: SendInput (Windows), CGEvent (macOS), XTest (Linux). Default for relative movement.
+* `"talon"` - Talon's built-in mouse API. `pos.to` always uses it unless an action overrides `api`.
+* `"platform"` - Native OS API: SendInput (Windows), CGEvent (macOS), XWarpPointer (Linux). Default.
 
 **Scroll** (`user.mouse_rig_scroll_api` setting):
 * `"default"` - Follows `user.mouse_rig_api` (default)
-* `"platform"` - Native OS API with sub-line precision, enabling smooth direction transitions at low scroll speeds
+* `"platform"` - Native OS API with sub-line precision (Windows, macOS), enabling smooth direction transitions at low scroll speeds
 
 Individual actions can also override the API with the `api` parameter.
 
