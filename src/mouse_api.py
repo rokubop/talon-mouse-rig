@@ -12,10 +12,11 @@ Each API provides two movement modes:
 - Absolute: Move cursor to screen position (for desktop use, pos.to())
 - Relative: Move cursor by delta (for gaming with infinite rotation, pos.by())
 
-Scroll APIs use the same backends with sub-line precision via native platform
-APIs. Talon's actions.mouse_scroll() quantizes small floats to zero, breaking
-smooth direction transitions at low scroll speeds. Native APIs accumulate
-fractional values and emit when crossing integer thresholds.
+Scroll APIs use the same names. Talon's actions.mouse_scroll() quantizes small
+floats to zero, breaking smooth direction transitions at low scroll speeds, so
+every backend accumulates fractional values and emits when crossing integer
+thresholds. Windows and macOS emit finer than a line; talon and linux_x11 emit
+whole lines.
 """
 
 import platform
@@ -30,18 +31,18 @@ MOUSE_APIS = {
     'windows_send_input': 'Windows SendInput. What platform picks on Windows.',
     'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
     'macos_cgevent': 'macOS CGEventCreateMouseEvent, through CoreGraphics.',
-    'linux_x11': 'Linux X11 XWarpPointer. Needs python-xlib.',
+    'linux_x11': 'Linux X11 XWarpPointer. Moves by warping to the new position. Needs python-xlib.',
 }
 
 # Scroll takes the same names, plus 'default'. What each does to a wheel.
 SCROLL_APIS = {
     'default': 'Whatever mouse_rig_api is.',
     'platform': 'Same pick as mouse_rig_api\'s platform.',
-    'talon': 'Talon actions.mouse_scroll. Every platform, but small amounts round to whole steps.',
-    'windows_send_input': 'Windows SendInput wheel events.',
-    'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
-    'macos_cgevent': 'macOS CGEventCreateScrollWheelEvent, through CoreGraphics.',
-    'linux_x11': 'Linux X11 XTest button events. Needs python-xlib.',
+    'talon': 'Talon actions.mouse_scroll. Every platform. Whole lines only; fractions carry over.',
+    'windows_send_input': 'Windows SendInput wheel events, in 1/120 line steps.',
+    'windows_mouse_event': 'Windows win32api.mouse_event, the older API, in 1/120 line steps. Needs pywin32.',
+    'macos_cgevent': 'macOS CGEventCreateScrollWheelEvent2 (CGEventCreateScrollWheelEvent on older macOS), through CoreGraphics.',
+    'linux_x11': 'Linux X11 XTest wheel buttons. Whole lines only; fractions carry over. Needs python-xlib.',
 }
 
 # Track availability of each API

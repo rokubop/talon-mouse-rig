@@ -22,7 +22,7 @@ mod.setting(
     "mouse_rig_api",
     type=str,
     default="platform",
-    desc=f"""API for all mouse rig movement, except `pos.to` which uses ctrl.mouse_move)
+    desc=f"""API for all mouse rig movement, except `pos.to` which uses ctrl.mouse_move.
     Options:
 {_options(MOUSE_APIS)}
 
@@ -35,7 +35,7 @@ mod.setting(
     "mouse_rig_scroll_api",
     type=str,
     default="default",
-    desc=f"""API for scroll operations. Uses native platform APIs for sub-line precision.
+    desc=f"""API for scroll operations.
     Options:
 {_options(SCROLL_APIS)}
     Type: mouse_rig.scroll_api
