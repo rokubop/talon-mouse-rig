@@ -344,7 +344,7 @@ Mouse and scroll use OS-specific APIs for compatibility with games and applicati
 
 **Scroll** (`user.mouse_rig_scroll_api` setting):
 * `"default"` - Follows `user.mouse_rig_api` (default)
-* `"platform"` - Native OS API. Finer than a line on Windows and macOS, enabling smooth direction transitions at low scroll speeds. Whole lines on Linux.
+* `"platform"` - Native OS API with sub-line precision (Windows, macOS), enabling smooth direction transitions at low scroll speeds
 
 Individual actions can also override the API with the `api` parameter.
 

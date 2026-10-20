@@ -15,7 +15,7 @@ Each API provides two movement modes:
 Scroll APIs use the same names. Talon's actions.mouse_scroll() quantizes small
 floats to zero, breaking smooth direction transitions at low scroll speeds, so
 every backend accumulates fractional values and emits when crossing integer
-thresholds. Windows and macOS emit finer than a line; talon and linux_x11 emit
+thresholds. Windows and macOS have sub-line precision; talon and linux_x11 emit
 whole lines.
 """
 
