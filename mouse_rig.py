@@ -31,13 +31,12 @@ def _parse_direction(direction: str) -> tuple:
     key = direction.replace(" ", "_").replace("-", "_").lower()
     return DIRECTION_MAP[key]
 
-TURN_SPEED_BASE = 3.0
-TURN_SPEED_KNEE = 2.0
-
 def _turn_speed_factor(speed: float) -> float:
-    factor = max(1.0, speed / TURN_SPEED_BASE)
-    if factor > TURN_SPEED_KNEE:
-        factor = TURN_SPEED_KNEE + (factor - TURN_SPEED_KNEE) ** 0.5
+    base = settings.get("user.mouse_rig_smooth_turn_speed_base")
+    knee = settings.get("user.mouse_rig_smooth_turn_speed_knee")
+    factor = max(1.0, speed / base)
+    if factor > knee:
+        factor = knee + (factor - knee) ** 0.5
     return factor
 
 @mod.action_class

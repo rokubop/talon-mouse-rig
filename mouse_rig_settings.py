@@ -61,6 +61,20 @@ mod.setting(
 )
 
 mod.setting(
+    "mouse_rig_smooth_turn_speed_base",
+    type=float,
+    default=3.0,
+    desc="Speed above which direction changes take longer than mouse_rig_smooth_turn_ms, in proportion to speed."
+)
+
+mod.setting(
+    "mouse_rig_smooth_turn_speed_knee",
+    type=float,
+    default=2.0,
+    desc="Past this multiple of mouse_rig_smooth_turn_ms, direction changes slow down less as speed rises. Lower = snappier turns at high speed."
+)
+
+mod.setting(
     "mouse_rig_smooth_turn_easing",
     type=str,
     default="ease_out2",
