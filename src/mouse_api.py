@@ -34,7 +34,6 @@ MOUSE_APIS = {
     'linux_x11': 'Linux X11 XWarpPointer. Moves by warping to the new position. Needs python-xlib.',
 }
 
-# Scroll takes the same names, plus 'default'. What each does to a wheel.
 SCROLL_APIS = {
     'default': 'Whatever mouse_rig_api is.',
     'platform': 'Same pick as mouse_rig_api\'s platform.',
