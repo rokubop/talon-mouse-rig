@@ -26,3 +26,6 @@ Thumbs.db
 test_results.txt
 mouse_rig_ignore.talon
 .claude
+
+# Python bytecode
+*.pyc
