@@ -1,9 +1,10 @@
 """Mouse movement and scroll API implementations
 
 Supports multiple mouse movement backends:
-- talon: Cross-platform using Talon's ctrl.mouse_move (default)
+- platform: Picks one of the below for this OS (default)
+- talon: Cross-platform using Talon's ctrl.mouse_move
 - windows_mouse_event: Windows win32api.mouse_event (legacy API)
-- windows_send_input: Windows SendInput (modern, recommended for Windows)
+- windows_send_input: Windows SendInput (modern)
 - macos_cgevent: macOS CGEventCreateMouseEvent
 - linux_x11: Linux X11 XWarpPointer
 
@@ -11,10 +12,11 @@ Each API provides two movement modes:
 - Absolute: Move cursor to screen position (for desktop use, pos.to())
 - Relative: Move cursor by delta (for gaming with infinite rotation, pos.by())
 
-Scroll APIs use the same backends with sub-line precision via native platform
-APIs. Talon's actions.mouse_scroll() quantizes small floats to zero, breaking
-smooth direction transitions at low scroll speeds. Native APIs accumulate
-fractional values and emit when crossing integer thresholds.
+Scroll APIs use the same names. Talon's actions.mouse_scroll() quantizes small
+floats to zero, breaking smooth direction transitions at low scroll speeds, so
+every backend accumulates fractional values and emits when crossing integer
+thresholds. Windows and macOS have sub-line precision; talon and linux_x11 emit
+whole lines.
 """
 
 import platform
@@ -24,12 +26,22 @@ from talon import ctrl, settings
 
 # Available mouse APIs
 MOUSE_APIS = {
-    'platform': 'Auto-detect best platform-specific API',
-    'talon': 'Talon ctrl.mouse_move (default, cross-platform)',
-    'windows_mouse_event': 'Windows win32api.mouse_event (legacy API)',
-    'windows_send_input': 'Windows SendInput (modern, recommended)',
-    'macos_cgevent': 'macOS CGEventCreateMouseEvent',
-    'linux_x11': 'Linux X11 XWarpPointer',
+    'platform': 'Picks one for this OS: windows_send_input (else windows_mouse_event), macos_cgevent or linux_x11. Falls back to talon.',
+    'talon': 'Talon: actions.mouse_nudge to move by, ctrl.mouse_move to move to. Every platform.',
+    'windows_send_input': 'Windows SendInput. What platform picks on Windows.',
+    'windows_mouse_event': 'Windows win32api.mouse_event, the older API. Needs pywin32.',
+    'macos_cgevent': 'macOS CGEventCreateMouseEvent, through CoreGraphics.',
+    'linux_x11': 'Linux X11 XWarpPointer. Moves by warping to the new position. Needs python-xlib.',
+}
+
+SCROLL_APIS = {
+    'default': 'Whatever mouse_rig_api is.',
+    'platform': 'Same pick as mouse_rig_api\'s platform.',
+    'talon': 'Talon actions.mouse_scroll. Every platform. Whole lines only; fractions carry over.',
+    'windows_send_input': 'Windows SendInput wheel events, in 1/120 line steps.',
+    'windows_mouse_event': 'Windows win32api.mouse_event, the older API, in 1/120 line steps. Needs pywin32.',
+    'macos_cgevent': 'macOS CGEventCreateScrollWheelEvent2 (CGEventCreateScrollWheelEvent on older macOS), through CoreGraphics.',
+    'linux_x11': 'Linux X11 XTest wheel buttons. Whole lines only; fractions carry over. Needs python-xlib.',
 }
 
 # Track availability of each API
@@ -73,9 +85,9 @@ elif platform.system() == "Linux":
 
 
 def _get_platform_api() -> str:
-    """Auto-detect the best platform-specific mouse API
+    """Pick the platform-specific mouse API for this OS
 
-    Returns the recommended API name for the current platform.
+    Returns the first available API name for the current platform.
     Falls back to 'talon' if no platform-specific API is available.
     """
     if platform.system() == "Windows":
@@ -153,7 +165,7 @@ def _make_windows_mouse_event_mouse_move() -> Tuple[Callable[[float, float], Non
 
 
 def _make_windows_send_input_mouse_move() -> Tuple[Callable[[float, float], None], Callable[[float, float], None]]:
-    """Windows SendInput (modern, recommended for Windows)
+    """Windows SendInput (modern)
 
     Returns (absolute_func, relative_func)
     """

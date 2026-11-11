@@ -106,7 +106,7 @@ def mouse_move_relative(dx: float, dy: float) -> None:
 
 
 def mouse_scroll_native(dx: float, dy: float) -> None:
-    """Scroll using native platform API with sub-line precision"""
+    """Scroll using the mouse_rig_scroll_api setting"""
     if _mouse_scroll is None:
         _initialize_mouse_move()
     _mouse_scroll(dx, dy)

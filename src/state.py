@@ -2055,8 +2055,14 @@ def _build_classes(core):
                     move_config.value = 0
                     move_config.over_ms = transition_ms
                     move_config.over_easing = easing
+                    # A handle's then() fires once it is still
+                    move_config.then_callbacks.append(
+                        (LifecyclePhase.OVER, self._fire_move_stop_callbacks))
                     move_builder = ActiveBuilder(move_config, self, is_base_layer=True)
                     self.add_builder(move_builder)
+                else:
+                    # Already still: nothing to ease down
+                    cron.after("1ms", self._fire_move_stop_callbacks)
 
         def bake_all(self):
             """Bake all active mouse movement builders immediately (not scroll)"""

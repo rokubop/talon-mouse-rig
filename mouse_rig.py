@@ -5,22 +5,39 @@ from .src.sequence import run_sequence, WaitHandle
 
 mod = Module()
 
-BUTTON_MAP = {"left": 0, "right": 1, "middle": 2}
-
-DIRECTION_MAP = {
-    "left":       (-1,  0),
-    "right":      ( 1,  0),
-    "up":         ( 0, -1),
-    "down":       ( 0,  1),
-    "up_left":    (-1, -1),
-    "up_right":   ( 1, -1),
-    "down_left":  (-1,  1),
-    "down_right": ( 1,  1),
+# name: (value, description)
+BUTTONS = {
+    "left":   (0, ""),
+    "right":  (1, ""),
+    "middle": (2, "Or wheel click."),
 }
+
+DIRECTIONS = {
+    "left":       ((-1,  0), ""),
+    "right":      (( 1,  0), ""),
+    "up":         (( 0, -1), ""),
+    "down":       (( 0,  1), ""),
+    "up_left":    ((-1, -1), ""),
+    "up_right":   (( 1, -1), ""),
+    "down_left":  ((-1,  1), ""),
+    "down_right": (( 1,  1), ""),
+}
+
+BUTTON_MAP = {name: n for name, (n, _desc) in BUTTONS.items()}
+
+DIRECTION_MAP = {name: xy for name, (xy, _desc) in DIRECTIONS.items()}
 
 def _parse_direction(direction: str) -> tuple:
     key = direction.replace(" ", "_").replace("-", "_").lower()
     return DIRECTION_MAP[key]
+
+def _turn_speed_factor(speed: float) -> float:
+    base = settings.get("user.mouse_rig_smooth_turn_speed_base")
+    knee = settings.get("user.mouse_rig_smooth_turn_speed_knee")
+    factor = max(1.0, speed / base)
+    if factor > knee:
+        factor = knee + (factor - knee) ** 0.5
+    return factor
 
 @mod.action_class
 class Actions:
@@ -91,7 +108,7 @@ class Actions:
             x: Target x coordinate
             y: Target y coordinate
             over_ms: Duration in ms (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional). Type: rig_core.easing
             callback: Function to call when movement completes (optional)
         """
         rig = actions.user.mouse_rig()
@@ -138,12 +155,12 @@ class Actions:
         """Move mouse in a direction by amount.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             amount: Distance in pixels (default: 1)
             over_ms: Duration in ms (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional). Type: rig_core.easing
             callback: Function to call when movement completes (optional)
-            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional). Type: mouse_rig.mouse_api
         """
         rig = actions.user.mouse_rig()
         x, y = _parse_direction(direction)
@@ -168,11 +185,11 @@ class Actions:
         Timing/easing from mouse_rig_smooth_delta_ms and mouse_rig_smooth_delta_easing settings.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             amount: Distance in pixels (default: 1)
             scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when movement completes (optional)
-            api: Mouse API to use, e.g. "talon" or "platform" (optional)
+            api: Mouse API to use, e.g. "talon" or "platform" (optional). Type: mouse_rig.mouse_api
         """
         over_ms = int(settings.get("user.mouse_rig_smooth_delta_ms") * scale)
         easing = settings.get("user.mouse_rig_smooth_delta_easing")
@@ -304,7 +321,7 @@ class Actions:
         Args:
             degrees: Degrees to rotate (positive = clockwise)
             over_ms: Time in ms to curve to the new direction (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional). Type: rig_core.easing
         """
         rig = actions.user.mouse_rig()
         builder = rig.direction.queue.by(degrees)
@@ -335,7 +352,7 @@ class Actions:
         """Set direction and start moving. Keeps current speed unless force=True.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
         """
@@ -351,7 +368,7 @@ class Actions:
         Easing controlled by settings, timing scaled by `scale`.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
             scale: Multiplier for all smooth timing (0.5 = snappier, 2.0 = smoother).
@@ -369,7 +386,7 @@ class Actions:
             rig.speed.to(speed).over(speed_ms, speed_easing)
         else:
             # Already moving: smooth turn
-            speed_factor = max(1.0, rig.state.speed / 3.0)
+            speed_factor = _turn_speed_factor(rig.state.speed)
             turn_ms = int(base_turn_ms * scale * speed_factor)
             rig.direction.to(x, y).over(turn_ms, turn_easing)
             if force:
@@ -464,7 +481,7 @@ class Actions:
 
         Args:
             ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: Easing function - "linear", "ease_in_out", etc. Type: rig_core.easing
             callback: Function to call when system fully stops
         """
         rig = actions.user.mouse_rig()
@@ -493,7 +510,7 @@ class Actions:
         the frame loop stops (movement completes or stop() is called).
 
         Args:
-            button: "left", "right", or "middle"
+            button: "left", "right", or "middle". Type: mouse_rig.button
         """
         rig = actions.user.mouse_rig()
         rig.state.button_prime(BUTTON_MAP[button])
@@ -551,7 +568,7 @@ class Actions:
 
         Args:
             stop_ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: Easing function - "linear", "ease_in_out", etc. Type: rig_core.easing
             callback: Function to call when scroll fully stops
         """
         rig = actions.user.mouse_rig()
@@ -572,7 +589,7 @@ class Actions:
 
         Args:
             stop_ms: Time in ms to decelerate to stop
-            easing: Easing function - "linear", "ease_in_out", etc.
+            easing: Easing function - "linear", "ease_in_out", etc. Type: rig_core.easing
             callback: Function to call when movement fully stops
         """
         rig = actions.user.mouse_rig()
@@ -596,10 +613,10 @@ class Actions:
         Uses native platform API. 1 amount = 1 physical scroll tick.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             amount: Number of scroll ticks (default: 1)
             over_ms: Duration in ms to spread scroll over (optional)
-            easing: Easing function like "linear", "ease_in_out" (optional)
+            easing: Easing function like "linear", "ease_in_out" (optional). Type: rig_core.easing
             callback: Function to call when complete (optional)
         """
         rig = actions.user.mouse_rig()
@@ -622,7 +639,7 @@ class Actions:
         Timing/easing from mouse_rig_smooth_scroll_ms and mouse_rig_smooth_scroll_easing settings.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             amount: Number of scroll ticks (default: 1)
             scale: Multiplier for smooth timing (0.5 = snappier, 2.0 = smoother)
             callback: Function to call when complete (optional)
@@ -734,7 +751,7 @@ class Actions:
         """Set scroll direction and start scrolling. Same semantics as mouse_rig_move_continuous.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
         """
@@ -748,7 +765,7 @@ class Actions:
         """Like scroll_continuous() but with smooth transitions. Same semantics as mouse_rig_move_continuous_smooth.
 
         Args:
-            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right"
+            direction: "left", "right", "up", "down", "up_left", "up_right", "down_left", "down_right". Type: mouse_rig.direction
             speed: Speed value. Only applied if stopped (or force=True).
             force: If True, always set speed. If False, only set speed when starting from stopped.
             scale: Multiplier for all smooth timing (0.5 = snappier, 2.0 = smoother).
@@ -766,7 +783,7 @@ class Actions:
             rig.scroll.speed.to(speed).over(speed_ms, speed_easing)
         else:
             # Already scrolling: smooth turn
-            speed_factor = max(1.0, rig.state.scroll_speed / 3.0)
+            speed_factor = _turn_speed_factor(rig.state.scroll_speed)
             turn_ms = int(base_turn_ms * scale * speed_factor)
             rig.scroll.direction.to(x, y).over(turn_ms, turn_easing)
             if force:

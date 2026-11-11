@@ -2,8 +2,8 @@
   "name": "talon-mouse-rig",
   "title": "Mouse Rig",
   "description": "All purpose mouse rig for Talon with movement and scrolling. Prefers OS-specific relative movement to be compatible with games.",
-  "version": "4.2.1",
-  "status": "preview",
+  "version": "4.3.0",
+  "status": "stable",
   "namespace": "user.mouse_rig",
   "github": "https://github.com/rokubop/talon-mouse-rig",
   "preview": "https://raw.githubusercontent.com/rokubop/talon-mouse-rig/main/preview.svg",
@@ -41,7 +41,9 @@
       "user.mouse_rig_smooth_speed_easing",
       "user.mouse_rig_smooth_speed_ms",
       "user.mouse_rig_smooth_turn_easing",
-      "user.mouse_rig_smooth_turn_ms"
+      "user.mouse_rig_smooth_turn_ms",
+      "user.mouse_rig_smooth_turn_speed_base",
+      "user.mouse_rig_smooth_turn_speed_knee"
     ],
     "actions": [
       "user.mouse_rig",
@@ -85,6 +87,7 @@
       "user.mouse_rig_state_speed",
       "user.mouse_rig_stop",
       "user.mouse_rig_test_toggle_ui",
+      "user.mouse_rig_types",
       "user.mouse_rig_version",
       "user.mouse_rig_wait"
     ]
@@ -92,6 +95,7 @@
   "depends": {
     "actions": [
       "user.rig_core",
+      "user.rig_core_types",
       "user.ui_elements",
       "user.ui_elements_get_state",
       "user.ui_elements_get_trees",
@@ -104,7 +108,7 @@
   },
   "validateDependencies": true,
   "_generator": "talon-pack",
-  "_generatorVersion": "3.3.0",
+  "_generatorVersion": "3.3.1",
   "_generatorRequiresVersionAction": true,
   "_generatorStrictNamespace": true,
   "_generatorFrozenFields": [],
